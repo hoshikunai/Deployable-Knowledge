@@ -5,7 +5,7 @@ import json
 from pydantic import BaseModel, Field, ConfigDict
 from sqlmodel import Session
 
-from config import BASE_DIR
+from config import BASE_DIR, DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER, PROMPTS_DIR
 from core.database import engine, init_db
 from core.database.models import UserSettingsRecord, utc_now
 from .validation import validate_identifier
@@ -17,8 +17,8 @@ LEGACY_USERS_DIR = BASE_DIR / "users"
 class UserSettings(BaseModel):
     user_id: str
     prompt_template_id: Optional[str] = None
-    provider_id: str = "ollama"
-    model_id: str = ""
+    provider_id: str = DEFAULT_LLM_PROVIDER
+    model_id: str = DEFAULT_LLM_MODEL
     temperature: float = 0.2
     top_p: float = 0.95
     max_tokens: int = 512
@@ -33,7 +33,7 @@ def _user_path(user_id: str) -> Path:
 
 
 def _to_settings(record: UserSettingsRecord) -> UserSettings:
-    return UserSettings(
+    settings = UserSettings(
         user_id=record.user_id,
         prompt_template_id=record.prompt_template_id,
         provider_id=record.provider_id,
@@ -43,6 +43,7 @@ def _to_settings(record: UserSettingsRecord) -> UserSettings:
         max_tokens=record.max_tokens,
         top_k=record.top_k,
     )
+    return settings
 
 
 def _record_from_settings(settings: UserSettings) -> UserSettingsRecord:
@@ -56,6 +57,10 @@ def _load_legacy_settings(user_id: str) -> Optional[UserSettings]:
     if not legacy_path.exists():
         return None
     data = json.loads(legacy_path.read_text(encoding="utf-8"))
+    if "provider_id" not in data and "llm_provider" in data:
+        data["provider_id"] = data["llm_provider"]
+    if "model_id" not in data and "llm_model" in data:
+        data["model_id"] = data["llm_model"]
     return UserSettings.model_validate({**data, "user_id": user_id})
 
 
@@ -104,7 +109,6 @@ def update_settings(user_id: str, patch: Dict[str, Any]) -> UserSettings:
 
 
 # Prompt template helpers (same as config.PROMPTS_DIR for consistency)
-PROMPTS_DIR = BASE_DIR / "prompts"
 PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import List, Dict, Optional, Iterable, Any
 from dataclasses import dataclass
 import re
+import requests
 from core.sessions import ChatExchange
 from core.settings import get_prompt_template, load_settings
 from core.llm import make_llm
@@ -213,6 +214,14 @@ def _generation_values(s, t: Template) -> Dict[str, Any]:
     }
 
 
+def _should_fallback_to_ollama(exc: Exception) -> bool:
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        return True
+    if isinstance(exc, RuntimeError) and "not configured" in str(exc).lower():
+        return True
+    return False
+
+
 def stream_llm(
     prompt: str,
     user_id: Optional[str] = None,
@@ -241,7 +250,21 @@ def stream_llm(
     )
 
     def tokens():
-        yield from llm.stream_text(prompt)
+        try:
+            yield from llm.stream_text(prompt)
+        except Exception as exc:
+            if provider in {"ollama", "llama_cpp"} or not _should_fallback_to_ollama(exc):
+                raise
+
+            fallback = make_llm(
+                "ollama",
+                None,
+                temperature=gen["temperature"],
+                top_p=gen["top_p"],
+                top_k=gen["top_k"],
+                max_tokens=gen["max_tokens"],
+            )
+            yield from fallback.stream_text(prompt)
 
     return tokens()
 
@@ -273,4 +296,18 @@ def ask_llm(
         max_tokens=gen["max_tokens"],
     )
 
-    return llm.generate_text(prompt)
+    try:
+        return llm.generate_text(prompt)
+    except Exception as exc:
+        if provider in {"ollama", "llama_cpp"} or not _should_fallback_to_ollama(exc):
+            raise
+
+        fallback = make_llm(
+            "ollama",
+            None,
+            temperature=gen["temperature"],
+            top_p=gen["top_p"],
+            top_k=gen["top_k"],
+            max_tokens=gen["max_tokens"],
+        )
+        return fallback.generate_text(prompt)

@@ -5,6 +5,8 @@ from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
+from config import DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -103,8 +105,8 @@ class UserSettingsRecord(SQLModel, table=True):
 
     user_id: str = Field(primary_key=True)
     prompt_template_id: Optional[str] = None
-    provider_id: str = "ollama"
-    model_id: str = ""
+    provider_id: str = DEFAULT_LLM_PROVIDER
+    model_id: str = DEFAULT_LLM_MODEL
     temperature: float = 0.2
     top_p: float = 0.95
     max_tokens: int = 512

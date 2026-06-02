@@ -6,6 +6,7 @@ from .base import BaseLLM, ModelInfo
 from .anthropic_llm import AnthropicLLM
 from .gemini_llm import GeminiLLM
 from .github_models_llm import GitHubModelsLLM
+from .llamacpp_llm import LlamaCppLLM
 from .ollama_llm import OllamaLLM
 from .openai_llm import OpenAILLM
 
@@ -29,6 +30,15 @@ def make_llm(
 
     if provider == "ollama":
         return OllamaLLM(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            max_tokens=max_tokens,
+        )
+
+    if provider == "llama_cpp":
+        return LlamaCppLLM(
             model=model,
             temperature=temperature,
             top_p=top_p,

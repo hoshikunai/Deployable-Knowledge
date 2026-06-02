@@ -23,6 +23,11 @@ DEFAULT_PROVIDER_SPECS: dict[str, ProviderSpec] = {
         label="Ollama",
         api_key_required=False,
     ),
+    "llama_cpp": ProviderSpec(
+        id="llama_cpp",
+        label="llama.cpp",
+        api_key_required=False,
+    ),
     "openai": ProviderSpec(
         id="openai",
         label="OpenAI",

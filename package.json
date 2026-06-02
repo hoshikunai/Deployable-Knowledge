@@ -7,10 +7,11 @@
   "scripts": {
     "electron": "electron .",
     "electron:dev": "electron .",
-    "backend:build": "node electron/build-backend.js",
+    "electron:assets:win": "python scripts/fetch-windows-llamacpp-assets.py",
+    "backend:build": "python electron/build-backend.py",
     "electron:pack": "npm run backend:build && electron-builder --dir",
     "electron:dist": "npm run backend:build && electron-builder",
-    "electron:dist:win:msi": "npm run backend:build && electron-builder --win msi --x64"
+    "electron:dist:win:msi": "npm run electron:assets:win && npm run backend:build && electron-builder --win msi --x64 && python scripts/validate-windows-package-assets.py"
   },
   "build": {
     "appId": "com.deployableknowledge.app",
@@ -19,7 +20,7 @@
       "output": "electron-dist"
     },
     "files": [
-      "electron/build-backend.js",
+      "electron/build-backend.py",
       "electron/main.js",
       "electron/preload.js",
       "package.json"
@@ -50,7 +51,21 @@
         "from": "prompts",
         "to": "prompts",
         "filter": [
-          "*.json"
+          "**/*.json"
+        ]
+      },
+      {
+        "from": "vendor/llama.cpp/win-x64",
+        "to": "llama.cpp/win-x64",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "vendor/models",
+        "to": "models",
+        "filter": [
+          "**/*.gguf"
         ]
       }
     ],
@@ -62,6 +77,7 @@
       "category": "Utility"
     },
     "win": {
+      "icon": "app/static/favicon.ico",
       "target": [
         "nsis",
         "dir"

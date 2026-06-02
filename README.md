@@ -85,7 +85,9 @@ npm install
 npm run electron:dist:win:msi
 ```
 
-The MSI is written to `electron-dist/`. Run the Windows MSI build on Windows so PyInstaller creates `DeployableKnowledgeBackend.exe`; cross-building from Linux/macOS will not produce the correct bundled backend executable.
+The MSI is written to `electron-dist/`. Run the Windows MSI build on Windows so PyInstaller creates `DeployableKnowledgeBackend.exe`; cross-building from Linux/macOS will not produce the correct bundled backend executable. The MSI build runs `npm run electron:assets:win`, which downloads the Windows x64 CPU llama.cpp release, local PDF.js assets, and Granite 4.1 3B Q4_K_M.
+
+Packaged Electron builds start the bundled `llama-server.exe` as a local fallback. If Ollama is reachable, the app can use installed Ollama models such as `ibm/granite4.1:3b`; otherwise new settings default to the bundled llama.cpp model.
 
 The same build is available in GitHub Actions as `Windows MSI`. It can be run manually from the Actions tab and also runs for tags matching `v*`; the MSI is uploaded as a workflow artifact.
 

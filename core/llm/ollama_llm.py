@@ -77,6 +77,8 @@ class OllamaLLM(BaseLLM):
             for model in data.get("models", [])
             if isinstance(model, dict) and isinstance(model.get("name"), str)
         ]
+        preferred = OLLAMA_MODEL
+        models.sort(key=lambda model: (model != preferred, model.lower()))
         return [ModelInfo.from_id(model) for model in models] or super().list_models(refresh=False)
 
     def _generate_payload(self, prompt: str, stream: bool) -> dict[str, Any]:

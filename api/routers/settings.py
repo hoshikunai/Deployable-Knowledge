@@ -2,9 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from typing import Dict, Any
 import json, time, shutil
 
-from config import (
-    BASE_DIR,
-)
+from config import PROMPTS_DIR
 from core.settings import (
     UserSettings,
     load_settings,
@@ -59,10 +57,10 @@ def put_prompt(tid: str, payload: Dict[str, Any]):
             raise HTTPException(status_code=400, detail=f"missing {f}")
     if payload["id"] != tid:
         raise HTTPException(status_code=400, detail="id mismatch")
-    prompts_dir = BASE_DIR / "prompts"
-    prompts_dir.mkdir(exist_ok=True)
+    prompts_dir = PROMPTS_DIR
+    prompts_dir.mkdir(parents=True, exist_ok=True)
     backup_dir = prompts_dir / ".backup"
-    backup_dir.mkdir(exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True)
     target = prompts_dir / f"{tid}.json"
     tmp = prompts_dir / f"{tid}.json.tmp"
     tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -89,14 +87,14 @@ def delete_prompt_template(tid: str):
             detail=f"Refusing to delete protected built-in template: {tid}",
         )
 
-    prompts_dir = BASE_DIR / "prompts"
+    prompts_dir = PROMPTS_DIR
     target = prompts_dir / f"{tid}.json"
 
     if not target.exists():
         raise HTTPException(status_code=404, detail="Prompt template not found.")
 
     backup_dir = prompts_dir / ".backup"
-    backup_dir.mkdir(exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True)
 
     shutil.copy(target, backup_dir / f"{tid}.{int(time.time())}.deleted.json")
     target.unlink()

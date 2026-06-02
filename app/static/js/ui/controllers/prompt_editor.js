@@ -495,8 +495,8 @@ export async function initPromptEditor(winId = "win_prompt_editor") {
     const topK = toIntOrNull(topKInput.value);
 
     const payload = {
-      llm_provider: providerSelect.value || "ollama",
-      llm_model: modelSelect.value || null,
+      provider_id: providerSelect.value || "ollama",
+      model_id: modelSelect.value || "",
     };
 
     if (temperature !== null) payload.temperature = temperature;
@@ -517,14 +517,14 @@ export async function initPromptEditor(winId = "win_prompt_editor") {
 
     const [settings, providerData] = await Promise.all([
       api.getSettings(currentUserId),
-      api.listModelProviders(true),
+      api.listProviders({ refresh: true }),
     ]);
 
     tempInput.value = settings?.temperature ?? 0.2;
     maxTokensInput.value = settings?.max_tokens ?? 512;
     topKInput.value = settings?.top_k ?? 8;
 
-    providers = providerData?.chat_providers || [];
+    providers = providerData?.providers || [];
     providerSelect.innerHTML = "";
 
     for (const provider of providers) {
@@ -542,8 +542,8 @@ export async function initPromptEditor(winId = "win_prompt_editor") {
       providers = [{ id: "ollama", label: "Ollama", models: [] }];
     }
 
-    providerSelect.value = settings?.llm_provider || providerSelect.options[0]?.value || "ollama";
-    populateModelsForProvider(providerSelect.value, settings?.llm_model || null);
+    providerSelect.value = settings?.provider_id || providerSelect.options[0]?.value || "ollama";
+    populateModelsForProvider(providerSelect.value, settings?.model_id || null);
   }
 
   function setPromptDetailMode(mode) {

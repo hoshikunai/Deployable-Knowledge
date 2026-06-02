@@ -13,11 +13,12 @@ jobs:
   build-msi:
     name: Build Windows MSI
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
 
     env:
       DK_PYTHON: python
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Checkout
