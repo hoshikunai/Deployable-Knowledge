@@ -87,6 +87,8 @@ npm run electron:dist:win:msi
 
 The MSI is written to `electron-dist/`. Run the Windows MSI build on Windows so PyInstaller creates `DeployableKnowledgeBackend.exe`; cross-building from Linux/macOS will not produce the correct bundled backend executable.
 
+The same build is available in GitHub Actions as `Windows MSI`. It can be run manually from the Actions tab and also runs for tags matching `v*`; the MSI is uploaded as a workflow artifact.
+
 Do not change the configured MSI `upgradeCode` after publishing an installer; Windows Installer uses it to upgrade existing installations.
 
 Packaging uses `electron/backend.spec` to build the FastAPI backend with PyInstaller, then bundles it into the Electron app.
