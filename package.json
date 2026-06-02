@@ -1,0 +1,90 @@
+{
+  "name": "deployable-knowledge",
+  "version": "0.2.2",
+  "description": "Offline-first retrieval-augmented generation desktop shell.",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "electron": "electron .",
+    "electron:dev": "electron .",
+    "backend:build": "node electron/build-backend.js",
+    "electron:pack": "npm run backend:build && electron-builder --dir",
+    "electron:dist": "npm run backend:build && electron-builder",
+    "electron:dist:win:msi": "npm run backend:build && electron-builder --win msi --x64"
+  },
+  "build": {
+    "appId": "com.deployableknowledge.app",
+    "productName": "Deployable Knowledge",
+    "directories": {
+      "output": "electron-dist"
+    },
+    "files": [
+      "electron/build-backend.js",
+      "electron/main.js",
+      "electron/preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "app/static",
+        "to": "app/static",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "app/templates",
+        "to": "app/templates",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "prompts",
+        "to": "prompts",
+        "filter": [
+          "*.json"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "dir"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "dir"
+      ]
+    },
+    "msi": {
+      "upgradeCode": "{CE26E9DE-820C-4036-AAD0-B2279DC7A9B7}",
+      "oneClick": false,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "dir"
+      ],
+      "category": "public.app-category.productivity"
+    }
+  },
+  "devDependencies": {
+    "electron": "^40.10.0",
+    "electron-builder": "^26.0.12"
+  }
+}

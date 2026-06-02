@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 app.mount("/documents", StaticFiles(directory=UPLOAD_DIR), name="documents")
 manager, settings = setup_auth(app, load_settings_from_config())
 

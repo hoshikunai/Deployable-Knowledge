@@ -8,6 +8,7 @@ dist/
 build/
 *.manifest
 *.spec
+!electron/backend.spec
 
 # --- Environment + dependencies ---
 .venv/
@@ -45,8 +46,14 @@ parsed_texts/
 
 # --- Query result data ---
 *.json
+!package.json
+!package-lock.json
 !prompts/*.json
 app.db
+
+# --- Node / Electron ---
+node_modules/
+electron-dist/
 
 # --- Model cache or sentence-transformers ---
 cache/

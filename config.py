@@ -2,18 +2,22 @@ from pathlib import Path
 import os
 
 # === Base Paths ===
-BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "documents"
-PDF_DIR = BASE_DIR / "pdfs"
-MODEL_DIR = BASE_DIR / "tmp_model"
+_resource_root = os.getenv("DK_RESOURCE_ROOT")
+_data_root = os.getenv("DK_DATA_DIR")
+
+BASE_DIR = Path(_resource_root).expanduser().resolve() if _resource_root else Path(__file__).resolve().parent
+DATA_DIR = Path(_data_root).expanduser().resolve() if _data_root else BASE_DIR
+UPLOAD_DIR = DATA_DIR / "documents"
+PDF_DIR = DATA_DIR / "pdfs"
+MODEL_DIR = DATA_DIR / "tmp_model"
 
 # === ChromaDB ===
-CHROMA_DB_DIR = BASE_DIR / "chroma_db"
+CHROMA_DB_DIR = DATA_DIR / "chroma_db"
 COLLECTION_NAME = "default_collection"
 
 # === SQL Database ===
 _database_path = os.getenv("DATABASE_PATH")
-DATABASE_PATH = Path(_database_path).expanduser() if _database_path else BASE_DIR / "app.db"
+DATABASE_PATH = Path(_database_path).expanduser() if _database_path else DATA_DIR / "app.db"
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATABASE_PATH}")
 DATABASE_ECHO = os.getenv("DATABASE_ECHO", "0") == "1"
 
@@ -29,4 +33,4 @@ MIN_TOP_K = 1
 MAX_TOP_K = 20
 
 # === Prompt Templates ===
-PROMPTS_DIR = BASE_DIR / "prompts"
+PROMPTS_DIR = DATA_DIR / "prompts"

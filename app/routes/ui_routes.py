@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
+from config import BASE_DIR
 from core.rag.retriever import db
 from core.sessions import ChatSession, SessionStore
 from core.corpus_registry import merge_document_list
@@ -10,8 +10,7 @@ from api.utils import validate_session_id
 
 router = APIRouter()
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 SESSION_COOKIE_NAME = "chat_session_id"
 store = SessionStore()

@@ -51,6 +51,46 @@ Visit <http://localhost:8000> once the server starts. Ollama is available by def
 
 **If you see "script location not on PATH" or "pytest not recognized":** run `pip` and `pytest` as modules so the active Python is used: `python -m pip install -r requirements.txt` and `python -m pytest tests/ -q`.
 
+## Electron desktop shell
+
+Install the Node dependencies once:
+
+```bash
+npm install
+```
+
+Run the desktop shell during development:
+
+```bash
+npm run electron:dev
+```
+
+The Electron app starts the FastAPI backend with `venv/bin/python` when it exists, otherwise it falls back to `python3` on Unix/macOS or `python` on Windows. Set `DK_PYTHON=/path/to/python` to force a specific interpreter.
+
+Build distributable desktop artifacts:
+
+```bash
+python -m pip install -r requirements-build.txt
+npm run electron:dist
+```
+
+Build a Windows MSI installer from a Windows shell or Windows CI runner:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-build.txt
+npm install
+npm run electron:dist:win:msi
+```
+
+The MSI is written to `electron-dist/`. Run the Windows MSI build on Windows so PyInstaller creates `DeployableKnowledgeBackend.exe`; cross-building from Linux/macOS will not produce the correct bundled backend executable.
+
+Do not change the configured MSI `upgradeCode` after publishing an installer; Windows Installer uses it to upgrade existing installations.
+
+Packaging uses `electron/backend.spec` to build the FastAPI backend with PyInstaller, then bundles it into the Electron app.
+
 ## Architecture overview
 
 The system is split into three layers:
