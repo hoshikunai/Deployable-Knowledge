@@ -77,7 +77,7 @@
       "category": "Utility"
     },
     "win": {
-      "icon": "app/static/favicon.ico",
+      "icon": "app/static/favicon.png",
       "target": [
         "nsis",
         "dir"
