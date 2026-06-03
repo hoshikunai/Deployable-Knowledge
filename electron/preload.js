@@ -1,5 +1,6 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("deployableKnowledge", {
-  platform: process.platform
+  platform: process.platform,
+  cancelSetup: () => ipcRenderer.send("setup:cancel")
 });

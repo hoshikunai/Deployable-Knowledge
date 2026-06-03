@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const https = require("node:https");
@@ -12,10 +12,10 @@ const APP_URL = `http://${HOST}:${PORT}`;
 const LLAMA_CPP_BASE_URL = `http://${HOST}:${LLAMA_CPP_PORT}/v1`;
 
 let mainWindow;
-let setupWindow;
 let backendProcess;
 let llamaServerProcess;
 let selectedLlamaModel;
+let setupDownload;
 
 const GRANITE_MODEL_SPECS = [
   {
@@ -53,6 +53,10 @@ function getLlamaServerExecutable() {
   }
 
   return findBundledFile(path.join(process.resourcesPath, "llama.cpp"), executable) || candidates[0];
+}
+
+function isBundledLlamaMode() {
+  return app.isPackaged && process.env.DK_BUNDLED_LLAMA !== "0";
 }
 
 function getGraniteModelInfo() {
@@ -101,108 +105,127 @@ function formatBytes(bytes) {
   return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
-function setupWindowHtml() {
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: Inter, "Segoe UI", system-ui, sans-serif;
-      background: #111827;
-      color: #f9fafb;
-    }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background: #111827;
-    }
-    main {
-      width: min(440px, calc(100vw - 48px));
-    }
-    h1 {
-      margin: 0 0 10px;
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: 0;
-    }
-    p {
-      margin: 0 0 18px;
-      color: #cbd5e1;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    progress {
-      width: 100%;
-      height: 14px;
-      border: 0;
-      border-radius: 7px;
-      overflow: hidden;
-      background: #1f2937;
-    }
-    progress::-webkit-progress-bar {
-      background: #1f2937;
-    }
-    progress::-webkit-progress-value {
-      background: #38bdf8;
-    }
-    progress::-moz-progress-bar {
-      background: #38bdf8;
-    }
-    #status {
-      margin-top: 12px;
-      min-height: 18px;
-      color: #e5e7eb;
-      font-size: 12px;
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Setting Up Local Model</h1>
-    <p>Downloading Granite 4.1 3B for the bundled llama.cpp provider. This only happens once.</p>
-    <progress id="progress"></progress>
-    <div id="status">Preparing download...</div>
-  </main>
-</body>
-</html>`;
+function setupCancelledError() {
+  const error = new Error("Setup was cancelled.");
+  error.code = "DK_SETUP_CANCELLED";
+  return error;
 }
 
-async function showSetupWindow() {
-  if (setupWindow) {
-    return setupWindow;
+function showSetupOverlay(modelInfo) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return Promise.resolve();
   }
 
-  setupWindow = new BrowserWindow({
-    width: 520,
-    height: 260,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    show: false,
-    backgroundColor: "#111827",
-    title: "Deployable Knowledge Setup",
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
-  });
+  return mainWindow.webContents.executeJavaScript(
+    `
+    (() => {
+      if (document.getElementById("dk-setup-overlay")) {
+        return;
+      }
 
-  setupWindow.on("closed", () => {
-    setupWindow = null;
-  });
+      const style = document.createElement("style");
+      style.id = "dk-setup-style";
+      style.textContent = \`
+        #dk-setup-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 2147483647;
+          display: grid;
+          place-items: center;
+          background: rgba(15, 23, 42, 0.82);
+          backdrop-filter: blur(10px);
+          color: #f9fafb;
+          font-family: Inter, "Segoe UI", system-ui, sans-serif;
+        }
+        #dk-setup-panel {
+          width: min(480px, calc(100vw - 40px));
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          border-radius: 8px;
+          background: #111827;
+          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+          padding: 22px;
+          position: relative;
+        }
+        #dk-setup-close {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          width: 32px;
+          height: 32px;
+          border: 0;
+          border-radius: 6px;
+          color: #cbd5e1;
+          background: transparent;
+          font-size: 22px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        #dk-setup-close:hover {
+          color: #ffffff;
+          background: #1f2937;
+        }
+        #dk-setup-title {
+          margin: 0 36px 8px 0;
+          font-size: 21px;
+          font-weight: 700;
+          letter-spacing: 0;
+        }
+        #dk-setup-copy {
+          margin: 0 0 18px;
+          color: #cbd5e1;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+        #dk-setup-progress {
+          width: 100%;
+          height: 14px;
+          border: 0;
+          border-radius: 7px;
+          overflow: hidden;
+          background: #1f2937;
+        }
+        #dk-setup-progress::-webkit-progress-bar {
+          background: #1f2937;
+        }
+        #dk-setup-progress::-webkit-progress-value {
+          background: #38bdf8;
+        }
+        #dk-setup-progress::-moz-progress-bar {
+          background: #38bdf8;
+        }
+        #dk-setup-status {
+          margin-top: 12px;
+          min-height: 18px;
+          color: #e5e7eb;
+          font-size: 12px;
+        }
+      \`;
+      document.head.appendChild(style);
 
-  await setupWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(setupWindowHtml())}`);
-  setupWindow.show();
-  return setupWindow;
+      const overlay = document.createElement("div");
+      overlay.id = "dk-setup-overlay";
+      overlay.innerHTML = \`
+        <section id="dk-setup-panel" role="dialog" aria-modal="true" aria-labelledby="dk-setup-title">
+          <button id="dk-setup-close" type="button" aria-label="Cancel setup">×</button>
+          <h1 id="dk-setup-title">First Time Setup</h1>
+          <p id="dk-setup-copy">Downloading ${modelInfo.label} for the bundled llama.cpp provider. This only happens once.</p>
+          <progress id="dk-setup-progress"></progress>
+          <div id="dk-setup-status">Preparing download...</div>
+        </section>
+      \`;
+      document.body.appendChild(overlay);
+      document.body.style.overflow = "hidden";
+      document.getElementById("dk-setup-close")?.addEventListener("click", () => {
+        window.deployableKnowledge?.cancelSetup?.();
+      });
+    })();
+    `,
+    true
+  );
 }
 
 function updateSetupProgress({ downloaded = 0, total = 0, status = "" }) {
-  if (!setupWindow || setupWindow.isDestroyed()) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
 
@@ -213,12 +236,15 @@ function updateSetupProgress({ downloaded = 0, total = 0, status = "" }) {
       ? `${percent}% - ${formatBytes(downloaded)} of ${formatBytes(total)}`
       : `${formatBytes(downloaded)} downloaded`);
 
-  setupWindow.webContents
+  mainWindow.webContents
     .executeJavaScript(
       `
       (() => {
-        const progress = document.getElementById("progress");
-        const status = document.getElementById("status");
+        const progress = document.getElementById("dk-setup-progress");
+        const status = document.getElementById("dk-setup-status");
+        if (!progress || !status) {
+          return;
+        }
         const percent = ${percent === null ? "null" : JSON.stringify(percent)};
         if (percent === null) {
           progress.removeAttribute("value");
@@ -234,22 +260,59 @@ function updateSetupProgress({ downloaded = 0, total = 0, status = "" }) {
     .catch(() => {});
 }
 
-function closeSetupWindow() {
-  if (setupWindow && !setupWindow.isDestroyed()) {
-    setupWindow.close();
+function closeSetupOverlay() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return Promise.resolve();
   }
-  setupWindow = null;
+
+  return mainWindow.webContents.executeJavaScript(
+    `
+    (() => {
+      document.getElementById("dk-setup-overlay")?.remove();
+      document.getElementById("dk-setup-style")?.remove();
+      document.body.style.overflow = "";
+    })();
+    `,
+    true
+  ).catch(() => {});
 }
 
-function download(url, destination, onProgress = () => {}) {
+function cancelSetupDownload() {
+  if (!setupDownload) {
+    return;
+  }
+
+  setupDownload.cancelled = true;
+  setupDownload.request?.destroy(setupCancelledError());
+  setupDownload.file?.destroy(setupCancelledError());
+  if (setupDownload.partial && fs.existsSync(setupDownload.partial)) {
+    fs.rmSync(setupDownload.partial, { force: true });
+  }
+}
+
+function download(url, destination, onProgress = () => {}, state = null) {
+  const downloadState = state || {
+    cancelled: false,
+    request: null,
+    file: null,
+    partial: `${destination}.part`
+  };
+  setupDownload = downloadState;
+
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
 
-    const partial = `${destination}.part`;
+    const partial = downloadState.partial;
     const request = https.get(url, { headers: { "User-Agent": "deployable-knowledge-builder" } }, (response) => {
+      if (downloadState.cancelled) {
+        response.resume();
+        reject(setupCancelledError());
+        return;
+      }
+
       if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
-        download(response.headers.location, destination).then(resolve, reject);
+        download(response.headers.location, destination, onProgress, downloadState).then(resolve, reject);
         return;
       }
 
@@ -263,7 +326,12 @@ function download(url, destination, onProgress = () => {}) {
       let downloaded = 0;
       let lastProgressUpdate = 0;
       const file = fs.createWriteStream(partial);
+      downloadState.file = file;
       response.on("data", (chunk) => {
+        if (downloadState.cancelled) {
+          response.destroy(setupCancelledError());
+          return;
+        }
         downloaded += chunk.length;
         const now = Date.now();
         if (now - lastProgressUpdate > 250 || downloaded === total) {
@@ -274,6 +342,10 @@ function download(url, destination, onProgress = () => {}) {
       response.pipe(file);
       file.on("finish", () => {
         file.close(() => {
+          if (downloadState.cancelled) {
+            reject(setupCancelledError());
+            return;
+          }
           fs.rename(partial, destination, (error) => {
             if (error) {
               reject(error);
@@ -286,11 +358,14 @@ function download(url, destination, onProgress = () => {}) {
       file.on("error", reject);
     });
 
+    downloadState.request = request;
     request.on("error", reject);
   }).finally(() => {
-    const partial = `${destination}.part`;
-    if (fs.existsSync(partial)) {
-      fs.rmSync(partial, { force: true });
+    if (setupDownload === downloadState) {
+      setupDownload = null;
+    }
+    if (downloadState.cancelled && fs.existsSync(downloadState.partial)) {
+      fs.rmSync(downloadState.partial, { force: true });
     }
   });
 }
@@ -301,17 +376,12 @@ async function ensureGraniteModel() {
     return modelInfo;
   }
 
-  await showSetupWindow();
+  await showSetupOverlay(modelInfo);
   updateSetupProgress({ status: "Starting download..." });
 
-  try {
-    await download(modelInfo.url, modelInfo.path, updateSetupProgress);
-    updateSetupProgress({ downloaded: 1, total: 1, status: "Download complete. Starting app..." });
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return modelInfo;
-  } finally {
-    closeSetupWindow();
-  }
+  await download(modelInfo.url, modelInfo.path, updateSetupProgress);
+  updateSetupProgress({ downloaded: 1, total: 1, status: "Download complete. Starting local model..." });
+  return modelInfo;
 }
 
 function findBundledFile(startDir, fileName) {
@@ -419,12 +489,12 @@ function waitForLlamaServer(timeoutMs = 60000) {
 }
 
 async function startLlamaCppServer() {
-  if (!app.isPackaged) {
+  if (!isBundledLlamaMode()) {
     return;
   }
 
   const executable = getLlamaServerExecutable();
-  const modelInfo = await ensureGraniteModel();
+  const modelInfo = getGraniteModelInfo();
   const modelAlias = process.env.LLAMA_CPP_MODEL || modelInfo.alias;
 
   if (!fs.existsSync(executable)) {
@@ -480,7 +550,7 @@ function startBackend() {
     PYTHONPATH: root,
     DK_RESOURCE_ROOT: root,
     DK_DATA_DIR: dataRoot,
-    DK_BUNDLED_LLAMA: app.isPackaged ? "1" : process.env.DK_BUNDLED_LLAMA || "0",
+    DK_BUNDLED_LLAMA: isBundledLlamaMode() ? "1" : process.env.DK_BUNDLED_LLAMA || "0",
     LLAMA_CPP_BASE_URL,
     LLAMA_CPP_MODEL: process.env.LLAMA_CPP_MODEL || selectedLlamaModel?.alias || undefined,
     DEFAULT_LLM_PROVIDER: process.env.DEFAULT_LLM_PROVIDER || undefined,
@@ -589,14 +659,21 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   try {
-    await startLlamaCppServer();
-    if (app.isPackaged) {
-      await waitForLlamaServer();
-    }
+    selectedLlamaModel = getGraniteModelInfo();
     startBackend();
     await waitForServer();
     await createWindow();
+    if (isBundledLlamaMode()) {
+      await ensureGraniteModel();
+      await startLlamaCppServer();
+      await waitForLlamaServer();
+      await closeSetupOverlay();
+    }
   } catch (error) {
+    if (error?.code === "DK_SETUP_CANCELLED") {
+      app.quit();
+      return;
+    }
     await dialog.showMessageBox({
       type: "error",
       title: "Deployable Knowledge failed to start",
@@ -605,6 +682,11 @@ app.whenReady().then(async () => {
     });
     app.quit();
   }
+});
+
+ipcMain.on("setup:cancel", () => {
+  cancelSetupDownload();
+  app.quit();
 });
 
 app.on("activate", () => {
