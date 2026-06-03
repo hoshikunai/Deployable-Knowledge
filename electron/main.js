@@ -1,6 +1,7 @@
 const { app, BrowserWindow, dialog, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const https = require("node:https");
 const net = require("node:net");
 const path = require("node:path");
 
@@ -11,6 +12,7 @@ const APP_URL = `http://${HOST}:${PORT}`;
 const LLAMA_CPP_BASE_URL = `http://${HOST}:${LLAMA_CPP_PORT}/v1`;
 
 let mainWindow;
+let setupWindow;
 let backendProcess;
 let llamaServerProcess;
 let selectedLlamaModel;
@@ -20,7 +22,8 @@ const GRANITE_MODEL_SPECS = [
     file: "granite-4.1-3b-Q4_K_M.gguf",
     alias: "granite4.1:3b-q4_K_M",
     label: "Granite 4.1 3B Q4_K_M",
-    dirs: ["granite4.1-3b", "granite4-3b"]
+    dirs: ["granite4.1-3b", "granite4-3b"],
+    url: "https://huggingface.co/ibm-granite/granite-4.1-3b-GGUF/resolve/main/granite-4.1-3b-Q4_K_M.gguf"
   }
 ];
 
@@ -53,8 +56,12 @@ function getLlamaServerExecutable() {
 }
 
 function getGraniteModelInfo() {
+  const userModelsDir = path.join(app.getPath("userData"), "models");
+
   for (const spec of GRANITE_MODEL_SPECS) {
     const candidates = [
+      ...spec.dirs.map((dir) => path.join(userModelsDir, dir, spec.file)),
+      path.join(userModelsDir, spec.file),
       ...spec.dirs.map((dir) => path.join(process.resourcesPath, "models", dir, spec.file)),
       path.join(process.resourcesPath, "models", spec.file),
     ];
@@ -74,8 +81,237 @@ function getGraniteModelInfo() {
   const fallback = GRANITE_MODEL_SPECS[GRANITE_MODEL_SPECS.length - 1];
   return {
     ...fallback,
-    path: path.join(process.resourcesPath, "models", fallback.dirs[0], fallback.file)
+    path: path.join(userModelsDir, fallback.dirs[0], fallback.file)
   };
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 MB";
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function setupWindowHtml() {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      background: #111827;
+      color: #f9fafb;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #111827;
+    }
+    main {
+      width: min(440px, calc(100vw - 48px));
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    p {
+      margin: 0 0 18px;
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    progress {
+      width: 100%;
+      height: 14px;
+      border: 0;
+      border-radius: 7px;
+      overflow: hidden;
+      background: #1f2937;
+    }
+    progress::-webkit-progress-bar {
+      background: #1f2937;
+    }
+    progress::-webkit-progress-value {
+      background: #38bdf8;
+    }
+    progress::-moz-progress-bar {
+      background: #38bdf8;
+    }
+    #status {
+      margin-top: 12px;
+      min-height: 18px;
+      color: #e5e7eb;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Setting Up Local Model</h1>
+    <p>Downloading Granite 4.1 3B for the bundled llama.cpp provider. This only happens once.</p>
+    <progress id="progress"></progress>
+    <div id="status">Preparing download...</div>
+  </main>
+</body>
+</html>`;
+}
+
+async function showSetupWindow() {
+  if (setupWindow) {
+    return setupWindow;
+  }
+
+  setupWindow = new BrowserWindow({
+    width: 520,
+    height: 260,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    show: false,
+    backgroundColor: "#111827",
+    title: "Deployable Knowledge Setup",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  setupWindow.on("closed", () => {
+    setupWindow = null;
+  });
+
+  await setupWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(setupWindowHtml())}`);
+  setupWindow.show();
+  return setupWindow;
+}
+
+function updateSetupProgress({ downloaded = 0, total = 0, status = "" }) {
+  if (!setupWindow || setupWindow.isDestroyed()) {
+    return;
+  }
+
+  const percent = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : null;
+  const statusText =
+    status ||
+    (total > 0
+      ? `${percent}% - ${formatBytes(downloaded)} of ${formatBytes(total)}`
+      : `${formatBytes(downloaded)} downloaded`);
+
+  setupWindow.webContents
+    .executeJavaScript(
+      `
+      (() => {
+        const progress = document.getElementById("progress");
+        const status = document.getElementById("status");
+        const percent = ${percent === null ? "null" : JSON.stringify(percent)};
+        if (percent === null) {
+          progress.removeAttribute("value");
+        } else {
+          progress.max = 100;
+          progress.value = percent;
+        }
+        status.textContent = ${JSON.stringify(statusText)};
+      })();
+      `,
+      true
+    )
+    .catch(() => {});
+}
+
+function closeSetupWindow() {
+  if (setupWindow && !setupWindow.isDestroyed()) {
+    setupWindow.close();
+  }
+  setupWindow = null;
+}
+
+function download(url, destination, onProgress = () => {}) {
+  return new Promise((resolve, reject) => {
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+
+    const partial = `${destination}.part`;
+    const request = https.get(url, { headers: { "User-Agent": "deployable-knowledge-builder" } }, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        response.resume();
+        download(response.headers.location, destination).then(resolve, reject);
+        return;
+      }
+
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`GET ${url} returned ${response.statusCode}`));
+        return;
+      }
+
+      const total = Number(response.headers["content-length"] || 0);
+      let downloaded = 0;
+      let lastProgressUpdate = 0;
+      const file = fs.createWriteStream(partial);
+      response.on("data", (chunk) => {
+        downloaded += chunk.length;
+        const now = Date.now();
+        if (now - lastProgressUpdate > 250 || downloaded === total) {
+          lastProgressUpdate = now;
+          onProgress({ downloaded, total });
+        }
+      });
+      response.pipe(file);
+      file.on("finish", () => {
+        file.close(() => {
+          fs.rename(partial, destination, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+      });
+      file.on("error", reject);
+    });
+
+    request.on("error", reject);
+  }).finally(() => {
+    const partial = `${destination}.part`;
+    if (fs.existsSync(partial)) {
+      fs.rmSync(partial, { force: true });
+    }
+  });
+}
+
+async function ensureGraniteModel() {
+  const modelInfo = getGraniteModelInfo();
+  if (fs.existsSync(modelInfo.path)) {
+    return modelInfo;
+  }
+
+  await showSetupWindow();
+  updateSetupProgress({ status: "Starting download..." });
+
+  try {
+    await download(modelInfo.url, modelInfo.path, updateSetupProgress);
+    updateSetupProgress({ downloaded: 1, total: 1, status: "Download complete. Starting app..." });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return modelInfo;
+  } finally {
+    closeSetupWindow();
+  }
 }
 
 function findBundledFile(startDir, fileName) {
@@ -182,13 +418,13 @@ function waitForLlamaServer(timeoutMs = 60000) {
   return waitForTcpServer(LLAMA_CPP_PORT, "llama.cpp", timeoutMs);
 }
 
-function startLlamaCppServer() {
+async function startLlamaCppServer() {
   if (!app.isPackaged) {
     return;
   }
 
   const executable = getLlamaServerExecutable();
-  const modelInfo = getGraniteModelInfo();
+  const modelInfo = await ensureGraniteModel();
   const modelAlias = process.env.LLAMA_CPP_MODEL || modelInfo.alias;
 
   if (!fs.existsSync(executable)) {
@@ -204,10 +440,10 @@ function startLlamaCppServer() {
   if (!fs.existsSync(modelInfo.path)) {
     throw new Error(
       [
-        `Missing bundled Granite model: ${modelInfo.path}`,
+        `Missing downloaded Granite model: ${modelInfo.path}`,
         `resourcesPath: ${process.resourcesPath}`,
-        "models resource contents:",
-        describeResourceDirectory(path.join(process.resourcesPath, "models")),
+        "downloaded models contents:",
+        describeResourceDirectory(path.join(app.getPath("userData"), "models")),
       ].join("\n")
     );
   }
@@ -353,7 +589,7 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   try {
-    startLlamaCppServer();
+    await startLlamaCppServer();
     if (app.isPackaged) {
       await waitForLlamaServer();
     }

@@ -60,13 +60,6 @@
         "filter": [
           "**/*"
         ]
-      },
-      {
-        "from": "vendor/models",
-        "to": "models",
-        "filter": [
-          "**/*.gguf"
-        ]
       }
     ],
     "linux": {

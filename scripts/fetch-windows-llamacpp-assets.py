@@ -128,11 +128,10 @@ def fetch_granite() -> None:
     for model in GRANITE_MODELS:
         model_file = model["file"]
         if model_file.exists():
-            print(f"{model['label']} already present: {model_file}")
+            print(f"{model['label']} already present but not bundled into the MSI: {model_file}")
             return
 
-        print(f"Downloading {model['label']}")
-        download(model["url"], model_file)
+        print(f"{model['label']} will be downloaded on first app launch")
         return
 
     raise RuntimeError("No Granite GGUF model configured")

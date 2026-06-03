@@ -14,11 +14,26 @@ binaries = []
 hiddenimports = []
 
 excluded_module_roots = {
+    "cupy",
     "dask",
+    "datasets",
+    "detectron2",
+    "diffusers",
+    "jax",
+    "jaxlib",
+    "keras",
+    "matplotlib",
+    "nvidia",
+    "onnx",
+    "onnxruntime",
+    "pandas",
     "pytest",
+    "spacy",
     "tensorboard",
+    "tensorflow",
     "tensorrt",
     "tkinter",
+    "triton",
 }
 
 
@@ -26,25 +41,29 @@ def is_runtime_module(module_name):
     parts = module_name.split(".")
     if parts[0] in excluded_module_roots:
         return False
-    return not any(part == "tests" or part.startswith("test_") for part in parts)
+    return not any(part in {"test", "tests"} or part.startswith("test_") for part in parts)
 
 
 def is_runtime_data(data_entry):
     source, target = data_entry
     path_parts = set(Path(source).parts) | set(Path(target).parts)
-    return "tests" not in path_parts and "__pycache__" not in path_parts
+    return not path_parts.intersection({"test", "tests", "__pycache__"})
+
+
+def is_runtime_artifact(artifact_entry):
+    path_parts = set()
+    for value in artifact_entry[:2]:
+        path_parts.update(Path(str(value)).parts)
+    return not path_parts.intersection({"cuda", "nvidia"})
 
 for package in (
     "chromadb",
     "sentence_transformers",
-    "transformers",
     "huggingface_hub",
     "tokenizers",
     "rapidocr",
     "pymupdf",
     "markdown2",
-    "sklearn",
-    "spacy",
 ):
     pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(package)
     datas += [data for data in pkg_datas if is_runtime_data(data)]
@@ -65,21 +84,39 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    hookspath=[str(spec_dir / "pyinstaller-hooks")],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
+        "cupy",
         "dask",
+        "datasets",
+        "detectron2",
+        "diffusers",
+        "jax",
+        "jaxlib",
+        "keras",
+        "matplotlib",
+        "nvidia",
+        "onnx",
+        "onnxruntime",
+        "pandas",
         "pytest",
+        "spacy",
         "tensorboard",
+        "tensorflow",
         "tensorrt",
         "tkinter",
+        "triton",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
+
+a.binaries = [entry for entry in a.binaries if is_runtime_artifact(entry)]
+a.datas = [entry for entry in a.datas if is_runtime_artifact(entry)]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
