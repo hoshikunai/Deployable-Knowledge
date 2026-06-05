@@ -117,6 +117,7 @@ function showSetupOverlay(modelInfo) {
   }
 
   return mainWindow.webContents.executeJavaScript(
+    // TODO: make this more editable, this is not human readable
     `
     (() => {
       if (document.getElementById("dk-setup-overlay")) {

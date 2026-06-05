@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 RESOURCES_DIR = ROOT / "electron-dist" / "win-unpacked" / "resources"
 
 
@@ -19,24 +19,18 @@ def main() -> int:
     pdf_worker = find_file(RESOURCES_DIR / "app" / "static", "pdf.worker.min.js")
     prompt_dir = RESOURCES_DIR / "prompts"
     prompt_files = list(prompt_dir.glob("*.json")) if prompt_dir.exists() else []
-    bundled_granite_model = find_file(RESOURCES_DIR / "models", "granite-4.1-3b-Q4_K_M.gguf")
 
-    if not all((llama_server, pdf_min, pdf_worker, prompt_files)) or bundled_granite_model:
+    if not all((llama_server, pdf_min, pdf_worker, prompt_files)):
         print("Windows package is missing required standalone assets.", file=sys.stderr)
         print(f"resourcesDir: {RESOURCES_DIR}", file=sys.stderr)
         print(f"llama-server.exe: {llama_server or 'missing'}", file=sys.stderr)
         print(f"pdf.min.js: {pdf_min or 'missing'}", file=sys.stderr)
         print(f"pdf.worker.min.js: {pdf_worker or 'missing'}", file=sys.stderr)
         print(f"prompt JSON files: {len(prompt_files)}", file=sys.stderr)
-        print(
-            f"bundled granite-4.1-3b-Q4_K_M.gguf: {bundled_granite_model or 'absent'}",
-            file=sys.stderr,
-        )
         return 1
 
     print("Windows standalone assets found:")
     print(f"llama-server.exe: {llama_server}")
-    print("granite model: downloaded on first app launch")
     print(f"pdf.min.js: {pdf_min}")
     print(f"pdf.worker.min.js: {pdf_worker}")
     print(f"prompt JSON files: {len(prompt_files)}")

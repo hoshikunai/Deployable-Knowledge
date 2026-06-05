@@ -42,7 +42,6 @@ app.db-*
 
 # --- Extracted or parsed PDF text content ---
 parsed_texts/
-*.txt
 
 # --- Query result data ---
 *.json

@@ -9,30 +9,10 @@ import zipfile
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 VENDOR_ROOT = ROOT / "vendor"
 LLAMA_DIR = VENDOR_ROOT / "llama.cpp" / "win-x64"
-PDFJS_DIR = ROOT / "app" / "static" / "vendor" / "pdfjs"
 USER_AGENT = "deployable-knowledge-builder"
-
-PDFJS_ASSETS = (
-    {
-        "file": "pdf.min.js",
-        "url": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
-    },
-    {
-        "file": "pdf.worker.min.js",
-        "url": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
-    },
-)
-
-GRANITE_MODELS = (
-    {
-        "label": "Granite 4.1 3B Q4_K_M",
-        "file": VENDOR_ROOT / "models" / "granite4.1-3b" / "granite-4.1-3b-Q4_K_M.gguf",
-        "url": "https://huggingface.co/ibm-granite/granite-4.1-3b-GGUF/resolve/main/granite-4.1-3b-Q4_K_M.gguf",
-    },
-)
 
 
 def request(url: str, *, github_auth: bool = False) -> urllib.request.Request:
@@ -113,35 +93,9 @@ def fetch_llama_cpp() -> None:
     shutil.rmtree(extract_dir, ignore_errors=True)
 
 
-def fetch_pdfjs() -> None:
-    for asset in PDFJS_ASSETS:
-        destination = PDFJS_DIR / asset["file"]
-        if destination.exists():
-            print(f"PDF.js asset already present: {destination}")
-            continue
-
-        print(f"Downloading {asset['file']}")
-        download(asset["url"], destination)
-
-
-def fetch_granite() -> None:
-    for model in GRANITE_MODELS:
-        model_file = model["file"]
-        if model_file.exists():
-            print(f"{model['label']} already present but not bundled into the MSI: {model_file}")
-            return
-
-        print(f"{model['label']} will be downloaded on first app launch")
-        return
-
-    raise RuntimeError("No Granite GGUF model configured")
-
-
 def main() -> int:
     try:
         fetch_llama_cpp()
-        fetch_pdfjs()
-        fetch_granite()
     except (OSError, urllib.error.URLError, zipfile.BadZipFile, RuntimeError) as error:
         print(error, file=sys.stderr)
         return 1

@@ -7,11 +7,11 @@
   "scripts": {
     "electron": "electron .",
     "electron:dev": "electron .",
-    "electron:assets:win": "python scripts/fetch-windows-llamacpp-assets.py",
+    "electron:assets:win": "python electron/scripts/fetch-windows-llamacpp-assets.py",
     "backend:build": "python electron/build-backend.py",
     "electron:pack": "npm run backend:build && electron-builder --dir",
     "electron:dist": "npm run backend:build && electron-builder",
-    "electron:dist:win:msi": "npm run electron:assets:win && npm run backend:build && electron-builder --win msi --x64 && python scripts/validate-windows-package-assets.py"
+    "electron:dist:win:msi": "npm run electron:assets:win && npm run backend:build && electron-builder --win msi --x64 && python electron/scripts/validate-windows-package-assets.py"
   },
   "build": {
     "appId": "com.deployableknowledge.app",
