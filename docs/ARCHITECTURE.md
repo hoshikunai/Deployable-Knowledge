@@ -19,7 +19,9 @@ Chat UI -> session message route -> agent runner -> provider stream
                                       v                 |
                                   tool registry <-------+
                                       |
-                                  search tool -> hybrid / semantic / BM25 retrieval
+                                  search tool -> retrieval registry
+                                                     |
+                                      semantic / BM25 / hybrid / HippoRAG2
                                       |
                                   tool result -> next model turn -> final answer
 ```
@@ -34,8 +36,10 @@ tool results, plus one ordered, typed context-output list on the final assistant
 message. The runner never synthesizes a specific tool call from an uncertainty
 phrase.
 
-The same registered `search` implementation serves interactive `/search`
-requests, so direct search and model-initiated retrieval share validation and
-execution behavior.
+Interactive search and model-initiated search resolve their selected mode through
+the same retrieval registry. HippoRAG2 adds a persisted entity/fact/passage graph,
+OpenIE indexing through the selected AI provider, query-time fact recognition,
+and weighted Personalized PageRank. It falls back to semantic retrieval when the
+graph or its configured provider is unavailable.
 
 Return to [README](../README.md) or browse the [API reference](API_REFERENCE.md).

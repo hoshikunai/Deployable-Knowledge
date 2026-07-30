@@ -1,6 +1,4 @@
-import { searchAllMethods } from '../rag/search/hybrid-search';
 import {
-	buildSources,
 	retrieveRagContext,
 	type RagRetrievalMode,
 	type RagSource
@@ -11,24 +9,18 @@ import { DEFAULT_ASSISTANT_CONFIG } from '$lib/constants';
 import { RetrievalMode } from '$lib/enums';
 import { clampInteger, clampText, readObject } from '../utils/values';
 
-type SearchMode = RagRetrievalMode | 'all';
+type SearchToolData = {
+	query: string;
+	mode: RagRetrievalMode;
+	context: string;
+	sources: RagSource[];
+};
 
-type SearchAllData = Awaited<ReturnType<typeof searchAllMethods>>;
-
-type SearchToolData =
-	| SearchAllData
-	| {
-			query: string;
-			mode: RagRetrievalMode;
-			context: string;
-			sources: RagSource[];
-	  };
-
-const SEARCH_MODES = new Set<SearchMode>([
+const SEARCH_MODES = new Set<RagRetrievalMode>([
 	RetrievalMode.SEMANTIC,
 	RetrievalMode.BM25,
 	RetrievalMode.HYBRID,
-	'all'
+	RetrievalMode.HIPPORAG_2
 ]);
 
 export const searchTool: AgentTool<SearchToolData> = {
@@ -57,7 +49,7 @@ export const searchTool: AgentTool<SearchToolData> = {
 				},
 				mode: {
 					type: 'string',
-					enum: ['semantic', 'bm25', 'hybrid'],
+					enum: ['semantic', 'bm25', 'hybrid', 'hipporag2'],
 					description: 'Optional retrieval method. Defaults to the configured method.'
 				},
 				top_k: {
@@ -79,8 +71,8 @@ export const searchTool: AgentTool<SearchToolData> = {
 		if (!query) throw new Error('search requires a non-empty query');
 
 		const requestedMode = typeof args.mode === 'string' ? args.mode : '';
-		const mode: SearchMode = SEARCH_MODES.has(requestedMode as SearchMode)
-			? (requestedMode as SearchMode)
+		const mode: RagRetrievalMode = SEARCH_MODES.has(requestedMode as RagRetrievalMode)
+			? (requestedMode as RagRetrievalMode)
 			: (context.retrievalMode ?? DEFAULT_ASSISTANT_CONFIG.retrievalMode);
 		const maxTopK = clampInteger(context.maxSearchTopK, 1, 100, 20);
 		const topK = clampInteger(
@@ -90,15 +82,6 @@ export const searchTool: AgentTool<SearchToolData> = {
 			DEFAULT_ASSISTANT_CONFIG.ragTopK
 		);
 		const documentIds = context.documentIds;
-
-		if (mode === 'all') {
-			const data = await searchAllMethods({ query, topK, documentIds });
-
-			const sources = buildSources(data.hybrid);
-			return createToolResult(data, {
-				outputs: sources.map(sourceOutput)
-			});
-		}
 
 		const result = await retrieveRagContext({
 			question: query,

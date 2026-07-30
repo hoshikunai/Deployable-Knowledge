@@ -6,7 +6,8 @@
 | `/{provider_id}/{model_id}/chat-stream` | POST       | Same as provider/model chat but always streams Server Sent Events                                                                         |
 | `/providers`                            | GET/PATCH  | List providers and update provider API keys or current model                                                                              |
 | `/{provider_id}/models`                 | GET        | List models for a provider                                                                                                                |
-| `/search`                               | GET        | Query documents through the registered `search` tool with `query`, optional `topK`, and repeated `documentIds`                            |
+| `/search`                               | GET        | Query documents with `query`, optional `mode`, `topK`, and repeated `documentIds`                                                         |
+| `/hipporag`                             | GET/POST   | Read HippoRAG2 index status or stream an incremental/full index build as newline-delimited JSON                                           |
 | `/upload`                               | POST       | Multipart upload of one or more documents                                                                                                 |
 | `/remove`                               | POST       | Remove an uploaded document by filename                                                                                                   |
 | `/ingest`                               | POST       | Parse PDFs and schedule background embedding                                                                                              |

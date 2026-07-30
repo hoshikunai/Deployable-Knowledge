@@ -32,6 +32,8 @@ export const API_DOCUMENTS = {
 	folder: (id: string) => `/documents/folders/${segment(id)}`
 };
 
+export const API_HIPPORAG = '/hipporag';
+
 export const API_NOTEBOOKS = {
 	BASE: '/notebooks',
 	IMPORT: '/notebooks/import',

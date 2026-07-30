@@ -33,7 +33,7 @@ Built-in tools:
 - `get_datetime` returns the current ISO time plus a formatted value in an
   optional IANA timezone.
 - `search` queries the local document store using semantic, BM25, hybrid, or
-  API-only comparison mode. Chat supplies the selected document IDs,
+  HippoRAG2 retrieval. Chat supplies the selected document IDs,
   retrieval-mode default, and result limit through execution context, so model
   arguments cannot broaden the selected document scope.
 - `python` runs backend Python code in Pyodide's WebAssembly runtime, so the

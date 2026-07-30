@@ -1,7 +1,10 @@
-import { json } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import { DEFAULT_ASSISTANT_CONFIG } from '$lib/constants';
+import {
+	isRetrievalMode,
+	searchWithRetrievalMode
+} from '$lib/server/rag/search/retrieval-registry';
 import type { RequestHandler } from './$types';
-import { toolRegistry } from '$lib/server/tools';
 
 export const GET: RequestHandler = async ({ url }) => {
 	const query = url.searchParams.get('query') ?? '';
@@ -14,20 +17,34 @@ export const GET: RequestHandler = async ({ url }) => {
 		: DEFAULT_ASSISTANT_CONFIG.ragTopK;
 	const documentIds = url.searchParams.getAll('documentIds');
 	const docs = documentIds.length ? documentIds : undefined;
+	const requestedMode = url.searchParams.get('mode') ?? '';
+	if (requestedMode && !isRetrievalMode(requestedMode)) {
+		throw error(400, `Unsupported retrieval mode: ${requestedMode}`);
+	}
+	const mode = isRetrievalMode(requestedMode)
+		? requestedMode
+		: DEFAULT_ASSISTANT_CONFIG.retrievalMode;
 
 	if (!query.trim()) {
-		return json({ bm25: [], semantic: [], hybrid: [] });
+		return json([]);
 	}
 
-	const result = await toolRegistry.execute(
-		'search',
-		{ query, top_k: topK, mode: 'all' },
-		{ documentIds: docs, maxSearchTopK: 100 }
+	const matches = await searchWithRetrievalMode(mode, {
+		query,
+		topK,
+		documentIds: docs
+	});
+	return json(
+		matches.map(
+			({ chunkId, documentId, sourceTitle, sourceType, pageIndex, chunkIndex, content }) => ({
+				chunkId,
+				documentId,
+				sourceTitle,
+				sourceType,
+				pageIndex,
+				chunkIndex,
+				content
+			})
+		)
 	);
-
-	if (result.isError) {
-		return json(JSON.parse(result.content), { status: 400 });
-	}
-
-	return json(result.data);
 };

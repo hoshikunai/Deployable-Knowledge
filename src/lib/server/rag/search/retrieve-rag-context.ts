@@ -1,13 +1,11 @@
-import { searchSemantic } from './semantic-search';
-import { searchHybrid } from './hybrid-search';
-import { searchBm25 } from './bm25-search';
 import type { SearchChunkType, SearchMatchBase } from './search-shared';
+import { searchWithRetrievalMode } from './retrieval-registry';
 import { DEFAULT_ASSISTANT_CONFIG, RAG_CHUNK_CHARACTER_LIMIT } from '$lib/constants';
 import { RetrievalMode } from '$lib/enums';
 import { compactText } from '$lib/server/utils/values';
 
 const MAX_PREVIEW_CHARS = 200;
-const ENV_RETRIEVAL_MODES: readonly RetrievalMode[] = [RetrievalMode.BM25, RetrievalMode.SEMANTIC];
+const ENV_RETRIEVAL_MODES: readonly RetrievalMode[] = Object.values(RetrievalMode);
 const DEFAULT_RETRIEVAL_MODE =
 	ENV_RETRIEVAL_MODES.find((mode) => mode === process.env.RAG_RETRIEVAL_MODE) ??
 	DEFAULT_ASSISTANT_CONFIG.retrievalMode;
@@ -63,8 +61,7 @@ export function buildSources(matches: SearchMatchBase[]): RagSource[] {
 	});
 }
 
-// Chat uses hybrid by default. Set RAG_RETRIEVAL_MODE=semantic / bm25 to force one path
-// May want to switch to hybrid only in the future, kept for now to test/validate
+// Chat uses the profile selection by default. RAG_RETRIEVAL_MODE can override it for local testing.
 export async function retrieveRagContext({
 	question,
 	documentIds = [],
@@ -84,17 +81,7 @@ export async function retrieveRagContext({
 		documentIds,
 		chunkTypes
 	};
-	let matches: SearchMatchBase[];
-
-	if (mode === RetrievalMode.BM25) {
-		const search = await searchBm25(searchOptions);
-		matches = search.results.map(({ score: _score, ...match }) => match);
-	} else if (mode === RetrievalMode.HYBRID) {
-		matches = (await searchHybrid(searchOptions)).results;
-	} else {
-		const search = await searchSemantic(searchOptions);
-		matches = search.results.map(({ score: _score, ...match }) => match);
-	}
+	const matches = await searchWithRetrievalMode(mode, searchOptions);
 
 	return {
 		mode,

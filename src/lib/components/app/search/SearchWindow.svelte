@@ -6,7 +6,7 @@
 	import { RetrievalMode } from '$lib/enums';
 	import { SearchService } from '$lib/services';
 	import { documentsStore, settingsStore } from '$lib/stores';
-	import type { ApiSearchResults } from '$lib/types';
+	import type { ApiSearchMatch } from '$lib/types';
 	import SearchForm from './SearchForm.svelte';
 	import SearchResultCard from './SearchResultCard.svelte';
 
@@ -33,16 +33,18 @@
 	let query = $state(settingsStore.lastQuery);
 	let retrievalMode = $state<RetrievalMode>(settingsStore.config.retrievalMode);
 	let ragTopK = $state(settingsStore.config.ragTopK);
-	let results = $state<ApiSearchResults>({ semantic: [], bm25: [], hybrid: [] });
+	let results = $state<ApiSearchMatch[]>([]);
+	let resultMode = $state<RetrievalMode | null>(null);
 	let loading = $state(false);
 	let error = $state('');
-	const activeResults = $derived(results[retrievalMode] ?? []);
+	const activeResults = $derived(resultMode === retrievalMode ? results : []);
 
 	async function runSearch(): Promise<void> {
 		const value = query.trim();
 
 		if (!value) {
-			results = { semantic: [], bm25: [], hybrid: [] };
+			results = [];
+			resultMode = null;
 			return;
 		}
 
@@ -54,11 +56,14 @@
 			results = await SearchService.search(
 				value,
 				Math.max(1, Math.floor(ragTopK || settingsStore.config.ragTopK)),
+				retrievalMode,
 				[...documentsStore.selectedIds]
 			);
+			resultMode = retrievalMode;
 		} catch (searchError) {
 			error = searchError instanceof Error ? searchError.message : 'Search failed';
-			results = { semantic: [], bm25: [], hybrid: [] };
+			results = [];
+			resultMode = null;
 		} finally {
 			loading = false;
 		}

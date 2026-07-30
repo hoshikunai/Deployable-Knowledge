@@ -10,7 +10,7 @@ single windowed workspace that can run against local Ollama models or GitHub Mod
 
 - Ingest PDFs with text extraction and OCR fallback.
 - Create local embeddings with `nomic-ai/nomic-embed-text-v1.5`.
-- Search with semantic, BM25, or hybrid retrieval.
+- Search with semantic, BM25, hybrid, or TypeScript-native HippoRAG2 retrieval.
 - Organize documents with tags and select the corpus used by chat.
 
 ### Agentic chat
@@ -77,7 +77,7 @@ test the affected workspace flows.
 | Application         | SvelteKit, Svelte 5 runes, TypeScript                     |
 | UI                  | Tailwind CSS 4, shadcn-svelte primitives, bits-ui, Lucide |
 | Database            | SQLite/libSQL with Drizzle ORM                            |
-| Retrieval           | Transformers.js embeddings, BM25, hybrid search           |
+| Retrieval           | Transformers.js embeddings, BM25, hybrid, HippoRAG2       |
 | Document processing | pdf-parse, Tesseract.js, Sharp                            |
 | Model providers     | Ollama, GitHub Models                                     |
 | Agent tools         | Local search, Pyodide Python, date/time                   |
