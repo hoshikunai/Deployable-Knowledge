@@ -10,7 +10,7 @@ single windowed workspace that can run against local Ollama models or GitHub Mod
 
 - Ingest PDFs with text extraction and OCR fallback.
 - Create local embeddings with `nomic-ai/nomic-embed-text-v1.5`.
-- Search with semantic, BM25, or hybrid retrieval.
+- Search with semantic, BM25, hybrid retrieval, or HippoRAG2
 - Organize documents with tags and select the corpus used by chat.
 
 ### Agentic chat
@@ -34,6 +34,7 @@ single windowed workspace that can run against local Ollama models or GitHub Mod
 - Audio files up to 2 hours in length and 100 MB
 - Utilizes OpenAI's whisper-tiny model for transcription
 - Supports all FFMpeg supported audio files
+
 
 ## Getting Started
 
@@ -72,15 +73,15 @@ test the affected workspace flows.
 
 ## Tech Stack
 
-| Layer               | Technology                                                |
-| ------------------- | --------------------------------------------------------- |
-| Application         | SvelteKit, Svelte 5 runes, TypeScript                     |
-| UI                  | Tailwind CSS 4, shadcn-svelte primitives, bits-ui, Lucide |
-| Database            | SQLite/libSQL with Drizzle ORM                            |
-| Retrieval           | Transformers.js embeddings, BM25, hybrid search           |
-| Document processing | pdf-parse, Tesseract.js, Sharp                            |
-| Model providers     | Ollama, GitHub Models                                     |
-| Agent tools         | Local search, Pyodide Python, date/time                   |
+| Layer               | Technology                                                 |
+| ------------------- | ---------------------------------------------------------- |
+| Application         | SvelteKit, Svelte 5 runes, TypeScript                      |
+| UI                  | Tailwind CSS 4, shadcn-svelte primitives, bits-ui, Lucide  |
+| Database            | SQLite/libSQL with Drizzle ORM                             |
+| Retrieval           | Transformers.js embeddings, BM25, hybrid search, HippoRAG2 |
+| Document processing | pdf-parse, Tesseract.js, Sharp                             |
+| Model providers     | Ollama, GitHub Models                                      |
+| Agent tools         | Local search, Pyodide Python, date/time                    |
 
 ## Architecture
 
