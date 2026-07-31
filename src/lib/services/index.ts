@@ -6,7 +6,6 @@
  */
 export { ChatService } from './chat.service';
 export { DocumentsService } from './documents.service';
-export { HippoRagService } from './hipporag.service';
 export { LocalModelsService } from './local-models.service';
 export { NotebooksService } from './notebooks.service';
 export { ProfilesService } from './profiles.service';

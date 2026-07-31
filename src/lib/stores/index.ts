@@ -1,6 +1,5 @@
 export { chatStore } from './chat.svelte';
 export { documentsStore } from './documents.svelte';
-export { hippoRagStore } from './hipporag.svelte';
 export { localModelsStore } from './local-models.svelte';
 export { notebooksStore } from './notebooks.svelte';
 export { sessionsStore } from './sessions.svelte';

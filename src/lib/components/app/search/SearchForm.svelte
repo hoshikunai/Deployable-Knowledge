@@ -24,8 +24,7 @@
 	const modes = [
 		{ value: RetrievalMode.SEMANTIC, label: 'Semantic' },
 		{ value: RetrievalMode.BM25, label: 'BM25' },
-		{ value: RetrievalMode.HYBRID, label: 'Hybrid' },
-		{ value: RetrievalMode.HIPPORAG_2, label: 'HippoRAG 2' }
+		{ value: RetrievalMode.HYBRID, label: 'Hybrid' }
 	];
 </script>
 

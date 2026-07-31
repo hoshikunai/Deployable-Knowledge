@@ -9,7 +9,6 @@ import {
 } from '../database/schema';
 import type { ParsedChunk } from './chunk/parse-shared';
 import { embedTexts } from './embedding-model';
-import { embeddingToBuffer } from './embedding-vectors';
 
 const INSERT_BATCH_SIZE = 100; //Can adjust later
 
@@ -23,6 +22,12 @@ export type StoreDocumentProgress = {
 	current: number;
 	total: number;
 };
+
+// SQLite DB stores embeddings as bytes, however semantic search reads them back as Float32 vectors
+function embeddingToBuffer(values: number[]): Buffer {
+	const array = Float32Array.from(values);
+	return Buffer.from(array.buffer, array.byteOffset, array.byteLength);
+}
 
 // The document id is path based so reingesting the same file replaces the same document. Prevents duplicate documents!
 function buildDocumentRow(chunks: ParsedChunk[], now: string): NewDocument {

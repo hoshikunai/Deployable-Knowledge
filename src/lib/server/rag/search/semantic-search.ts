@@ -6,7 +6,6 @@ import { DEFAULT_ASSISTANT_CONFIG } from '$lib/constants';
 import { db } from '../../database/database';
 import { documentChunks, documents } from '../../database/schema';
 import { embedTexts } from '../embedding-model';
-import { embeddingDotProduct, embeddingFromBytes } from '../embedding-vectors';
 import {
 	cleanFilterValues,
 	type ScoredSearchMatch,
@@ -92,13 +91,24 @@ export async function searchSemantic(options: SearchOptionsBase): Promise<Semant
 			throw new Error(`Chunk ${row.chunkId} is missing its embedding bytes.`);
 		}
 
-		if (!(rawEmbedding instanceof Uint8Array) && !(rawEmbedding instanceof ArrayBuffer)) {
+		let bytes: Uint8Array;
+		if (rawEmbedding instanceof Uint8Array) {
+			bytes = rawEmbedding;
+		} else if (rawEmbedding instanceof ArrayBuffer) {
+			bytes = new Uint8Array(rawEmbedding);
+		} else {
 			throw new Error(`Chunk ${row.chunkId} returned an unsupported embedding shape.`);
 		}
 
+		const vector = new Float32Array(
+			bytes.buffer,
+			bytes.byteOffset,
+			Math.floor(bytes.byteLength / Float32Array.BYTES_PER_ELEMENT)
+		);
+
 		return {
 			row,
-			vector: embeddingFromBytes(rawEmbedding)
+			vector
 		};
 	});
 
@@ -107,8 +117,12 @@ export async function searchSemantic(options: SearchOptionsBase): Promise<Semant
 	for (const candidate of decodedCandidates) {
 		const { row, vector } = candidate;
 
+		let score = 0;
+
 		// Embeddings are normalized, so dot product is the cosine score
-		const score = embeddingDotProduct(queryEmbedding, vector);
+		for (let index = 0; index < queryEmbedding.length; index += 1) {
+			score += queryEmbedding[index] * vector[index]; // dot product
+		}
 		scoredRows.push({
 			chunkId: row.chunkId,
 			documentId: row.documentId,

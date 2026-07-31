@@ -61,26 +61,6 @@ export interface ApiDocumentIngestResult {
 	chunkCount: number;
 }
 
-export interface ApiHippoRagIndexStatus {
-	error: string | null;
-	indexedChunks: number;
-	modelId: string | null;
-	pendingChunks: number;
-	providerId: string | null;
-	ready: boolean;
-	running: boolean;
-	totalChunks: number;
-}
-
-export interface ApiHippoRagBuildRequest {
-	rebuild?: boolean;
-}
-
-export type ApiHippoRagBuildEvent =
-	| ({ status: 'progress' } & ApiDocumentIngestProgress)
-	| { status: 'complete'; result: ApiHippoRagIndexStatus }
-	| { status: 'error'; message: string };
-
 export type ApiDocumentIngestEvent =
 	| ({ status: 'progress' } & ApiDocumentIngestProgress)
 	| { status: 'complete'; result: ApiDocumentIngestResult }
@@ -329,5 +309,7 @@ export interface ApiSearchMatch {
 	chunkIndex: number;
 	content: string;
 }
+
+export type ApiSearchResults = Record<RetrievalMode, ApiSearchMatch[]>;
 
 export type ApiActiveAssistantProfile = AssistantProfile | null;

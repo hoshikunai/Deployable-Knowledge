@@ -40,8 +40,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const supportedRetrievalModes: readonly RagRetrievalMode[] = [
 		RetrievalMode.SEMANTIC,
 		RetrievalMode.BM25,
-		RetrievalMode.HYBRID,
-		RetrievalMode.HIPPORAG_2
+		RetrievalMode.HYBRID
 	];
 	const storedRetrievalMode = profile?.retrievalMode as RagRetrievalMode | undefined;
 	const retrievalMode: RagRetrievalMode =

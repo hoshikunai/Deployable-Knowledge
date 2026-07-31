@@ -180,7 +180,7 @@ export const profiles = sqliteTable(
 			.notNull()
 			.default(DEFAULT_ASSISTANT_CONFIG.reasoningBudget),
 		retrievalMode: text('retrieval_mode', {
-			enum: ['semantic', 'bm25', 'hybrid', 'hipporag2']
+			enum: ['semantic', 'bm25', 'hybrid']
 		})
 			.notNull()
 			.default(DEFAULT_ASSISTANT_CONFIG.retrievalMode),
@@ -270,112 +270,6 @@ export const documentChunks = sqliteTable(
 	]
 );
 
-// HippoRAG 2 keeps its graph artifacts separate from the source chunks so the
-// existing semantic/BM25 indexes remain usable while a graph is being rebuilt.
-export const hippoIndexMetadata = sqliteTable('hippo_index_metadata', {
-	id: text('id').primaryKey(),
-	providerId: text('provider_id', { length: 128 }).notNull(),
-	modelId: text('model_id', { length: 255 }).notNull(),
-	embeddingModel: text('embedding_model', { length: 255 }).notNull(),
-	promptVersion: text('prompt_version', { length: 64 }).notNull(),
-	updatedAt: text('updated_at').notNull()
-});
-
-export const hippoChunkIndex = sqliteTable(
-	'hippo_chunk_index',
-	{
-		chunkId: text('chunk_id')
-			.primaryKey()
-			.references(() => documentChunks.id, { onDelete: 'cascade' }),
-		indexedAt: text('indexed_at').notNull()
-	},
-	(table) => [index('hippo_chunk_index_indexed_at_idx').on(table.indexedAt)]
-);
-
-export const hippoEntities = sqliteTable(
-	'hippo_entities',
-	{
-		id: text('id').primaryKey(),
-		name: text('name').notNull(),
-		embedding: blob('embedding', { mode: 'buffer' }).notNull(),
-		createdAt: text('created_at').notNull()
-	},
-	(table) => [index('hippo_entities_name_idx').on(table.name)]
-);
-
-export const hippoFacts = sqliteTable(
-	'hippo_facts',
-	{
-		id: text('id').primaryKey(),
-		subjectEntityId: text('subject_entity_id')
-			.notNull()
-			.references(() => hippoEntities.id, { onDelete: 'cascade' }),
-		predicate: text('predicate').notNull(),
-		objectEntityId: text('object_entity_id')
-			.notNull()
-			.references(() => hippoEntities.id, { onDelete: 'cascade' }),
-		content: text('content').notNull(),
-		embedding: blob('embedding', { mode: 'buffer' }).notNull(),
-		createdAt: text('created_at').notNull()
-	},
-	(table) => [
-		index('hippo_facts_subject_idx').on(table.subjectEntityId),
-		index('hippo_facts_object_idx').on(table.objectEntityId)
-	]
-);
-
-export const hippoChunkEntities = sqliteTable(
-	'hippo_chunk_entities',
-	{
-		id: text('id').primaryKey(),
-		chunkId: text('chunk_id')
-			.notNull()
-			.references(() => documentChunks.id, { onDelete: 'cascade' }),
-		entityId: text('entity_id')
-			.notNull()
-			.references(() => hippoEntities.id, { onDelete: 'cascade' })
-	},
-	(table) => [
-		uniqueIndex('hippo_chunk_entities_unique_idx').on(table.chunkId, table.entityId),
-		index('hippo_chunk_entities_entity_idx').on(table.entityId)
-	]
-);
-
-export const hippoChunkFacts = sqliteTable(
-	'hippo_chunk_facts',
-	{
-		id: text('id').primaryKey(),
-		chunkId: text('chunk_id')
-			.notNull()
-			.references(() => documentChunks.id, { onDelete: 'cascade' }),
-		factId: text('fact_id')
-			.notNull()
-			.references(() => hippoFacts.id, { onDelete: 'cascade' })
-	},
-	(table) => [
-		uniqueIndex('hippo_chunk_facts_unique_idx').on(table.chunkId, table.factId),
-		index('hippo_chunk_facts_fact_idx').on(table.factId)
-	]
-);
-
-export const hippoSynonyms = sqliteTable(
-	'hippo_synonyms',
-	{
-		id: text('id').primaryKey(),
-		sourceEntityId: text('source_entity_id')
-			.notNull()
-			.references(() => hippoEntities.id, { onDelete: 'cascade' }),
-		targetEntityId: text('target_entity_id')
-			.notNull()
-			.references(() => hippoEntities.id, { onDelete: 'cascade' }),
-		score: real().notNull()
-	},
-	(table) => [
-		uniqueIndex('hippo_synonyms_unique_idx').on(table.sourceEntityId, table.targetEntityId),
-		index('hippo_synonyms_target_idx').on(table.targetEntityId)
-	]
-);
-
 export const syncedFolders = sqliteTable(
 	'synced_folders',
 	{
@@ -451,12 +345,6 @@ export type NewDocumentTag = typeof documentTags.$inferInsert;
 
 export type DocumentChunk = typeof documentChunks.$inferSelect;
 export type NewDocumentChunk = typeof documentChunks.$inferInsert;
-
-export type HippoChunkIndex = typeof hippoChunkIndex.$inferSelect;
-export type HippoEntity = typeof hippoEntities.$inferSelect;
-export type HippoFact = typeof hippoFacts.$inferSelect;
-export type HippoIndexMetadata = typeof hippoIndexMetadata.$inferSelect;
-export type HippoSynonym = typeof hippoSynonyms.$inferSelect;
 
 export type SyncedFolder = typeof syncedFolders.$inferSelect;
 export type NewSyncedFolder = typeof syncedFolders.$inferInsert;
