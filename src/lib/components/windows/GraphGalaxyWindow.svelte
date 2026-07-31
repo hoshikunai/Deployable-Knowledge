@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { WorkspaceWindow } from '$lib/components/app/workspace/WorkspaceWindow';
 	import Icon from '$lib/components/utils/Icon.svelte';
 	import { showToast } from '$lib/components/utils/ToastHost.svelte';
@@ -116,7 +117,6 @@
 	let selectedEdge = $state<VisualEdge | null>(null);
 	let inspectorExpanded = $state(false);
 	let savingChunkId = $state<string | null>(null);
-	let pendingChunk = $state<VisualNode | null>(null);
 	let yaw = $state(0.42);
 	let pitch = $state(-0.18);
 	let zoom = $state(DEFAULT_ZOOM);
@@ -341,7 +341,7 @@
 		inspectorExpanded = false;
 		cameraAnimation = null;
 		try {
-			const params = new URLSearchParams({
+			const params = new SvelteURLSearchParams({
 				topK: String(activeTopK)
 			});
 			if (nextQuery.trim()) params.set('query', nextQuery.trim());
@@ -915,7 +915,6 @@
 	}
 
 	async function openSaveChunkDialogFor(node: VisualNode) {
-		pendingChunk = node;
 		const saveKey = node.chunkId;
 		if (!saveKey) throw new Error('This graph chunk has no stored source ID.');
 		if (savingChunkId) return;
@@ -927,7 +926,6 @@
 			await tick();
 			window.dispatchEvent(new CustomEvent('notebook-sources:refresh'));
 			showToast(`Chunk added to ${notebookTitle}`);
-			pendingChunk = null;
 		} catch (error) {
 			throw error instanceof Error ? error : new Error('The chunk could not be saved.');
 		} finally {
@@ -1247,7 +1245,7 @@
 					{#if selectedNodeEdges.length}
 						<div class="relationship-menu">
 							<div class="kind">connected relationships</div>
-							{#each selectedNodeEdges.slice(0, 12) as edge}
+							{#each selectedNodeEdges.slice(0, 12) as edge (`${edge.source}:${edge.target}:${edge.relation}`)}
 								<button type="button" onclick={() => focusEdge(edge)}>
 									<span>{displayRelation(edge.relation)}</span>
 									<small>{edgePartnerLabel(edge, selectedNode.id)}</small>

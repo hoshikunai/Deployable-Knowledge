@@ -7,8 +7,13 @@ export type RerankCandidate = {
 	content: string;
 };
 
-let tokenizer: any = null;
-let model: any = null;
+type Tokenizer = Awaited<ReturnType<typeof AutoTokenizer.from_pretrained>>;
+type ClassificationModel = Awaited<
+	ReturnType<typeof AutoModelForSequenceClassification.from_pretrained>
+>;
+
+let tokenizer: Tokenizer | undefined;
+let model: ClassificationModel | undefined;
 
 async function initializeModel() {
 	if (!tokenizer || !model) {
@@ -16,6 +21,7 @@ async function initializeModel() {
 		tokenizer = await AutoTokenizer.from_pretrained(modelId);
 		model = await AutoModelForSequenceClassification.from_pretrained(modelId);
 	}
+	return { tokenizer, model };
 }
 
 export async function rerankCandidates(
@@ -28,7 +34,7 @@ export async function rerankCandidates(
 
 	if (uniqueCandidates.length === 0) return [];
 
-	await initializeModel();
+	const { tokenizer, model } = await initializeModel();
 
 	const queries = new Array(uniqueCandidates.length).fill(query);
 	const passages = uniqueCandidates.map((candidate) => candidate.content);

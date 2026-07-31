@@ -128,7 +128,6 @@ export function sanitizeEntityLabel(input: string): string {
 	const normalized = normalizeLabel(input);
 	if (!normalized) return '';
 
-	const lower = normalized.toLowerCase();
 	if (/^(?:\d+|0+)$/.test(normalized)) return '';
 	if (/^(?:sample|chunk|document|page|section|chapter)(?:[\s\-_]?\d+)?$/i.test(normalized))
 		return '';

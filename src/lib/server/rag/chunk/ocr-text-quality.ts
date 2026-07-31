@@ -13,7 +13,7 @@ type OcrTextOptions = {
 };
 
 function wordTokens(text: string): string[] {
-	return text.match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) ?? [];
+	return text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? [];
 }
 
 function letterCount(text: string): number {

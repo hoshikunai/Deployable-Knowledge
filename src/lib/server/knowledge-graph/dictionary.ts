@@ -276,10 +276,6 @@ function phraseIndexBefore(text: string, phrase: string, maximumIndex: number): 
 	return best;
 }
 
-function containsTokenized(text: string, tokenizedAlias: string): boolean {
-	return tokenizedMatch(text, tokenizedAlias) !== null;
-}
-
 function tokenizedMatch(
 	text: string,
 	tokenizedAlias: string

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- Retained inactive research prototype from kg-clean.
 // @ts-nocheck
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
