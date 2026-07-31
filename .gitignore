@@ -13,6 +13,7 @@ node_modules
 # operating systems
 .DS_Store
 Thumbs.db
+*.log
 
 # editors 
 .vscode/

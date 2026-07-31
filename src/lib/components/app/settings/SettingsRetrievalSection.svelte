@@ -9,7 +9,8 @@
 	const modes = [
 		{ value: RetrievalMode.SEMANTIC, label: 'Semantic' },
 		{ value: RetrievalMode.BM25, label: 'BM25' },
-		{ value: RetrievalMode.HYBRID, label: 'Hybrid' }
+		{ value: RetrievalMode.HYBRID, label: 'Hybrid' },
+		{ value: RetrievalMode.KNOWLEDGE_GRAPH, label: 'Knowledge Graph' }
 	];
 
 	function updateRagTopK(event: Event): void {

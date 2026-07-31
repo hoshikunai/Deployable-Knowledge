@@ -91,7 +91,16 @@ export interface ApiTranscriptResponse {
 }
 
 export interface ApiDocumentDirectoryItem {
-	kind: 'folder' | 'pdf' | 'audio' | 'markdown' | 'text';
+	kind:
+		| 'folder'
+		| 'pdf'
+		| 'audio'
+		| 'docx'
+		| 'pptx'
+		| 'xlsx'
+		| 'csv'
+		| 'markdown'
+		| 'text';
 	name: string;
 	path: string;
 }

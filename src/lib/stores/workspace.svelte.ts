@@ -15,6 +15,7 @@ const DEFAULT_WINDOW_HEIGHT = 320;
 const DEFAULT_PLACEMENTS: WindowPlacement[] = [
 	placement('documents-window', WindowColumn.LEFT),
 	placement('chat-history-window', WindowColumn.LEFT),
+	placement('graph-galaxy-window', WindowColumn.LEFT),
 	placement('chat-window', WindowColumn.RIGHT),
 	placement('search-context-window', WindowColumn.RIGHT),
 	placement('notebook-window', WindowColumn.RIGHT)

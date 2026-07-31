@@ -28,6 +28,7 @@ const SEARCH_MODES = new Set<SearchMode>([
 	RetrievalMode.SEMANTIC,
 	RetrievalMode.BM25,
 	RetrievalMode.HYBRID,
+	RetrievalMode.KNOWLEDGE_GRAPH,
 	'all'
 ]);
 
@@ -57,7 +58,7 @@ export const searchTool: AgentTool<SearchToolData> = {
 				},
 				mode: {
 					type: 'string',
-					enum: ['semantic', 'bm25', 'hybrid'],
+					enum: ['semantic', 'bm25', 'hybrid', 'graph'],
 					description: 'Optional retrieval method. Defaults to the configured method.'
 				},
 				top_k: {
