@@ -4,10 +4,7 @@ import { searchBm25 } from './bm25-search';
 import type { SearchChunkType, SearchMatchBase } from './search-shared';
 import { DEFAULT_ASSISTANT_CONFIG, RAG_CHUNK_CHARACTER_LIMIT } from '$lib/constants';
 import { RetrievalMode } from '$lib/enums';
-import {
-	searchKnowledgeGraph,
-	type KnowledgeGraphPath
-} from '$lib/server/knowledge-graph';
+import { searchKnowledgeGraph, type KnowledgeGraphPath } from '$lib/server/knowledge-graph';
 import { compactText } from '$lib/server/utils/values';
 
 const MAX_PREVIEW_CHARS = 200;

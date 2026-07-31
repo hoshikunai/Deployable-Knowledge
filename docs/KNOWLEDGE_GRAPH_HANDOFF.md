@@ -165,9 +165,9 @@ Current active Knowledge Graph scripts in `package.json`:
 
 ```json
 {
-  "test:knowledge-graph": "tsx --test src/lib/server/knowledge-graph/*.test.ts",
-  "graph:rebuild": "tsx scripts/rebuild-knowledge-graph.ts",
-  "graph:rebuild:fast": "tsx scripts/rebuild-knowledge-graph.ts --extractor=typescript"
+	"test:knowledge-graph": "tsx --test src/lib/server/knowledge-graph/*.test.ts",
+	"graph:rebuild": "tsx scripts/rebuild-knowledge-graph.ts",
+	"graph:rebuild:fast": "tsx scripts/rebuild-knowledge-graph.ts --extractor=typescript"
 }
 ```
 
@@ -360,7 +360,6 @@ Current status:
    NER/relation extraction model, and it should not be presented as a finished
    management-grade graph intelligence layer. The biggest future improvement area is
    semantic control:
-
    - canonical entity resolution;
    - relation direction;
    - avoiding document-layout artifacts;
@@ -382,7 +381,6 @@ Current status:
 5. Seed/corpus reproducibility needs a decision
 
    Decide whether the product should ship with:
-
    - PDFs in repo;
    - `app.db.seed`;
    - generated graph rows;
@@ -412,7 +410,6 @@ Current status:
    ```
 
 8. Smoke test in the browser:
-
    - select Knowledge Graph search mode;
    - ask a document-specific query;
    - open Graph Galaxy;

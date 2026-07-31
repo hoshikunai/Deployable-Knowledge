@@ -345,7 +345,12 @@ export const graph_edges = sqliteTable(
 		index('graph_edges_target_idx').on(table.target),
 		index('graph_edges_document_idx').on(table.documentId),
 		index('graph_edges_chunk_idx').on(table.chunkId),
-		uniqueIndex('graph_edges_unique_idx').on(table.source, table.target, table.relation, table.chunkId)
+		uniqueIndex('graph_edges_unique_idx').on(
+			table.source,
+			table.target,
+			table.relation,
+			table.chunkId
+		)
 	]
 );
 

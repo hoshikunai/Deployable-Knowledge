@@ -111,20 +111,20 @@ Data sources:
 - source text in `app.db`;
 - a deterministic manual review of 48 assertions.
 
-| Measure | Result |
-|---|---:|
-| Chunks completed | 269 / 269 |
-| Build failures | 0 |
-| Chunks producing at least one assertion | 175 / 269 (65.1%) |
-| Entities | 765 |
-| Assertions | 594 |
-| Evidence strings found verbatim in source chunks | 594 / 594 |
-| LLM-only assertions | 439 (73.9%) |
-| GLiNER-only assertions | 119 (20.0%) |
-| LLM and GLiNER agreement | 36 (6.1%) |
-| Asserted relationships | 582 |
-| Negated relationships | 12 |
-| Uncertain relationships | 0 |
+| Measure                                          |            Result |
+| ------------------------------------------------ | ----------------: |
+| Chunks completed                                 |         269 / 269 |
+| Build failures                                   |                 0 |
+| Chunks producing at least one assertion          | 175 / 269 (65.1%) |
+| Entities                                         |               765 |
+| Assertions                                       |               594 |
+| Evidence strings found verbatim in source chunks |         594 / 594 |
+| LLM-only assertions                              |       439 (73.9%) |
+| GLiNER-only assertions                           |       119 (20.0%) |
+| LLM and GLiNER agreement                         |         36 (6.1%) |
+| Asserted relationships                           |               582 |
+| Negated relationships                            |                12 |
+| Uncertain relationships                          |                 0 |
 
 The captured run log reached LLM chunk 269 after approximately 22 minutes and
 52 seconds. Caching allowed later retries and inspection without repeating those
@@ -169,19 +169,19 @@ site, care phase, or medical team.
 
 The resulting entity distribution was:
 
-| Entity type | Count |
-|---|---:|
-| object | 210 |
-| process | 166 |
-| other | 117 |
-| organization | 76 |
-| person | 61 |
-| document | 52 |
-| location | 37 |
-| system | 25 |
-| component | 13 |
-| event | 6 |
-| date | 2 |
+| Entity type  | Count |
+| ------------ | ----: |
+| object       |   210 |
+| process      |   166 |
+| other        |   117 |
+| organization |    76 |
+| person       |    61 |
+| document     |    52 |
+| location     |    37 |
+| system       |    25 |
+| component    |    13 |
+| event        |     6 |
+| date         |     2 |
 
 `object`, `process`, and `other` account for 493 of 765 entities (64.4%). This is
 too generic for a technical medical graph.
@@ -269,13 +269,13 @@ requirements, hypotheses, disputed claims, and time-bounded facts.
 Fifteen assertions belonged to seven duplicated normalized triple groups.
 Several high-degree nodes were generic or structural:
 
-| Node | Distinct neighbors |
-|---|---:|
-| casualty | 55 |
-| Role 3 facility | 16 |
-| Table 3-3 | 11 |
-| TACTICAL COMBAT CASUALTY CARE HANDBOOK | 10 |
-| 55 TACTICAL COMBAT CASUALTY CARE HANDBOOK | 10 |
+| Node                                      | Distinct neighbors |
+| ----------------------------------------- | -----------------: |
+| casualty                                  |                 55 |
+| Role 3 facility                           |                 16 |
+| Table 3-3                                 |                 11 |
+| TACTICAL COMBAT CASUALTY CARE HANDBOOK    |                 10 |
+| 55 TACTICAL COMBAT CASUALTY CARE HANDBOOK |                 10 |
 
 The page-numbered handbook variants demonstrate both entity-resolution and
 document-structure leakage.
