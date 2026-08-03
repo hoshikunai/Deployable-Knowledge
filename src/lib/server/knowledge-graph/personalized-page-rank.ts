@@ -1,14 +1,11 @@
-import { GraphStore } from './graph-store';
-import type { GraphEdge, GraphNode } from './types';
+import type { PprIndex } from './ppr-index';
 import type { GraphSeedCandidate } from './seed-selection';
-import { isNoisyEntityLabel } from './utils';
 
 export type PersonalizedPageRankOptions = {
 	damping?: number;
 	maxIterations?: number;
 	tolerance?: number;
 	resultLimit?: number;
-	includeContainment?: boolean;
 };
 
 export type PersonalizedPageRankEvidence = {
@@ -16,13 +13,9 @@ export type PersonalizedPageRankEvidence = {
 	score: number;
 };
 
-type CompiledGraph = {
-	nodes: GraphNode[];
-	nodeIndex: Map<string, number>;
-	offsets: Uint32Array;
-	targets: Uint32Array;
-	weights: Float64Array;
-	outgoingWeights: Float64Array;
+type ResetSeed = {
+	index: number;
+	weight: number;
 };
 
 const DEFAULT_DAMPING = 0.5;
@@ -31,32 +24,24 @@ const DEFAULT_TOLERANCE = 1e-7;
 const DEFAULT_RESULT_LIMIT = 100;
 
 export function personalizedPageRank(
-	graph: GraphStore,
+	index: PprIndex,
 	seeds: readonly GraphSeedCandidate[],
 	options: PersonalizedPageRankOptions = {}
 ): PersonalizedPageRankEvidence[] {
-	if (!seeds.length || graph.nodes.size === 0) return [];
+	if (!seeds.length || index.nodeIdByIndex.length === 0) return [];
 
 	const damping = clamp(options.damping ?? DEFAULT_DAMPING, 0, 0.999);
-	const maxIterations = Math.max(
-		1,
-		Math.floor(options.maxIterations ?? DEFAULT_MAX_ITERATIONS)
-	);
+	const maxIterations = Math.max(1, Math.floor(options.maxIterations ?? DEFAULT_MAX_ITERATIONS));
 	const tolerance = Math.max(Number.EPSILON, options.tolerance ?? DEFAULT_TOLERANCE);
-	const resultLimit = Math.max(
-		0,
-		Math.floor(options.resultLimit ?? DEFAULT_RESULT_LIMIT)
-	);
-
+	const resultLimit = Math.max(0, Math.floor(options.resultLimit ?? DEFAULT_RESULT_LIMIT));
 	if (resultLimit === 0) return [];
 
-	const compiled = compileGraph(graph, options.includeContainment === true);
-	const reset = buildResetVector(compiled, seeds);
+	const resetSeeds = buildResetSeeds(index, seeds);
+	if (!resetSeeds) return [];
 
-	if (!reset) return [];
-
-	let current = reset.slice();
-	let next = new Float64Array(compiled.nodes.length);
+	let current = new Float64Array(index.nodeIdByIndex.length);
+	let next = new Float64Array(index.nodeIdByIndex.length);
+	for (const seed of resetSeeds) current[seed.index] = seed.weight;
 
 	for (let iteration = 0; iteration < maxIterations; iteration += 1) {
 		next.fill(0);
@@ -66,185 +51,133 @@ export function personalizedPageRank(
 			const nodeScore = current[nodeIndex];
 			if (nodeScore === 0) continue;
 
-			const totalWeight = compiled.outgoingWeights[nodeIndex];
+			const totalWeight = index.outgoingWeights[nodeIndex];
 			if (totalWeight <= 0) {
 				danglingMass += nodeScore;
 				continue;
 			}
 
-			const start = compiled.offsets[nodeIndex];
-			const end = compiled.offsets[nodeIndex + 1];
+			const start = index.offsets[nodeIndex];
+			const end = index.offsets[nodeIndex + 1];
 			const distributedScore = damping * nodeScore;
 
 			for (let edgeIndex = start; edgeIndex < end; edgeIndex += 1) {
-				const target = compiled.targets[edgeIndex];
-				const weight = compiled.weights[edgeIndex];
-
+				const target = index.targets[edgeIndex];
+				const weight = index.weights[edgeIndex];
 				next[target] += distributedScore * (weight / totalWeight);
 			}
 		}
 
 		const resetMass = 1 - damping + damping * danglingMass;
-		let delta = 0;
+		for (const seed of resetSeeds) next[seed.index] += resetMass * seed.weight;
 
+		let delta = 0;
 		for (let nodeIndex = 0; nodeIndex < next.length; nodeIndex += 1) {
-			next[nodeIndex] += resetMass * reset[nodeIndex];
 			delta += Math.abs(next[nodeIndex] - current[nodeIndex]);
 		}
 
 		[current, next] = [next, current];
-
 		if (delta <= tolerance) break;
 	}
 
-	return compiled.nodes
-		.flatMap((node, index) => {
-			const score = current[index];
-
-			if (node.kind !== 'chunk' || !node.chunkId || score <= 0) return [];
-			return [{ chunkId: node.chunkId, score }];
-		})
-		.sort((left, right) => right.score - left.score)
-		.slice(0, resultLimit);
+	return selectTopChunkScores(index, current, resultLimit);
 }
 
-function buildResetVector(
-	graph: CompiledGraph,
+function buildResetSeeds(
+	index: PprIndex,
 	seeds: readonly GraphSeedCandidate[]
-): Float64Array | null {
-	const reset = new Float64Array(graph.nodes.length);
+): ResetSeed[] | null {
+	const weightsByIndex = new Map<number, number>();
 	let totalWeight = 0;
 
 	for (const seed of seeds) {
-		const index = graph.nodeIndex.get(seed.nodeId);
-		if (index === undefined) continue;
+		const nodeIndex = index.nodeIndexById.get(seed.nodeId);
+		if (nodeIndex === undefined) continue;
 
 		const weight = Number.isFinite(seed.score) ? Math.max(0, seed.score) : 0;
 		if (weight === 0) continue;
 
-		reset[index] += weight;
+		weightsByIndex.set(nodeIndex, (weightsByIndex.get(nodeIndex) ?? 0) + weight);
 		totalWeight += weight;
 	}
 
 	if (totalWeight === 0) return null;
 
-	for (let index = 0; index < reset.length; index += 1) {
-		reset[index] /= totalWeight;
-	}
-
-	return reset;
+	return [...weightsByIndex].map(([nodeIndex, weight]) => ({
+		index: nodeIndex,
+		weight: weight / totalWeight
+	}));
 }
 
-function compileGraph(graph: GraphStore, includeContainment: boolean): CompiledGraph {
-	const nodes = [...graph.nodes.values()];
-	const nodeIndex = new Map(nodes.map((node, index) => [node.id, index]));
-	const traversable = nodes.map(isTraversableNode);
-	const degrees = new Uint32Array(nodes.length);
+function selectTopChunkScores(
+	index: PprIndex,
+	scores: Float64Array,
+	limit: number
+): PersonalizedPageRankEvidence[] {
+	const heap: PersonalizedPageRankEvidence[] = [];
 
-	const includedEdges: Array<{
-		source: number;
-		target: number;
-		weight: number;
-	}> = [];
+	for (let nodeIndex = 0; nodeIndex < scores.length; nodeIndex += 1) {
+		const chunkId = index.chunkIdByIndex[nodeIndex];
+		const score = scores[nodeIndex];
+		if (!chunkId || score <= 0 || !Number.isFinite(score)) continue;
 
-	for (const edge of graph.edges) {
-		const compiledEdge = compileEdge(
-			edge,
-			nodeIndex,
-			traversable,
-			includeContainment
-		);
-		if (!compiledEdge) continue;
+		const candidate = { chunkId, score };
+		if (heap.length < limit) {
+			heap.push(candidate);
+			siftUpWorst(heap, heap.length - 1);
+			continue;
+		}
 
-		includedEdges.push(compiledEdge);
-		degrees[compiledEdge.source] += 1;
-		degrees[compiledEdge.target] += 1;
+		if (!isBetter(candidate, heap[0])) continue;
+		heap[0] = candidate;
+		siftDownWorst(heap, 0);
 	}
 
-	const offsets = new Uint32Array(nodes.length + 1);
-	for (let index = 0; index < nodes.length; index += 1) {
-		offsets[index + 1] = offsets[index] + degrees[index];
+	return heap.sort(compareBestFirst);
+}
+
+function siftUpWorst(heap: PersonalizedPageRankEvidence[], start: number): void {
+	let index = start;
+	while (index > 0) {
+		const parent = Math.floor((index - 1) / 2);
+		if (!isWorse(heap[index], heap[parent])) return;
+		[heap[index], heap[parent]] = [heap[parent], heap[index]];
+		index = parent;
 	}
+}
 
-	const targets = new Uint32Array(offsets[nodes.length]);
-	const weights = new Float64Array(offsets[nodes.length]);
-	const outgoingWeights = new Float64Array(nodes.length);
-	const cursor = Uint32Array.from(offsets.subarray(0, nodes.length));
+function siftDownWorst(heap: PersonalizedPageRankEvidence[], start: number): void {
+	let index = start;
+	while (true) {
+		const left = index * 2 + 1;
+		const right = left + 1;
+		let worst = index;
 
-	for (const edge of includedEdges) {
-		addCompiledEdge(
-			edge.source,
-			edge.target,
-			edge.weight,
-			cursor,
-			targets,
-			weights,
-			outgoingWeights
-		);
-		addCompiledEdge(
-			edge.target,
-			edge.source,
-			edge.weight,
-			cursor,
-			targets,
-			weights,
-			outgoingWeights
-		);
+		if (left < heap.length && isWorse(heap[left], heap[worst])) worst = left;
+		if (right < heap.length && isWorse(heap[right], heap[worst])) worst = right;
+		if (worst === index) return;
+
+		[heap[index], heap[worst]] = [heap[worst], heap[index]];
+		index = worst;
 	}
-
-	return {
-		nodes,
-		nodeIndex,
-		offsets,
-		targets,
-		weights,
-		outgoingWeights
-	};
 }
 
-function compileEdge(
-	edge: GraphEdge,
-	nodeIndex: Map<string, number>,
-	traversable: readonly boolean[],
-	includeContainment: boolean
-): { source: number; target: number; weight: number } | null {
-	if (!includeContainment && edge.relation === 'CONTAINS') return null;
-
-	const source = nodeIndex.get(edge.source);
-	const target = nodeIndex.get(edge.target);
-
-	if (source === undefined || target === undefined) return null;
-	if (!traversable[source] || !traversable[target]) return null;
-
-	const weight =
-		Number.isFinite(edge.weight) && edge.weight > 0 ? edge.weight : 1;
-
-	return { source, target, weight };
+function isBetter(
+	left: PersonalizedPageRankEvidence,
+	right: PersonalizedPageRankEvidence
+): boolean {
+	return left.score > right.score || (left.score === right.score && left.chunkId < right.chunkId);
 }
 
-function addCompiledEdge(
-	source: number,
-	target: number,
-	weight: number,
-	cursor: Uint32Array,
-	targets: Uint32Array,
-	weights: Float64Array,
-	outgoingWeights: Float64Array
-): void {
-	const index = cursor[source];
-	cursor[source] += 1;
-	targets[index] = target;
-	weights[index] = weight;
-	outgoingWeights[source] += weight;
+function isWorse(left: PersonalizedPageRankEvidence, right: PersonalizedPageRankEvidence): boolean {
+	return left.score < right.score || (left.score === right.score && left.chunkId > right.chunkId);
 }
 
-function isTraversableNode(node: GraphNode): boolean {
-	if (node.kind === 'document') return false;
-
-	return (
-		node.kind !== 'entity' ||
-		!isNoisyEntityLabel(node.label, node.entityKind)
-	);
+function compareBestFirst(
+	left: PersonalizedPageRankEvidence,
+	right: PersonalizedPageRankEvidence
+): number {
+	return right.score - left.score || left.chunkId.localeCompare(right.chunkId);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

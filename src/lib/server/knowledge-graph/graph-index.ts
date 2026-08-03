@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/database/database';
 import { document_chunks, documents } from '$lib/server/database/schema';
-import { extractChunkEntitiesAndRelations, resolveEntityLabels } from './gliner-extractor';
+import { extractChunkEntitiesAndRelations } from './gliner-extractor';
 import {
 	KnowledgeGraphBuildRegistry,
 	type KnowledgeGraphBuildScope,
@@ -16,6 +16,7 @@ import { loadKnowledgeGraphSnapshot, saveKnowledgeGraphSnapshot } from './graph-
 import type { IndexedChunk } from './types';
 import { graphId, sanitizeEntityLabel, unique } from './utils';
 import { isUsefulImageText } from '$lib/server/rag/chunk/ocr-text-quality';
+import { compilePprIndex, type PprIndex } from './ppr-index';
 
 export type {
 	KnowledgeGraphBuildState,
@@ -29,6 +30,7 @@ export const KNOWLEDGE_GRAPH_BUILD_VERSION = '3';
 
 export type KnowledgeGraphIndex = {
 	graph: GraphStore;
+	pprIndex: PprIndex;
 	chunksById: Map<string, IndexedChunk>;
 	signature: string;
 };
@@ -49,7 +51,9 @@ export type BuildKnowledgeGraphOptions = {
 	force?: boolean;
 };
 
-const graphRegistry = new KnowledgeGraphBuildRegistry<KnowledgeGraphIndex>(8);
+// A graph index is intentionally large. Retaining arbitrary document-scope variants
+// multiplies memory use, so edge deployments keep only the most recently used index.
+const graphRegistry = new KnowledgeGraphBuildRegistry<KnowledgeGraphIndex>(1);
 const snapshotRestorePromises = new Map<string, Promise<void>>();
 
 export class KnowledgeGraphNotBuiltError extends Error {
@@ -387,7 +391,12 @@ async function constructKnowledgeGraph(scope: ResolvedGraphScope): Promise<Knowl
 		}
 	}
 
-	return { graph, chunksById, signature: scope.buildScope.signature };
+	return {
+		graph,
+		pprIndex: compilePprIndex(graph),
+		chunksById,
+		signature: scope.buildScope.signature
+	};
 }
 
 function normalizeDocumentIds(documentIds: readonly string[]): string[] {
@@ -529,89 +538,6 @@ async function addChunkToGraph(graph: GraphStore, chunk: IndexedChunk): Promise<
 			documentId: chunk.documentId
 		});
 	}
-}
-
-export async function augmentGraphWithQueryLabels(
-	graph: GraphStore,
-	chunksById: Map<string, IndexedChunk>,
-	labels: string[],
-	candidateChunkIds?: string[]
-): Promise<GraphStore> {
-	const augmented = cloneGraph(graph);
-	const normalizedLabels = resolveEntityLabels(labels);
-	const candidates = candidateChunkIds?.length
-		? candidateChunkIds.flatMap((chunkId) => {
-				const chunk = chunksById.get(chunkId);
-				return chunk ? [chunk] : [];
-			})
-		: [...chunksById.values()];
-
-	for (const chunk of candidates) {
-		const { entities, relations } = await extractChunkEntitiesAndRelations(
-			chunk.content,
-			normalizedLabels,
-			chunk.chunkId
-		);
-		const chunkNodeId = graphId('chunk', chunk.chunkId);
-
-		for (const entity of entities) {
-			const label = sanitizeEntityLabel(entity.label);
-			if (!label) continue;
-			upsertEntityNode(augmented, { ...entity, label }, chunk.chunkId);
-			const entityNodeId = graphId('entity', label);
-			augmented.addEdge({
-				source: chunkNodeId,
-				target: entityNodeId,
-				relation: 'MENTIONS',
-				weight: 1,
-				evidence: chunk.content,
-				chunkId: chunk.chunkId,
-				documentId: chunk.documentId
-			});
-		}
-
-		for (const relation of relations) {
-			const sourceLabel = sanitizeEntityLabel(relation.source);
-			const targetLabel = sanitizeEntityLabel(relation.target);
-			if (!sourceLabel || !targetLabel) continue;
-			const sourceNodeId = graphId('entity', sourceLabel);
-			const targetNodeId = graphId('entity', targetLabel);
-			augmented.addNode({
-				id: sourceNodeId,
-				label: sourceLabel,
-				kind: 'entity',
-				entityKind: 'unknown'
-			});
-			augmented.addNode({
-				id: targetNodeId,
-				label: targetLabel,
-				kind: 'entity',
-				entityKind: 'unknown'
-			});
-			augmented.addEdge({
-				source: sourceNodeId,
-				target: targetNodeId,
-				relation: relation.relation || 'RELATED_TO',
-				weight: 1,
-				evidence: relation.evidence ?? chunk.content,
-				chunkId: chunk.chunkId,
-				documentId: chunk.documentId
-			});
-		}
-	}
-
-	return augmented;
-}
-
-function cloneGraph(graph: GraphStore): GraphStore {
-	const copy = new GraphStore();
-	for (const node of graph.nodes.values()) {
-		copy.addNode(node);
-	}
-	for (const edge of graph.edges) {
-		copy.addEdge(edge);
-	}
-	return copy;
 }
 
 function upsertEntityNode(

@@ -3,8 +3,7 @@
 
 import { searchHybrid } from '$lib/server/rag/search/hybrid-search';
 import type { SearchChunkType } from '$lib/server/rag/search/search-shared';
-import { augmentGraphWithQueryLabels, ensureKnowledgeGraph } from './graph-index';
-import { extractQueryEntities } from './gliner-extractor';
+import { ensureKnowledgeGraph } from './graph-index';
 import { lightRagSearch } from './light-rag';
 import { pathRagSearch } from './path-rag';
 import { selectGraphSeedCandidates } from './seed-selection';
@@ -14,6 +13,7 @@ import type {
 	KnowledgeGraphSearchResult,
 	RelationType
 } from './types';
+import { personalizedPageRank, type PersonalizedPageRankEvidence } from './personalized-page-rank';
 import { unique } from './utils';
 
 export type KnowledgeGraphSearchOptions = {
@@ -28,9 +28,17 @@ type ScoreAccumulator = {
 	hybridScore: number;
 	lightScore: number;
 	pathScore: number;
+	pprScore: number;
 	matchedEntities: string[];
 	relations: RelationType[];
 	pathCount: number;
+};
+
+export type NormalizedKnowledgeGraphScores = {
+	hybrid: number;
+	light: number;
+	path: number;
+	ppr: number;
 };
 
 export async function searchKnowledgeGraph(
@@ -54,20 +62,25 @@ export async function searchKnowledgeGraph(
 		...match,
 		score: 1 / (index + 1)
 	}));
-	const queryEntities = await extractQueryEntities(query);
-	const queryLabels = unique(queryEntities.map((entity) => entity.label));
-	const graph = await augmentGraphWithQueryLabels(
-		index.graph,
-		index.chunksById,
-		queryLabels,
-		unique(hybrid.results.map((match) => match.chunkId))
-	);
+	// The built graph is immutable during retrieval. Query-specific graph cloning and
+	// extraction caused the largest query-time memory spike; hybrid chunks and exact or
+	// fuzzy entity labels already provide personalized restart seeds.
+	const graph = index.graph;
 	const seeds = selectGraphSeedCandidates({
 		query,
 		graph,
 		hybridResults: hybridSeeds
 	});
+
 	const lightEvidence = lightRagSearch(graph, seeds);
+
+	const pprEvidence = personalizedPageRank(index.pprIndex, seeds, {
+		damping: 0.5,
+		maxIterations: 50,
+		tolerance: 1e-7,
+		resultLimit: Math.max(topK * 10, 50)
+	});
+
 	const paths = pathRagSearch(
 		query,
 		graph,
@@ -75,12 +88,21 @@ export async function searchKnowledgeGraph(
 		Math.max(1, Math.min(4, options.maxDepth ?? 3)),
 		Math.max(topK * 3, 12)
 	);
-	const scores = collectScores(hybridSeeds, lightEvidence, paths);
+	const scores = collectScores(hybridSeeds, lightEvidence, paths, pprEvidence);
 
 	const maxHybrid = maxScore([...scores.values()].map((score) => score.hybridScore));
+
 	const maxLight = maxScore([...scores.values()].map((score) => score.lightScore));
+
 	const maxPath = maxScore([...scores.values()].map((score) => score.pathScore));
+
+	const maxPpr = Math.max(
+		Number.EPSILON,
+		...[...scores.values()].map((score) => score.pprScore).filter(Number.isFinite)
+	);
+
 	const allowedTypes = new Set(options.chunkTypes ?? []);
+
 	const results: KnowledgeGraphMatch[] = [];
 
 	for (const [chunkId, score] of scores) {
@@ -93,16 +115,18 @@ export async function searchKnowledgeGraph(
 		const hybridPart = score.hybridScore / maxHybrid;
 		const lightPart = score.lightScore / maxLight;
 		const pathPart = score.pathScore / maxPath;
-		const graphScore = lightPart * 0.6 + pathPart * 0.4;
+		const pprPart = score.pprScore / maxPpr;
+		const graphScore = lightPart * 0.25 + pathPart * 0.25 + pprPart * 0.5;
+		const retrievalScore = fuseKnowledgeGraphScores({
+			hybrid: hybridPart,
+			light: lightPart,
+			path: pathPart,
+			ppr: pprPart
+		});
 
 		results.push({
 			...chunk,
-			score: clamp01(
-				hybridPart * 0.45 +
-					lightPart * 0.28 +
-					pathPart * 0.27 +
-					acronymDefinitionBoost(query, chunk.content)
-			),
+			score: clamp01(retrievalScore + acronymDefinitionBoost(query, chunk.content)),
 			graphScore: clamp01(graphScore),
 			hybridScore: score.hybridScore || undefined,
 			matchedEntities: unique(score.matchedEntities),
@@ -135,6 +159,10 @@ export function acronymDefinitionBoost(query: string, content: string): number {
 	return definesAcronym ? 1 : 0;
 }
 
+export function fuseKnowledgeGraphScores(scores: NormalizedKnowledgeGraphScores): number {
+	return scores.hybrid * 0.4 + scores.light * 0.2 + scores.path * 0.15 + scores.ppr * 0.25;
+}
+
 function collectScores(
 	hybrid: Array<{ chunkId: string; score: number }>,
 	light: Array<{
@@ -143,19 +171,22 @@ function collectScores(
 		matchedEntities: string[];
 		relations: RelationType[];
 	}>,
-	paths: KnowledgeGraphPath[]
+	paths: KnowledgeGraphPath[],
+	ppr: PersonalizedPageRankEvidence[]
 ): Map<string, ScoreAccumulator> {
 	const scores = new Map<string, ScoreAccumulator>();
 
 	for (const match of hybrid) {
 		getScore(scores, match.chunkId).hybridScore = Math.max(0, match.score);
 	}
+
 	for (const evidence of light) {
 		const score = getScore(scores, evidence.chunkId);
 		score.lightScore += evidence.score;
 		score.matchedEntities.push(...evidence.matchedEntities);
 		score.relations.push(...evidence.relations);
 	}
+
 	for (const path of paths) {
 		for (const chunkId of path.chunkIds) {
 			const score = getScore(scores, chunkId);
@@ -166,6 +197,11 @@ function collectScores(
 				...path.nodes.filter((node) => node.kind === 'entity').map((node) => node.label)
 			);
 		}
+	}
+
+	for (const evidence of ppr) {
+		const score = getScore(scores, evidence.chunkId);
+		score.pprScore = Math.max(score.pprScore, evidence.score);
 	}
 
 	return scores;
@@ -179,6 +215,7 @@ function getScore(scores: Map<string, ScoreAccumulator>, chunkId: string): Score
 		hybridScore: 0,
 		lightScore: 0,
 		pathScore: 0,
+		pprScore: 0,
 		matchedEntities: [],
 		relations: [],
 		pathCount: 0

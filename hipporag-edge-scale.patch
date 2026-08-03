@@ -1,0 +1,1090 @@
+diff --git a/src/lib/server/knowledge-graph/graph-index.ts b/src/lib/server/knowledge-graph/graph-index.ts
+index d3716cf..a3a68f6 100644
+--- a/src/lib/server/knowledge-graph/graph-index.ts
++++ b/src/lib/server/knowledge-graph/graph-index.ts
+@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
+ import { eq, inArray } from 'drizzle-orm';
+ import { db } from '$lib/server/database/database';
+ import { document_chunks, documents } from '$lib/server/database/schema';
+-import { extractChunkEntitiesAndRelations, resolveEntityLabels } from './gliner-extractor';
++import { extractChunkEntitiesAndRelations } from './gliner-extractor';
+ import {
+ 	KnowledgeGraphBuildRegistry,
+ 	type KnowledgeGraphBuildScope,
+@@ -16,6 +16,7 @@ import { loadKnowledgeGraphSnapshot, saveKnowledgeGraphSnapshot } from './graph-
+ import type { IndexedChunk } from './types';
+ import { graphId, sanitizeEntityLabel, unique } from './utils';
+ import { isUsefulImageText } from '$lib/server/rag/chunk/ocr-text-quality';
++import { compilePprIndex, type PprIndex } from './ppr-index';
+ 
+ export type {
+ 	KnowledgeGraphBuildState,
+@@ -29,6 +30,7 @@ export const KNOWLEDGE_GRAPH_BUILD_VERSION = '3';
+ 
+ export type KnowledgeGraphIndex = {
+ 	graph: GraphStore;
++	pprIndex: PprIndex;
+ 	chunksById: Map<string, IndexedChunk>;
+ 	signature: string;
+ };
+@@ -49,7 +51,9 @@ export type BuildKnowledgeGraphOptions = {
+ 	force?: boolean;
+ };
+ 
+-const graphRegistry = new KnowledgeGraphBuildRegistry<KnowledgeGraphIndex>(8);
++// A graph index is intentionally large. Retaining arbitrary document-scope variants
++// multiplies memory use, so edge deployments keep only the most recently used index.
++const graphRegistry = new KnowledgeGraphBuildRegistry<KnowledgeGraphIndex>(1);
+ const snapshotRestorePromises = new Map<string, Promise<void>>();
+ 
+ export class KnowledgeGraphNotBuiltError extends Error {
+@@ -387,7 +391,12 @@ async function constructKnowledgeGraph(scope: ResolvedGraphScope): Promise<Knowl
+ 		}
+ 	}
+ 
+-	return { graph, chunksById, signature: scope.buildScope.signature };
++	return {
++		graph,
++		pprIndex: compilePprIndex(graph),
++		chunksById,
++		signature: scope.buildScope.signature
++	};
+ }
+ 
+ function normalizeDocumentIds(documentIds: readonly string[]): string[] {
+@@ -531,89 +540,6 @@ async function addChunkToGraph(graph: GraphStore, chunk: IndexedChunk): Promise<
+ 	}
+ }
+ 
+-export async function augmentGraphWithQueryLabels(
+-	graph: GraphStore,
+-	chunksById: Map<string, IndexedChunk>,
+-	labels: string[],
+-	candidateChunkIds?: string[]
+-): Promise<GraphStore> {
+-	const augmented = cloneGraph(graph);
+-	const normalizedLabels = resolveEntityLabels(labels);
+-	const candidates = candidateChunkIds?.length
+-		? candidateChunkIds.flatMap((chunkId) => {
+-				const chunk = chunksById.get(chunkId);
+-				return chunk ? [chunk] : [];
+-			})
+-		: [...chunksById.values()];
+-
+-	for (const chunk of candidates) {
+-		const { entities, relations } = await extractChunkEntitiesAndRelations(
+-			chunk.content,
+-			normalizedLabels,
+-			chunk.chunkId
+-		);
+-		const chunkNodeId = graphId('chunk', chunk.chunkId);
+-
+-		for (const entity of entities) {
+-			const label = sanitizeEntityLabel(entity.label);
+-			if (!label) continue;
+-			upsertEntityNode(augmented, { ...entity, label }, chunk.chunkId);
+-			const entityNodeId = graphId('entity', label);
+-			augmented.addEdge({
+-				source: chunkNodeId,
+-				target: entityNodeId,
+-				relation: 'MENTIONS',
+-				weight: 1,
+-				evidence: chunk.content,
+-				chunkId: chunk.chunkId,
+-				documentId: chunk.documentId
+-			});
+-		}
+-
+-		for (const relation of relations) {
+-			const sourceLabel = sanitizeEntityLabel(relation.source);
+-			const targetLabel = sanitizeEntityLabel(relation.target);
+-			if (!sourceLabel || !targetLabel) continue;
+-			const sourceNodeId = graphId('entity', sourceLabel);
+-			const targetNodeId = graphId('entity', targetLabel);
+-			augmented.addNode({
+-				id: sourceNodeId,
+-				label: sourceLabel,
+-				kind: 'entity',
+-				entityKind: 'unknown'
+-			});
+-			augmented.addNode({
+-				id: targetNodeId,
+-				label: targetLabel,
+-				kind: 'entity',
+-				entityKind: 'unknown'
+-			});
+-			augmented.addEdge({
+-				source: sourceNodeId,
+-				target: targetNodeId,
+-				relation: relation.relation || 'RELATED_TO',
+-				weight: 1,
+-				evidence: relation.evidence ?? chunk.content,
+-				chunkId: chunk.chunkId,
+-				documentId: chunk.documentId
+-			});
+-		}
+-	}
+-
+-	return augmented;
+-}
+-
+-function cloneGraph(graph: GraphStore): GraphStore {
+-	const copy = new GraphStore();
+-	for (const node of graph.nodes.values()) {
+-		copy.addNode(node);
+-	}
+-	for (const edge of graph.edges) {
+-		copy.addEdge(edge);
+-	}
+-	return copy;
+-}
+-
+ function upsertEntityNode(
+ 	graph: GraphStore,
+ 	entity: { label: string; kind: string; chunkIds?: string[] },
+diff --git a/src/lib/server/knowledge-graph/graph-snapshot.ts b/src/lib/server/knowledge-graph/graph-snapshot.ts
+index 14539c5..acd4b37 100644
+--- a/src/lib/server/knowledge-graph/graph-snapshot.ts
++++ b/src/lib/server/knowledge-graph/graph-snapshot.ts
+@@ -6,6 +6,7 @@ import { knowledgeGraphSnapshots } from '$lib/server/database/schema';
+ import { GraphStore } from './graph-store';
+ import type { KnowledgeGraphBuildScope, KnowledgeGraphBuildStats } from './graph-build-registry';
+ import type { KnowledgeGraphIndex } from './graph-index';
++import { compilePprIndex } from './ppr-index';
+ import type { GraphEdge, GraphNode, IndexedChunk } from './types';
+ 
+ const SNAPSHOT_FORMAT_VERSION = 1;
+@@ -109,7 +110,12 @@ export async function loadKnowledgeGraphSnapshot(
+ 		const chunksById = new Map(payload.chunks.map((chunk) => [chunk.chunkId, chunk]));
+ 		return {
+ 			...metadata,
+-			index: { graph, chunksById, signature: row.signature }
++			index: {
++				graph,
++				pprIndex: compilePprIndex(graph),
++				chunksById,
++				signature: row.signature
++			}
+ 		};
+ 	} catch (error) {
+ 		console.warn('Discarding an unreadable Knowledge Graph snapshot:', error);
+diff --git a/src/lib/server/knowledge-graph/knowledge-graph-search.test.ts b/src/lib/server/knowledge-graph/knowledge-graph-search.test.ts
+index 1af57c4..bb83d77 100644
+--- a/src/lib/server/knowledge-graph/knowledge-graph-search.test.ts
++++ b/src/lib/server/knowledge-graph/knowledge-graph-search.test.ts
+@@ -1,6 +1,6 @@
+ import assert from 'node:assert/strict';
+ import test from 'node:test';
+-import { acronymDefinitionBoost } from './knowledge-graph-search';
++import { acronymDefinitionBoost, fuseKnowledgeGraphScores } from './knowledge-graph-search';
+ 
+ test('acronym definition evidence outranks incidental acronym text', () => {
+ 	const query = 'What does MARCH stand for?';
+@@ -17,3 +17,8 @@ test('acronym definition evidence outranks incidental acronym text', () => {
+ 		0
+ 	);
+ });
++
++test('PPR contributes independently to the final retrieval score', () => {
++	assert.equal(fuseKnowledgeGraphScores({ hybrid: 0, light: 0, path: 0, ppr: 1 }), 0.25);
++	assert.equal(fuseKnowledgeGraphScores({ hybrid: 1, light: 1, path: 1, ppr: 1 }), 1);
++});
+diff --git a/src/lib/server/knowledge-graph/knowledge-graph-search.ts b/src/lib/server/knowledge-graph/knowledge-graph-search.ts
+index ccb86c3..2876896 100644
+--- a/src/lib/server/knowledge-graph/knowledge-graph-search.ts
++++ b/src/lib/server/knowledge-graph/knowledge-graph-search.ts
+@@ -3,8 +3,7 @@
+ 
+ import { searchHybrid } from '$lib/server/rag/search/hybrid-search';
+ import type { SearchChunkType } from '$lib/server/rag/search/search-shared';
+-import { augmentGraphWithQueryLabels, ensureKnowledgeGraph } from './graph-index';
+-import { extractQueryEntities } from './gliner-extractor';
++import { ensureKnowledgeGraph } from './graph-index';
+ import { lightRagSearch } from './light-rag';
+ import { pathRagSearch } from './path-rag';
+ import { selectGraphSeedCandidates } from './seed-selection';
+@@ -14,6 +13,7 @@ import type {
+ 	KnowledgeGraphSearchResult,
+ 	RelationType
+ } from './types';
++import { personalizedPageRank, type PersonalizedPageRankEvidence } from './personalized-page-rank';
+ import { unique } from './utils';
+ 
+ export type KnowledgeGraphSearchOptions = {
+@@ -28,11 +28,19 @@ type ScoreAccumulator = {
+ 	hybridScore: number;
+ 	lightScore: number;
+ 	pathScore: number;
++	pprScore: number;
+ 	matchedEntities: string[];
+ 	relations: RelationType[];
+ 	pathCount: number;
+ };
+ 
++export type NormalizedKnowledgeGraphScores = {
++	hybrid: number;
++	light: number;
++	path: number;
++	ppr: number;
++};
++
+ export async function searchKnowledgeGraph(
+ 	options: KnowledgeGraphSearchOptions
+ ): Promise<KnowledgeGraphSearchResult> {
+@@ -54,20 +62,25 @@ export async function searchKnowledgeGraph(
+ 		...match,
+ 		score: 1 / (index + 1)
+ 	}));
+-	const queryEntities = await extractQueryEntities(query);
+-	const queryLabels = unique(queryEntities.map((entity) => entity.label));
+-	const graph = await augmentGraphWithQueryLabels(
+-		index.graph,
+-		index.chunksById,
+-		queryLabels,
+-		unique(hybrid.results.map((match) => match.chunkId))
+-	);
++	// The built graph is immutable during retrieval. Query-specific graph cloning and
++	// extraction caused the largest query-time memory spike; hybrid chunks and exact or
++	// fuzzy entity labels already provide personalized restart seeds.
++	const graph = index.graph;
+ 	const seeds = selectGraphSeedCandidates({
+ 		query,
+ 		graph,
+ 		hybridResults: hybridSeeds
+ 	});
++
+ 	const lightEvidence = lightRagSearch(graph, seeds);
++
++	const pprEvidence = personalizedPageRank(index.pprIndex, seeds, {
++		damping: 0.5,
++		maxIterations: 50,
++		tolerance: 1e-7,
++		resultLimit: Math.max(topK * 10, 50)
++	});
++
+ 	const paths = pathRagSearch(
+ 		query,
+ 		graph,
+@@ -75,12 +88,21 @@ export async function searchKnowledgeGraph(
+ 		Math.max(1, Math.min(4, options.maxDepth ?? 3)),
+ 		Math.max(topK * 3, 12)
+ 	);
+-	const scores = collectScores(hybridSeeds, lightEvidence, paths);
++	const scores = collectScores(hybridSeeds, lightEvidence, paths, pprEvidence);
+ 
+ 	const maxHybrid = maxScore([...scores.values()].map((score) => score.hybridScore));
++
+ 	const maxLight = maxScore([...scores.values()].map((score) => score.lightScore));
++
+ 	const maxPath = maxScore([...scores.values()].map((score) => score.pathScore));
++
++	const maxPpr = Math.max(
++		Number.EPSILON,
++		...[...scores.values()].map((score) => score.pprScore).filter(Number.isFinite)
++	);
++
+ 	const allowedTypes = new Set(options.chunkTypes ?? []);
++
+ 	const results: KnowledgeGraphMatch[] = [];
+ 
+ 	for (const [chunkId, score] of scores) {
+@@ -93,16 +115,18 @@ export async function searchKnowledgeGraph(
+ 		const hybridPart = score.hybridScore / maxHybrid;
+ 		const lightPart = score.lightScore / maxLight;
+ 		const pathPart = score.pathScore / maxPath;
+-		const graphScore = lightPart * 0.6 + pathPart * 0.4;
++		const pprPart = score.pprScore / maxPpr;
++		const graphScore = lightPart * 0.25 + pathPart * 0.25 + pprPart * 0.5;
++		const retrievalScore = fuseKnowledgeGraphScores({
++			hybrid: hybridPart,
++			light: lightPart,
++			path: pathPart,
++			ppr: pprPart
++		});
+ 
+ 		results.push({
+ 			...chunk,
+-			score: clamp01(
+-				hybridPart * 0.45 +
+-					lightPart * 0.28 +
+-					pathPart * 0.27 +
+-					acronymDefinitionBoost(query, chunk.content)
+-			),
++			score: clamp01(retrievalScore + acronymDefinitionBoost(query, chunk.content)),
+ 			graphScore: clamp01(graphScore),
+ 			hybridScore: score.hybridScore || undefined,
+ 			matchedEntities: unique(score.matchedEntities),
+@@ -135,6 +159,10 @@ export function acronymDefinitionBoost(query: string, content: string): number {
+ 	return definesAcronym ? 1 : 0;
+ }
+ 
++export function fuseKnowledgeGraphScores(scores: NormalizedKnowledgeGraphScores): number {
++	return scores.hybrid * 0.4 + scores.light * 0.2 + scores.path * 0.15 + scores.ppr * 0.25;
++}
++
+ function collectScores(
+ 	hybrid: Array<{ chunkId: string; score: number }>,
+ 	light: Array<{
+@@ -143,19 +171,22 @@ function collectScores(
+ 		matchedEntities: string[];
+ 		relations: RelationType[];
+ 	}>,
+-	paths: KnowledgeGraphPath[]
++	paths: KnowledgeGraphPath[],
++	ppr: PersonalizedPageRankEvidence[]
+ ): Map<string, ScoreAccumulator> {
+ 	const scores = new Map<string, ScoreAccumulator>();
+ 
+ 	for (const match of hybrid) {
+ 		getScore(scores, match.chunkId).hybridScore = Math.max(0, match.score);
+ 	}
++
+ 	for (const evidence of light) {
+ 		const score = getScore(scores, evidence.chunkId);
+ 		score.lightScore += evidence.score;
+ 		score.matchedEntities.push(...evidence.matchedEntities);
+ 		score.relations.push(...evidence.relations);
+ 	}
++
+ 	for (const path of paths) {
+ 		for (const chunkId of path.chunkIds) {
+ 			const score = getScore(scores, chunkId);
+@@ -168,6 +199,11 @@ function collectScores(
+ 		}
+ 	}
+ 
++	for (const evidence of ppr) {
++		const score = getScore(scores, evidence.chunkId);
++		score.pprScore = Math.max(score.pprScore, evidence.score);
++	}
++
+ 	return scores;
+ }
+ 
+@@ -179,6 +215,7 @@ function getScore(scores: Map<string, ScoreAccumulator>, chunkId: string): Score
+ 		hybridScore: 0,
+ 		lightScore: 0,
+ 		pathScore: 0,
++		pprScore: 0,
+ 		matchedEntities: [],
+ 		relations: [],
+ 		pathCount: 0
+diff --git a/src/lib/server/knowledge-graph/personalized-page-rank.ts b/src/lib/server/knowledge-graph/personalized-page-rank.ts
+index ab9afaf..e0d57bc 100644
+--- a/src/lib/server/knowledge-graph/personalized-page-rank.ts
++++ b/src/lib/server/knowledge-graph/personalized-page-rank.ts
+@@ -1,14 +1,11 @@
+-import { GraphStore } from './graph-store';
+-import type { GraphEdge, GraphNode } from './types';
++import type { PprIndex } from './ppr-index';
+ import type { GraphSeedCandidate } from './seed-selection';
+-import { isNoisyEntityLabel } from './utils';
+ 
+ export type PersonalizedPageRankOptions = {
+ 	damping?: number;
+ 	maxIterations?: number;
+ 	tolerance?: number;
+ 	resultLimit?: number;
+-	includeContainment?: boolean;
+ };
+ 
+ export type PersonalizedPageRankEvidence = {
+@@ -16,13 +13,9 @@ export type PersonalizedPageRankEvidence = {
+ 	score: number;
+ };
+ 
+-type CompiledGraph = {
+-	nodes: GraphNode[];
+-	nodeIndex: Map<string, number>;
+-	offsets: Uint32Array;
+-	targets: Uint32Array;
+-	weights: Float64Array;
+-	outgoingWeights: Float64Array;
++type ResetSeed = {
++	index: number;
++	weight: number;
+ };
+ 
+ const DEFAULT_DAMPING = 0.5;
+@@ -31,32 +24,24 @@ const DEFAULT_TOLERANCE = 1e-7;
+ const DEFAULT_RESULT_LIMIT = 100;
+ 
+ export function personalizedPageRank(
+-	graph: GraphStore,
++	index: PprIndex,
+ 	seeds: readonly GraphSeedCandidate[],
+ 	options: PersonalizedPageRankOptions = {}
+ ): PersonalizedPageRankEvidence[] {
+-	if (!seeds.length || graph.nodes.size === 0) return [];
++	if (!seeds.length || index.nodeIdByIndex.length === 0) return [];
+ 
+ 	const damping = clamp(options.damping ?? DEFAULT_DAMPING, 0, 0.999);
+-	const maxIterations = Math.max(
+-		1,
+-		Math.floor(options.maxIterations ?? DEFAULT_MAX_ITERATIONS)
+-	);
++	const maxIterations = Math.max(1, Math.floor(options.maxIterations ?? DEFAULT_MAX_ITERATIONS));
+ 	const tolerance = Math.max(Number.EPSILON, options.tolerance ?? DEFAULT_TOLERANCE);
+-	const resultLimit = Math.max(
+-		0,
+-		Math.floor(options.resultLimit ?? DEFAULT_RESULT_LIMIT)
+-	);
+-
++	const resultLimit = Math.max(0, Math.floor(options.resultLimit ?? DEFAULT_RESULT_LIMIT));
+ 	if (resultLimit === 0) return [];
+ 
+-	const compiled = compileGraph(graph, options.includeContainment === true);
+-	const reset = buildResetVector(compiled, seeds);
+-
+-	if (!reset) return [];
++	const resetSeeds = buildResetSeeds(index, seeds);
++	if (!resetSeeds) return [];
+ 
+-	let current = reset.slice();
+-	let next = new Float64Array(compiled.nodes.length);
++	let current = new Float64Array(index.nodeIdByIndex.length);
++	let next = new Float64Array(index.nodeIdByIndex.length);
++	for (const seed of resetSeeds) current[seed.index] = seed.weight;
+ 
+ 	for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+ 		next.fill(0);
+@@ -66,188 +51,136 @@ export function personalizedPageRank(
+ 			const nodeScore = current[nodeIndex];
+ 			if (nodeScore === 0) continue;
+ 
+-			const totalWeight = compiled.outgoingWeights[nodeIndex];
++			const totalWeight = index.outgoingWeights[nodeIndex];
+ 			if (totalWeight <= 0) {
+ 				danglingMass += nodeScore;
+ 				continue;
+ 			}
+ 
+-			const start = compiled.offsets[nodeIndex];
+-			const end = compiled.offsets[nodeIndex + 1];
++			const start = index.offsets[nodeIndex];
++			const end = index.offsets[nodeIndex + 1];
+ 			const distributedScore = damping * nodeScore;
+ 
+ 			for (let edgeIndex = start; edgeIndex < end; edgeIndex += 1) {
+-				const target = compiled.targets[edgeIndex];
+-				const weight = compiled.weights[edgeIndex];
+-
++				const target = index.targets[edgeIndex];
++				const weight = index.weights[edgeIndex];
+ 				next[target] += distributedScore * (weight / totalWeight);
+ 			}
+ 		}
+ 
+ 		const resetMass = 1 - damping + damping * danglingMass;
+-		let delta = 0;
++		for (const seed of resetSeeds) next[seed.index] += resetMass * seed.weight;
+ 
++		let delta = 0;
+ 		for (let nodeIndex = 0; nodeIndex < next.length; nodeIndex += 1) {
+-			next[nodeIndex] += resetMass * reset[nodeIndex];
+ 			delta += Math.abs(next[nodeIndex] - current[nodeIndex]);
+ 		}
+ 
+ 		[current, next] = [next, current];
+-
+ 		if (delta <= tolerance) break;
+ 	}
+ 
+-	return compiled.nodes
+-		.flatMap((node, index) => {
+-			const score = current[index];
+-
+-			if (node.kind !== 'chunk' || !node.chunkId || score <= 0) return [];
+-			return [{ chunkId: node.chunkId, score }];
+-		})
+-		.sort((left, right) => right.score - left.score)
+-		.slice(0, resultLimit);
++	return selectTopChunkScores(index, current, resultLimit);
+ }
+ 
+-function buildResetVector(
+-	graph: CompiledGraph,
++function buildResetSeeds(
++	index: PprIndex,
+ 	seeds: readonly GraphSeedCandidate[]
+-): Float64Array | null {
+-	const reset = new Float64Array(graph.nodes.length);
++): ResetSeed[] | null {
++	const weightsByIndex = new Map<number, number>();
+ 	let totalWeight = 0;
+ 
+ 	for (const seed of seeds) {
+-		const index = graph.nodeIndex.get(seed.nodeId);
+-		if (index === undefined) continue;
++		const nodeIndex = index.nodeIndexById.get(seed.nodeId);
++		if (nodeIndex === undefined) continue;
+ 
+ 		const weight = Number.isFinite(seed.score) ? Math.max(0, seed.score) : 0;
+ 		if (weight === 0) continue;
+ 
+-		reset[index] += weight;
++		weightsByIndex.set(nodeIndex, (weightsByIndex.get(nodeIndex) ?? 0) + weight);
+ 		totalWeight += weight;
+ 	}
+ 
+ 	if (totalWeight === 0) return null;
+ 
+-	for (let index = 0; index < reset.length; index += 1) {
+-		reset[index] /= totalWeight;
+-	}
+-
+-	return reset;
++	return [...weightsByIndex].map(([nodeIndex, weight]) => ({
++		index: nodeIndex,
++		weight: weight / totalWeight
++	}));
+ }
+ 
+-function compileGraph(graph: GraphStore, includeContainment: boolean): CompiledGraph {
+-	const nodes = [...graph.nodes.values()];
+-	const nodeIndex = new Map(nodes.map((node, index) => [node.id, index]));
+-	const traversable = nodes.map(isTraversableNode);
+-	const degrees = new Uint32Array(nodes.length);
+-
+-	const includedEdges: Array<{
+-		source: number;
+-		target: number;
+-		weight: number;
+-	}> = [];
+-
+-	for (const edge of graph.edges) {
+-		const compiledEdge = compileEdge(
+-			edge,
+-			nodeIndex,
+-			traversable,
+-			includeContainment
+-		);
+-		if (!compiledEdge) continue;
+-
+-		includedEdges.push(compiledEdge);
+-		degrees[compiledEdge.source] += 1;
+-		degrees[compiledEdge.target] += 1;
+-	}
+-
+-	const offsets = new Uint32Array(nodes.length + 1);
+-	for (let index = 0; index < nodes.length; index += 1) {
+-		offsets[index + 1] = offsets[index] + degrees[index];
+-	}
++function selectTopChunkScores(
++	index: PprIndex,
++	scores: Float64Array,
++	limit: number
++): PersonalizedPageRankEvidence[] {
++	const heap: PersonalizedPageRankEvidence[] = [];
++
++	for (let nodeIndex = 0; nodeIndex < scores.length; nodeIndex += 1) {
++		const chunkId = index.chunkIdByIndex[nodeIndex];
++		const score = scores[nodeIndex];
++		if (!chunkId || score <= 0 || !Number.isFinite(score)) continue;
++
++		const candidate = { chunkId, score };
++		if (heap.length < limit) {
++			heap.push(candidate);
++			siftUpWorst(heap, heap.length - 1);
++			continue;
++		}
+ 
+-	const targets = new Uint32Array(offsets[nodes.length]);
+-	const weights = new Float64Array(offsets[nodes.length]);
+-	const outgoingWeights = new Float64Array(nodes.length);
+-	const cursor = Uint32Array.from(offsets.subarray(0, nodes.length));
+-
+-	for (const edge of includedEdges) {
+-		addCompiledEdge(
+-			edge.source,
+-			edge.target,
+-			edge.weight,
+-			cursor,
+-			targets,
+-			weights,
+-			outgoingWeights
+-		);
+-		addCompiledEdge(
+-			edge.target,
+-			edge.source,
+-			edge.weight,
+-			cursor,
+-			targets,
+-			weights,
+-			outgoingWeights
+-		);
++		if (!isBetter(candidate, heap[0])) continue;
++		heap[0] = candidate;
++		siftDownWorst(heap, 0);
+ 	}
+ 
+-	return {
+-		nodes,
+-		nodeIndex,
+-		offsets,
+-		targets,
+-		weights,
+-		outgoingWeights
+-	};
++	return heap.sort(compareBestFirst);
+ }
+ 
+-function compileEdge(
+-	edge: GraphEdge,
+-	nodeIndex: Map<string, number>,
+-	traversable: readonly boolean[],
+-	includeContainment: boolean
+-): { source: number; target: number; weight: number } | null {
+-	if (!includeContainment && edge.relation === 'CONTAINS') return null;
+-
+-	const source = nodeIndex.get(edge.source);
+-	const target = nodeIndex.get(edge.target);
++function siftUpWorst(heap: PersonalizedPageRankEvidence[], start: number): void {
++	let index = start;
++	while (index > 0) {
++		const parent = Math.floor((index - 1) / 2);
++		if (!isWorse(heap[index], heap[parent])) return;
++		[heap[index], heap[parent]] = [heap[parent], heap[index]];
++		index = parent;
++	}
++}
+ 
+-	if (source === undefined || target === undefined) return null;
+-	if (!traversable[source] || !traversable[target]) return null;
++function siftDownWorst(heap: PersonalizedPageRankEvidence[], start: number): void {
++	let index = start;
++	while (true) {
++		const left = index * 2 + 1;
++		const right = left + 1;
++		let worst = index;
+ 
+-	const weight =
+-		Number.isFinite(edge.weight) && edge.weight > 0 ? edge.weight : 1;
++		if (left < heap.length && isWorse(heap[left], heap[worst])) worst = left;
++		if (right < heap.length && isWorse(heap[right], heap[worst])) worst = right;
++		if (worst === index) return;
+ 
+-	return { source, target, weight };
++		[heap[index], heap[worst]] = [heap[worst], heap[index]];
++		index = worst;
++	}
+ }
+ 
+-function addCompiledEdge(
+-	source: number,
+-	target: number,
+-	weight: number,
+-	cursor: Uint32Array,
+-	targets: Uint32Array,
+-	weights: Float64Array,
+-	outgoingWeights: Float64Array
+-): void {
+-	const index = cursor[source];
+-	cursor[source] += 1;
+-	targets[index] = target;
+-	weights[index] = weight;
+-	outgoingWeights[source] += weight;
++function isBetter(
++	left: PersonalizedPageRankEvidence,
++	right: PersonalizedPageRankEvidence
++): boolean {
++	return left.score > right.score || (left.score === right.score && left.chunkId < right.chunkId);
+ }
+ 
+-function isTraversableNode(node: GraphNode): boolean {
+-	if (node.kind === 'document') return false;
++function isWorse(left: PersonalizedPageRankEvidence, right: PersonalizedPageRankEvidence): boolean {
++	return left.score < right.score || (left.score === right.score && left.chunkId > right.chunkId);
++}
+ 
+-	return (
+-		node.kind !== 'entity' ||
+-		!isNoisyEntityLabel(node.label, node.entityKind)
+-	);
++function compareBestFirst(
++	left: PersonalizedPageRankEvidence,
++	right: PersonalizedPageRankEvidence
++): number {
++	return right.score - left.score || left.chunkId.localeCompare(right.chunkId);
+ }
+ 
+ function clamp(value: number, minimum: number, maximum: number): number {
+ 	if (!Number.isFinite(value)) return minimum;
+ 	return Math.max(minimum, Math.min(maximum, value));
+-}
+\ No newline at end of file
++}
+diff --git a/src/lib/server/knowledge-graph/personalized-page-rank.test.ts b/src/lib/server/knowledge-graph/personalized-page-rank.test.ts
+new file mode 100644
+index 0000000..fb24eab
+--- /dev/null
++++ b/src/lib/server/knowledge-graph/personalized-page-rank.test.ts
+@@ -0,0 +1,182 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { GraphStore } from './graph-store';
++import { personalizedPageRank } from './personalized-page-rank';
++import { compilePprIndex } from './ppr-index';
++import type { GraphSeedCandidate } from './seed-selection';
++import { graphId } from './utils';
++
++test('PPR propagates entity relevance to indirectly connected chunks', () => {
++	const graph = new GraphStore();
++	const firstChunk = graphId('chunk', 'chunk-1');
++	const secondChunk = graphId('chunk', 'chunk-2');
++	const march = graphId('entity', 'MARCH');
++	const hemorrhage = graphId('entity', 'massive hemorrhage');
++
++	graph.addNode({
++		id: firstChunk,
++		label: 'MARCH overview',
++		kind: 'chunk',
++		chunkId: 'chunk-1'
++	});
++	graph.addNode({
++		id: secondChunk,
++		label: 'Hemorrhage treatment',
++		kind: 'chunk',
++		chunkId: 'chunk-2'
++	});
++	graph.addNode({
++		id: march,
++		label: 'MARCH',
++		kind: 'entity',
++		entityKind: 'protocol'
++	});
++	graph.addNode({
++		id: hemorrhage,
++		label: 'massive hemorrhage',
++		kind: 'entity',
++		entityKind: 'condition'
++	});
++
++	graph.addEdge({
++		source: firstChunk,
++		target: march,
++		relation: 'MENTIONS',
++		weight: 1,
++		evidence: 'MARCH protocol',
++		chunkId: 'chunk-1'
++	});
++	graph.addEdge({
++		source: march,
++		target: hemorrhage,
++		relation: 'HAS_STEP',
++		weight: 2,
++		evidence: 'MARCH begins with massive hemorrhage',
++		chunkId: 'chunk-1'
++	});
++	graph.addEdge({
++		source: hemorrhage,
++		target: secondChunk,
++		relation: 'MENTIONS',
++		weight: 1,
++		evidence: 'Control massive hemorrhage',
++		chunkId: 'chunk-2'
++	});
++
++	const seeds: GraphSeedCandidate[] = [
++		{
++			nodeId: march,
++			kind: 'entity',
++			label: 'MARCH',
++			score: 1,
++			sources: ['entity-exact'],
++			sourceScores: { 'entity-exact': 1 }
++		}
++	];
++
++	const results = personalizedPageRank(compilePprIndex(graph), seeds, {
++		resultLimit: 10
++	});
++
++	const first = results.find((result) => result.chunkId === 'chunk-1');
++	const second = results.find((result) => result.chunkId === 'chunk-2');
++
++	assert.ok(first);
++	assert.ok(second);
++	assert.ok(first.score > second.score);
++	assert.ok(second.score > 0);
++});
++
++test('PPR does not spread through document containment hubs', () => {
++	const graph = new GraphStore();
++	const document = graphId('document', 'manual');
++	const relevantChunk = graphId('chunk', 'relevant');
++	const unrelatedChunk = graphId('chunk', 'unrelated');
++
++	graph.addNode({
++		id: document,
++		label: 'Manual',
++		kind: 'document',
++		documentId: 'manual'
++	});
++	graph.addNode({
++		id: relevantChunk,
++		label: 'Relevant',
++		kind: 'chunk',
++		chunkId: 'relevant'
++	});
++	graph.addNode({
++		id: unrelatedChunk,
++		label: 'Unrelated',
++		kind: 'chunk',
++		chunkId: 'unrelated'
++	});
++
++	for (const chunk of [relevantChunk, unrelatedChunk]) {
++		graph.addEdge({
++			source: document,
++			target: chunk,
++			relation: 'CONTAINS',
++			weight: 0.5,
++			evidence: '',
++			chunkId: graph.getNode(chunk)?.chunkId
++		});
++	}
++
++	const seeds: GraphSeedCandidate[] = [
++		{
++			nodeId: relevantChunk,
++			kind: 'chunk',
++			label: 'Relevant',
++			chunkId: 'relevant',
++			score: 1,
++			sources: ['hybrid'],
++			sourceScores: { hybrid: 1 }
++		}
++	];
++
++	const results = personalizedPageRank(compilePprIndex(graph), seeds);
++
++	assert.ok(results.some((result) => result.chunkId === 'relevant'));
++	assert.ok(!results.some((result) => result.chunkId === 'unrelated'));
++});
++
++test('PPR returns no results without usable seeds', () => {
++	assert.deepEqual(personalizedPageRank(compilePprIndex(new GraphStore()), []), []);
++});
++
++test('PPR enforces resultLimit without sorting every graph node', () => {
++	const graph = new GraphStore();
++	const entity = graphId('entity', 'shared concept');
++	graph.addNode({ id: entity, label: 'shared concept', kind: 'entity', entityKind: 'concept' });
++
++	for (const chunkId of ['third', 'first', 'second']) {
++		const chunkNodeId = graphId('chunk', chunkId);
++		graph.addNode({ id: chunkNodeId, label: chunkId, kind: 'chunk', chunkId });
++		graph.addEdge({
++			source: entity,
++			target: chunkNodeId,
++			relation: 'MENTIONS',
++			weight: 1,
++			evidence: '',
++			chunkId
++		});
++	}
++
++	const seeds: GraphSeedCandidate[] = [
++		{
++			nodeId: entity,
++			kind: 'entity',
++			label: 'shared concept',
++			score: 1,
++			sources: ['entity-exact'],
++			sourceScores: { 'entity-exact': 1 }
++		}
++	];
++
++	const results = personalizedPageRank(compilePprIndex(graph), seeds, { resultLimit: 2 });
++	assert.deepEqual(
++		results.map((result) => result.chunkId),
++		['first', 'second']
++	);
++});
+diff --git a/src/lib/server/knowledge-graph/ppr-index.test.ts b/src/lib/server/knowledge-graph/ppr-index.test.ts
+new file mode 100644
+index 0000000..b4ea1c5
+--- /dev/null
++++ b/src/lib/server/knowledge-graph/ppr-index.test.ts
+@@ -0,0 +1,60 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { GraphStore } from './graph-store';
++import { compilePprIndex } from './ppr-index';
++import { graphId } from './utils';
++
++test('PPR index compiles weighted edges in both directions', () => {
++	const graph = new GraphStore();
++	const chunk = graphId('chunk', 'chunk-1');
++	const entity = graphId('entity', 'airway');
++	graph.addNode({ id: chunk, label: 'Chunk 1', kind: 'chunk', chunkId: 'chunk-1' });
++	graph.addNode({ id: entity, label: 'airway', kind: 'entity', entityKind: 'concept' });
++	graph.addEdge({
++		source: chunk,
++		target: entity,
++		relation: 'MENTIONS',
++		weight: 2,
++		evidence: '',
++		chunkId: 'chunk-1'
++	});
++
++	const index = compilePprIndex(graph);
++	assert.deepEqual(index.nodeIdByIndex, [chunk, entity]);
++	assert.deepEqual([...index.offsets], [0, 1, 2]);
++	assert.deepEqual([...index.targets], [1, 0]);
++	assert.deepEqual([...index.weights], [2, 2]);
++	assert.deepEqual([...index.outgoingWeights], [2, 2]);
++});
++
++test('PPR index excludes document containment hubs and noisy entities', () => {
++	const graph = new GraphStore();
++	const document = graphId('document', 'manual');
++	const chunk = graphId('chunk', 'chunk-1');
++	const noisyEntity = graphId('entity', 'the');
++
++	graph.addNode({ id: document, label: 'Manual', kind: 'document', documentId: 'manual' });
++	graph.addNode({ id: chunk, label: 'Chunk 1', kind: 'chunk', chunkId: 'chunk-1' });
++	graph.addNode({ id: noisyEntity, label: 'the', kind: 'entity', entityKind: 'concept' });
++	graph.addEdge({
++		source: document,
++		target: chunk,
++		relation: 'CONTAINS',
++		weight: 0.5,
++		evidence: '',
++		chunkId: 'chunk-1'
++	});
++	graph.addEdge({
++		source: chunk,
++		target: noisyEntity,
++		relation: 'MENTIONS',
++		weight: 1,
++		evidence: '',
++		chunkId: 'chunk-1'
++	});
++
++	const index = compilePprIndex(graph);
++	assert.deepEqual(index.nodeIdByIndex, [chunk]);
++	assert.deepEqual([...index.offsets], [0, 0]);
++	assert.equal(index.targets.length, 0);
++});
+diff --git a/src/lib/server/knowledge-graph/ppr-index.ts b/src/lib/server/knowledge-graph/ppr-index.ts
+new file mode 100644
+index 0000000..5f3ec1d
+--- /dev/null
++++ b/src/lib/server/knowledge-graph/ppr-index.ts
+@@ -0,0 +1,114 @@
++import { GraphStore } from './graph-store';
++import type { GraphEdge, GraphNode } from './types';
++import { isNoisyEntityLabel } from './utils';
++
++export type PprIndex = {
++	nodeIndexById: Map<string, number>;
++	nodeIdByIndex: string[];
++	chunkIdByIndex: Array<string | null>;
++	offsets: Uint32Array;
++	targets: Uint32Array;
++	weights: Float64Array;
++	outgoingWeights: Float64Array;
++};
++
++export type CompilePprIndexOptions = {
++	includeContainment?: boolean;
++};
++
++const MAX_UINT32 = 0xffffffff;
++
++/**
++ * Compile the object graph into an immutable compressed-sparse-row index.
++ *
++ * The two edge passes are intentional: the first sizes the typed arrays and the
++ * second fills them, avoiding a temporary JavaScript object for every edge.
++ */
++export function compilePprIndex(graph: GraphStore, options: CompilePprIndexOptions = {}): PprIndex {
++	const includeContainment = options.includeContainment === true;
++	const nodeIndexById = new Map<string, number>();
++	const nodeIdByIndex: string[] = [];
++	const chunkIdByIndex: Array<string | null> = [];
++
++	for (const node of graph.nodes.values()) {
++		if (!isTraversableNode(node)) continue;
++
++		const index = nodeIdByIndex.length;
++		nodeIndexById.set(node.id, index);
++		nodeIdByIndex.push(node.id);
++		chunkIdByIndex.push(node.kind === 'chunk' ? (node.chunkId ?? null) : null);
++	}
++
++	const degrees = new Uint32Array(nodeIdByIndex.length);
++	for (const edge of graph.edges) {
++		if (!isIncludedEdge(edge, includeContainment)) continue;
++
++		const source = nodeIndexById.get(edge.source);
++		const target = nodeIndexById.get(edge.target);
++		if (source === undefined || target === undefined) continue;
++
++		degrees[source] += 1;
++		degrees[target] += 1;
++	}
++
++	const offsets = new Uint32Array(nodeIdByIndex.length + 1);
++	for (let index = 0; index < nodeIdByIndex.length; index += 1) {
++		const nextOffset = offsets[index] + degrees[index];
++		if (nextOffset > MAX_UINT32) {
++			throw new Error('The PPR graph exceeds the Uint32 adjacency limit.');
++		}
++		offsets[index + 1] = nextOffset;
++	}
++
++	const targets = new Uint32Array(offsets[nodeIdByIndex.length]);
++	const weights = new Float64Array(targets.length);
++	const outgoingWeights = new Float64Array(nodeIdByIndex.length);
++	const cursor = Uint32Array.from(offsets.subarray(0, nodeIdByIndex.length));
++
++	for (const edge of graph.edges) {
++		if (!isIncludedEdge(edge, includeContainment)) continue;
++
++		const source = nodeIndexById.get(edge.source);
++		const target = nodeIndexById.get(edge.target);
++		if (source === undefined || target === undefined) continue;
++
++		const weight = Number.isFinite(edge.weight) && edge.weight > 0 ? edge.weight : 1;
++		addArc(source, target, weight, cursor, targets, weights, outgoingWeights);
++		addArc(target, source, weight, cursor, targets, weights, outgoingWeights);
++	}
++
++	return {
++		nodeIndexById,
++		nodeIdByIndex,
++		chunkIdByIndex,
++		offsets,
++		targets,
++		weights,
++		outgoingWeights
++	};
++}
++
++function isIncludedEdge(edge: GraphEdge, includeContainment: boolean): boolean {
++	return includeContainment || edge.relation !== 'CONTAINS';
++}
++
++function addArc(
++	source: number,
++	target: number,
++	weight: number,
++	cursor: Uint32Array,
++	targets: Uint32Array,
++	weights: Float64Array,
++	outgoingWeights: Float64Array
++): void {
++	const index = cursor[source];
++	cursor[source] += 1;
++	targets[index] = target;
++	weights[index] = weight;
++	outgoingWeights[source] += weight;
++}
++
++function isTraversableNode(node: GraphNode): boolean {
++	if (node.kind === 'document') return false;
++	return node.kind !== 'entity' || !isNoisyEntityLabel(node.label, node.entityKind);
++}

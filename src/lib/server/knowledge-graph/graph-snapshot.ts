@@ -6,6 +6,7 @@ import { knowledgeGraphSnapshots } from '$lib/server/database/schema';
 import { GraphStore } from './graph-store';
 import type { KnowledgeGraphBuildScope, KnowledgeGraphBuildStats } from './graph-build-registry';
 import type { KnowledgeGraphIndex } from './graph-index';
+import { compilePprIndex } from './ppr-index';
 import type { GraphEdge, GraphNode, IndexedChunk } from './types';
 
 const SNAPSHOT_FORMAT_VERSION = 1;
@@ -109,7 +110,12 @@ export async function loadKnowledgeGraphSnapshot(
 		const chunksById = new Map(payload.chunks.map((chunk) => [chunk.chunkId, chunk]));
 		return {
 			...metadata,
-			index: { graph, chunksById, signature: row.signature }
+			index: {
+				graph,
+				pprIndex: compilePprIndex(graph),
+				chunksById,
+				signature: row.signature
+			}
 		};
 	} catch (error) {
 		console.warn('Discarding an unreadable Knowledge Graph snapshot:', error);
