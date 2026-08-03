@@ -36,14 +36,17 @@
 			</Button>
 		{/each}
 	</ButtonGroup.Root>
-	<div class="grid max-w-52 gap-2">
-		<Label for="settings-rag-top-k">Retrieved chunks</Label>
-		<Input
-			id="settings-rag-top-k"
-			type="number"
-			min="1"
-			value={settingsStore.config.ragTopK}
-			oninput={updateRagTopK}
-		/>
+	<div class="grid items-start gap-3 sm:grid-cols-2">
+		<div class="grid min-w-0 grid-rows-[1.25rem_2.25rem] content-start gap-2">
+			<Label for="settings-rag-top-k">Retrieved chunks</Label>
+			<Input
+				id="settings-rag-top-k"
+				class="w-full"
+				min="1"
+				oninput={updateRagTopK}
+				type="number"
+				value={settingsStore.config.ragTopK}
+			/>
+		</div>
 	</div>
 </section>

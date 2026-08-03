@@ -49,7 +49,7 @@
 </script>
 
 <section class="grid gap-2">
-	<div class="flex min-h-7 items-center">
+	<div class="flex h-7 items-center">
 		<Label for="settings-prompt-template">Prompt template</Label>
 	</div>
 	<div class="flex gap-2">

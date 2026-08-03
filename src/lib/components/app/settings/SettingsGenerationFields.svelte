@@ -13,8 +13,8 @@
 	}
 </script>
 
-<section class="grid gap-3 sm:grid-cols-2">
-	<div class="grid gap-2">
+<section class="grid items-start gap-3 sm:grid-cols-2">
+	<div class="grid min-w-0 grid-rows-[1.25rem_2.25rem] content-start gap-2">
 		<Label for="settings-max-tokens">Max output tokens</Label>
 		<Input
 			id="settings-max-tokens"
@@ -27,7 +27,7 @@
 				})}
 		/>
 	</div>
-	<div class="grid gap-2">
+	<div class="grid min-w-0 grid-rows-[1.25rem_2.25rem] content-start gap-2">
 		<Label for="settings-temperature">Temperature</Label>
 		<Input
 			id="settings-temperature"
@@ -45,7 +45,7 @@
 				})}
 		/>
 	</div>
-	<div class="grid gap-2">
+	<div class="grid min-w-0 grid-rows-[1.25rem_2.25rem] content-start gap-2">
 		<Label for="settings-top-k">Sampling top K</Label>
 		<Input
 			id="settings-top-k"
@@ -58,7 +58,7 @@
 				})}
 		/>
 	</div>
-	<div class="grid gap-2">
+	<div class="grid min-w-0 grid-rows-[1.25rem_2.25rem] content-start gap-2">
 		<Label for="settings-reasoning-budget">Reasoning budget (tokens)</Label>
 		<Input
 			id="settings-reasoning-budget"
@@ -75,7 +75,7 @@
 		/>
 		<p class="m-0 text-xs text-muted-foreground">-1 = unlimited · 0 = disable thinking</p>
 	</div>
-	<div class="grid gap-2">
+	<div class="grid min-w-0 grid-rows-[1.25rem_2.25rem] content-start gap-2">
 		<Label for="settings-agent-turns">Agent turns</Label>
 		<Input
 			id="settings-agent-turns"

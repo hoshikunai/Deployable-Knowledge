@@ -19,7 +19,7 @@
 </script>
 
 <section class="grid gap-2">
-	<div class="flex items-center justify-between gap-2">
+	<div class="flex h-7 items-center justify-between gap-2">
 		<Label for="settings-model">Provider and model</Label>
 		<Button variant="ghost" size="sm" href={resolve('/settings/models')}>
 			<KeyRound /> API keys
