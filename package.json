@@ -15,6 +15,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test:knowledge-graph": "tsx --test src/lib/server/knowledge-graph/*.test.ts",
+		"test:providers": "tsx --test src/lib/server/providers/*.test.ts",
 		"graph:rebuild": "tsx scripts/rebuild-knowledge-graph.ts",
 		"graph:rebuild:fast": "tsx scripts/rebuild-knowledge-graph.ts --extractor=typescript",
 		"lint": "prettier --check . && eslint .",

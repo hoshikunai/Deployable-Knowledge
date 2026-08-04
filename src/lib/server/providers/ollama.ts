@@ -27,6 +27,8 @@ export class Ollama extends Provider {
 		options: ProviderChatOptions = {}
 	): AsyncGenerator<ProviderChatChunk> {
 		const tools = options.toolChoice === 'none' ? undefined : options.tools;
+		const think = resolveOllamaThinking(options.reasoningBudget);
+		const numPredict = resolveOllamaMaxTokens(options.maxTokens, options.reasoningBudget);
 		const req = new Request(`${LLAMA_API_URL}/api/chat`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -34,10 +36,11 @@ export class Ollama extends Provider {
 				model,
 				messages: messages.map(chatCodec.encodeMessage),
 				...(tools?.length ? { tools } : {}),
+				...(think === undefined ? {} : { think }),
 				options: {
 					temperature: options.temperature,
 					top_k: options.topK,
-					num_predict: options.maxTokens
+					num_predict: numPredict
 				},
 				stream: true
 			}),
@@ -98,4 +101,23 @@ export class Ollama extends Provider {
 			return typeof model === 'string' ? [model] : [];
 		});
 	}
+}
+
+function resolveOllamaThinking(reasoningBudget: number | undefined): boolean | undefined {
+	if (reasoningBudget === undefined) return undefined;
+	return reasoningBudget !== 0;
+}
+
+function resolveOllamaMaxTokens(
+	maxTokens: number | undefined,
+	reasoningBudget: number | undefined
+): number | undefined {
+	if (maxTokens === undefined || reasoningBudget === undefined || reasoningBudget <= 0) {
+		return maxTokens;
+	}
+
+	// Ollama's boolean `think` control cannot enforce a numeric thought budget.
+	// Reserve that allowance as additional generation headroom so thinking does
+	// not consume the entire visible-answer budget, matching the local provider.
+	return Math.min(Number.MAX_SAFE_INTEGER, maxTokens + reasoningBudget);
 }
