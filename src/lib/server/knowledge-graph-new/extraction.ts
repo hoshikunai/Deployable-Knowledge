@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { Parser, Store } from 'n3';
 import { getProvider } from '$lib/server/providers/registry';
+import { buildSchemaSample } from './schema-sampling';
 import type { ProviderChatOptions } from '$lib/server/providers/provider';
 
 export type GraphChunk = {
@@ -59,7 +60,13 @@ export type ExtractionSettings = {
 
 type ScoredTerm = SchemaCategory & { relation: boolean; score: number };
 
-const VERSION = 'kg-v4';
+const VERSION = 'kg-v5';
+// 16,384 for 12 GiB RAM
+const DEFAULT_CONTEXT_WINDOW = 16_384;
+// refer to line 165, value can be changed for more chunks
+const DEFAULT_SCHEMA_SAMPLE_CHUNKS = 48;
+const DEFAULT_SCHEMA_SAMPLE_CHARACTERS = 30_000;
+
 const ONTOLOGIES = [
 	'https://schema.org/version/latest/schemaorg-current-https.ttl',
 	'https://www.w3.org/ns/prov.ttl'
@@ -116,13 +123,39 @@ const ASSERTION = object({
 	status: { type: 'string', enum: ['asserted', 'negated', 'uncertain'] }
 });
 const EXTRACTION_OUTPUT = object({ assertions: array(ASSERTION, 30) });
+
+const booleanValue = { type: 'boolean' };
+
 const VERIFICATION_OUTPUT = object({
-	accepted: array({ type: 'integer' })
+	decisions: array(
+		object({
+			index: { type: 'integer' },
+			verdict: {
+				type: 'string',
+				enum: ['accept', 'reverse', 'reject']
+			},
+			subjectTypeCorrect: booleanValue,
+			objectTypeCorrect: booleanValue
+		})
+	)
 });
 
 export function extractionVersion(): Record<string, unknown> {
 	return {
 		version: VERSION,
+		contextWindow: positiveInteger(
+			process.env.KNOWLEDGE_GRAPH_CONTEXT_WINDOW,
+			DEFAULT_CONTEXT_WINDOW
+		),
+		schemaSampleChunks: positiveInteger(
+			process.env.KNOWLEDGE_GRAPH_SCHEMA_SAMPLE_CHUNKS,
+			DEFAULT_SCHEMA_SAMPLE_CHUNKS
+		),
+		schemaSampleCharacters: positiveInteger(
+			process.env.KNOWLEDGE_GRAPH_SCHEMA_SAMPLE_CHARACTERS,
+			DEFAULT_SCHEMA_SAMPLE_CHARACTERS
+		),
+		structuredOutput: 'json-schema-v1',
 		model: process.env.KNOWLEDGE_GRAPH_GLINER_MODEL ?? 'knowledgator/gliner-relex-large-v0.5',
 		entity: process.env.KNOWLEDGE_GRAPH_GLINER_THRESHOLD ?? '0.4',
 		adjacency: process.env.KNOWLEDGE_GRAPH_GLINER_ADJACENCY_THRESHOLD ?? '0.55',
@@ -135,11 +168,25 @@ export async function discoverCorpusSchema(
 	chunks: GraphChunk[],
 	settings: ExtractionSettings
 ): Promise<CorpusSchema> {
-	const sampled = sampleChunks(chunks, 18);
-	const sample = sampled
-		.map((chunk, index) => `[${index + 1}] ${chunk.content}`)
-		.join('\n\n')
-		.slice(0, 18_000);
+	// Old 18-chunk global sampler replaced by new 48-chunk sampler
+	// const sampled = sampleChunks(chunks, 18);
+	// const sample = sampled
+	// 	.map((chunk, index) => `[${index + 1}] ${chunk.content}`)
+	// 	.join('\n\n')
+	// 	.slice(0, 18_000);
+	const schemaSample = buildSchemaSample(chunks, {
+		maxChunks: positiveInteger(
+			process.env.KNOWLEDGE_GRAPH_SCHEMA_SAMPLE_CHUNKS,
+			DEFAULT_SCHEMA_SAMPLE_CHUNKS
+		),
+		maxCharacters: positiveInteger(
+			process.env.KNOWLEDGE_GRAPH_SCHEMA_SAMPLE_CHARACTERS,
+			DEFAULT_SCHEMA_SAMPLE_CHARACTERS
+		)
+	});
+
+	const sampled = schemaSample.chunks;
+	const sample = schemaSample.text;
 	if (!sample) throw new Error('No usable text is available for schema discovery.');
 
 	const ontologyTerms = await loadOntologyTerms(sample);
@@ -186,6 +233,11 @@ export async function extractWithLlm(
 	schema: CorpusSchema,
 	settings: ExtractionSettings
 ): Promise<ExtractionResult> {
+	const allowedRelations = schema.relationTypes.map((relation) => ({
+		name: relation.name,
+		subjectTypes: relation.subjectTypes,
+		objectTypes: relation.objectTypes
+	}));
 	const result = await askJson<Record<string, unknown>>(
 		settings,
 		`Extract a small, evidence-grounded knowledge graph from this chunk.
@@ -193,12 +245,18 @@ export async function extractWithLlm(
 Schema guidance:
 ${JSON.stringify(schema)}
 
+Allowed canonical relations:
+${JSON.stringify(allowedRelations)}
+
+rawPredicate must exactly match one allowed relation name. Do not invent
+predicates. If an explicitly stated relationship cannot be represented by an
+allowed relation, omit it from accepted assertions.
+
 Extract only explicitly stated, meaningful relationships. Copy subject, object,
 and one evidence substring exactly from the chunk; the evidence must contain
 both endpoints. Preserve direction, dates, negation, and uncertainty. Do not
-connect nearby entities, extract formatting, or emit every noun phrase. The
-schema is guidance, not a closed list. Return an empty assertions array when
-there is no useful relationship.
+connect nearby entities, extract formatting, or emit every noun phrase. Return
+an empty assertions array when there is no useful relationship.
 
 Chunk:
 ${chunk.content}`,
@@ -284,16 +342,13 @@ export async function reconcileExtractions(
 		}
 	}
 
-	const singles = assertions.filter((item) => item.extractors.length === 1);
-	if (!singles.length) return { assertions };
-	const accepted = await verify(text, singles, settings);
+	if (!assertions.length) return { assertions: [] };
+
+	const accepted = await verify(text, assertions, schema, settings);
+
 	return {
 		assertions: assertions.flatMap((assertion) =>
-			assertion.extractors.length > 1
-				? [assertion]
-				: accepted.has(key(assertion))
-					? [{ ...assertion, verified: true }]
-					: []
+			accepted.has(key(assertion)) ? [{ ...assertion, verified: true }] : []
 		)
 	};
 }
@@ -307,9 +362,17 @@ export function hasUsableText(text: string): boolean {
 	return words.length >= 3 && words.join('').length >= 12;
 }
 
+type VerificationDecision = {
+	index: number;
+	verdict: 'accept' | 'reverse' | 'reject';
+	subjectTypeCorrect: boolean;
+	objectTypeCorrect: boolean;
+};
+
 async function verify(
 	text: string,
 	assertions: ExtractedAssertion[],
+	schema: CorpusSchema,
 	settings: ExtractionSettings
 ): Promise<Set<string>> {
 	const candidates = assertions.map((assertion, index) => ({
@@ -322,12 +385,28 @@ async function verify(
 		evidence: assertion.evidence,
 		status: assertion.status
 	}));
-	const result = await askJson<{ accepted: number[] }>(
+
+	const result = await askJson<{
+		decisions: VerificationDecision[];
+	}>(
 		settings,
-		`Strictly verify each candidate against the chunk. Accept only when the
-evidence explicitly states the proposed meaning in the proposed direction.
-Reject co-occurrence, implication, vague wording, reversed direction, missing
-context, and unsupported types. Return accepted indexes only.
+		`Strictly verify every candidate against the chunk and canonical schema.
+
+Use "accept" only when:
+- the evidence explicitly supports the relationship;
+- the subject and object are in the proposed direction;
+- both endpoint types are correct;
+- the predicate accurately describes the relationship.
+
+Use "reverse" when the relationship is supported but its direction is reversed.
+Use "reject" for co-occurrence, implication, vague wording, missing context,
+incorrect predicates, unsupported types, or unsupported claims.
+
+Do not repair or rewrite candidates. Return exactly one decision for every
+candidate index.
+
+Canonical schema:
+${JSON.stringify(schema)}
 
 Chunk:
 ${text}
@@ -335,12 +414,23 @@ ${text}
 Candidates:
 ${JSON.stringify(candidates)}`,
 		VERIFICATION_OUTPUT,
-		700
+		1_200
 	);
-	const accepted = new Set(result.accepted.filter((value) => Number.isInteger(value)));
-	return new Set(assertions.filter((_, index) => accepted.has(index)).map(key));
-}
 
+	const acceptedIndexes = new Set(
+		result.decisions
+			.filter(
+				(decision) =>
+					Number.isInteger(decision.index) &&
+					decision.verdict === 'accept' &&
+					decision.subjectTypeCorrect &&
+					decision.objectTypeCorrect
+			)
+			.map((decision) => decision.index)
+	);
+
+	return new Set(assertions.filter((_, index) => acceptedIndexes.has(index)).map(key));
+}
 function parseResult(
 	value: Record<string, unknown>,
 	text: string,
@@ -396,7 +486,7 @@ function fitsSchema(assertion: ExtractedAssertion, schema: CorpusSchema): boolea
 	const relation = schema.relationTypes.find(
 		(type) => type.name === category(assertion.rawPredicate)
 	);
-	if (!relation) return true;
+	if (!relation) return false;
 	return (
 		accepts(relation.subjectTypes, assertion.subjectType) &&
 		accepts(relation.objectTypes, assertion.objectType)
@@ -419,34 +509,62 @@ async function askJson<T>(
 	maxTokens: number
 ): Promise<T> {
 	const attempts = positiveInteger(process.env.KNOWLEDGE_GRAPH_JSON_ATTEMPTS, 3);
-	const structuredPrompt = `${prompt}\n\nReturn only JSON matching this schema:\n${JSON.stringify(format)}`;
+	const contextWindow =
+		settings.providerOptions?.contextSize ??
+		positiveInteger(process.env.KNOWLEDGE_GRAPH_CONTEXT_WINDOW, DEFAULT_CONTEXT_WINDOW);
+	const requestedMaxTokens = settings.providerOptions?.maxTokens ?? maxTokens;
+	const outputTokens = Math.min(requestedMaxTokens, maxTokens);
+
+	const structuredPrompt =
+		`${prompt}\n\nReturn only JSON matching this schema:\n` + JSON.stringify(format);
+
 	let lastError: unknown;
+
 	for (let attempt = 1; attempt <= attempts; attempt += 1) {
 		try {
 			let output = '';
+
 			for await (const part of getProvider(settings.providerId).chat(
 				structuredPrompt,
 				settings.modelId,
 				{
+					...settings.providerOptions,
 					temperature: 0,
 					topK: 20,
-					...settings.providerOptions,
-					maxTokens: settings.providerOptions?.maxTokens ?? maxTokens
+					maxTokens: outputTokens,
+					contextSize: contextWindow,
+					structuredOutput: format
 				}
 			)) {
 				output += part;
 			}
-			return JSON.parse(output) as T;
+
+			return parseStructuredJson<T>(output);
 		} catch (error) {
 			lastError = error;
+
 			if (attempt < attempts) {
 				await new Promise((resolve) => setTimeout(resolve, attempt * 1_000));
 			}
 		}
 	}
+
 	throw new Error(
 		`Structured model request failed after ${attempts} attempts: ${message(lastError)}`
 	);
+}
+
+function parseStructuredJson<T>(output: string): T {
+	const trimmed = output.trim();
+
+	if (!trimmed) {
+		throw new Error('Structured model returned an empty response.');
+	}
+
+	const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+	const json = fenced ? fenced[1].trim() : trimmed;
+
+	return JSON.parse(json) as T;
 }
 
 async function loadOntologyTerms(sample: string): Promise<SchemaCategory[]> {
@@ -553,11 +671,11 @@ function readCategories(value: unknown, relations = false): SchemaCategory[] {
 	});
 }
 
-function sampleChunks(chunks: GraphChunk[], limit: number): GraphChunk[] {
-	if (chunks.length <= limit) return chunks;
-	const step = (chunks.length - 1) / (limit - 1);
-	return [...new Set(Array.from({ length: limit }, (_, i) => chunks[Math.round(i * step)]))];
-}
+// function sampleChunks(chunks: GraphChunk[], limit: number): GraphChunk[] {
+// 	if (chunks.length <= limit) return chunks;
+// 	const step = (chunks.length - 1) / (limit - 1);
+// 	return [...new Set(Array.from({ length: limit }, (_, i) => chunks[Math.round(i * step)]))];
+// }
 
 function sameAssertion(left: ExtractedAssertion, right: ExtractedAssertion): boolean {
 	if (

@@ -11,6 +11,8 @@ export type ProviderChatOptions = {
 	reasoningBudget?: number;
 	contextSize?: number | null;
 	gpuMode?: LlamaGpuMode;
+	// Provider-enforced structured output schema.
+	structuredOutput?: Record<string, unknown>;
 	tools?: ProviderToolDefinition[];
 	toolChoice?: 'auto' | 'none';
 	parallelToolCalls?: boolean;

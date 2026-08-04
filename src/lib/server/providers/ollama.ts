@@ -35,6 +35,7 @@ export class Ollama extends Provider {
 				model,
 				messages: messages.map(chatCodec.encodeMessage),
 				...(tools?.length ? { tools } : {}),
+				...(options.structuredOutput ? { format: options.structuredOutput } : {}),
 				options: {
 					temperature: options.temperature,
 					top_k: options.topK,
