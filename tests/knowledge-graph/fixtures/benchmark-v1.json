@@ -1,0 +1,50 @@
+{
+	"version": "kg-gold-v1",
+	"corpusId": "edge-device-corpus-2026-08-06",
+	"canonicalRelations": [
+		"is_part_of",
+		"requires_equipment",
+		"uses",
+		"treats",
+		"prevents",
+		"authorizes",
+		"prohibits"
+	],
+	"chunks": [
+		{
+			"chunkId": "replace-with-real-chunk-id",
+			"documentId": "replace-with-real-document-id",
+			"contentSha256": "replace-with-sha256"
+		}
+	],
+	"assertions": [
+		{
+			"id": "assertion-crts-part-of-arg",
+			"documentId": "replace-with-real-document-id",
+			"chunkId": "replace-with-real-chunk-id",
+			"subject": {
+				"canonical": "casualty receiving and treatment ship",
+				"aliases": ["CRTS"],
+				"type": "object"
+			},
+			"predicate": "is_part_of",
+			"object": {
+				"canonical": "amphibious ready group",
+				"aliases": ["ARG"],
+				"type": "organization"
+			},
+			"evidence": "A casualty receiving and treatment ship (CRTS) is part of an amphibious ready group (ARG).",
+			"status": "asserted",
+			"required": true
+		}
+	],
+	"queries": [
+		{
+			"id": "query-crts-parent",
+			"question": "What organization is a casualty receiving and treatment ship part of?",
+			"relevantChunkIds": ["replace-with-real-chunk-id"],
+			"expectedPathAssertionIds": [["assertion-crts-part-of-arg"]],
+			"forbiddenChunkIds": []
+		}
+	]
+}
