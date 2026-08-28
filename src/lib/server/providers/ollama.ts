@@ -28,6 +28,7 @@ export class Ollama extends Provider {
 		options: ProviderChatOptions = {}
 	): AsyncGenerator<ProviderChatChunk> {
 		const tools = options.toolChoice === 'none' ? undefined : options.tools;
+		const stream = !options.structuredOutput;
 		const req = new Request(`${LLAMA_API_URL}/api/chat`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -36,13 +37,14 @@ export class Ollama extends Provider {
 				messages: messages.map(chatCodec.encodeMessage),
 				...(tools?.length ? { tools } : {}),
 				...(options.structuredOutput ? { format: options.structuredOutput } : {}),
+				...(options.thinking === undefined ? {} : { think: options.thinking }),
 				options: {
 					temperature: options.temperature,
 					top_k: options.topK,
 					num_predict: options.maxTokens,
 					...(options.contextSize ? { num_ctx: options.contextSize } : {})
 				},
-				stream: true
+				stream
 			}),
 			signal: options.signal
 		});
@@ -69,7 +71,7 @@ export class Ollama extends Provider {
 			for (const line of lines) {
 				if (!line.trim()) continue;
 				const data = readObject(JSON.parse(line) as unknown);
-				const chunk = chatCodec.decodeChunk(data.message);
+				const chunk = decodeResponseChunk(data);
 
 				if (chunk) yield chunk;
 			}
@@ -79,7 +81,7 @@ export class Ollama extends Provider {
 
 		if (buffer.trim()) {
 			const data = readObject(JSON.parse(buffer) as unknown);
-			const chunk = chatCodec.decodeChunk(data.message);
+			const chunk = decodeResponseChunk(data);
 
 			if (chunk) yield chunk;
 		}
@@ -116,4 +118,31 @@ export class Ollama extends Provider {
 			return data.capabilities.includes('tools');
 		});
 	}
+}
+
+function decodeResponseChunk(data: Record<string, unknown>): ProviderChatChunk | null {
+	const message = chatCodec.decodeChunk(data.message);
+	const finishReason = typeof data.done_reason === 'string' ? data.done_reason : undefined;
+	const inputTokens = integer(data.prompt_eval_count);
+	const outputTokens = integer(data.eval_count);
+
+	if (
+		!message &&
+		finishReason === undefined &&
+		inputTokens === undefined &&
+		outputTokens === undefined
+	) {
+		return null;
+	}
+
+	return {
+		...(message ?? {}),
+		...(finishReason === undefined ? {} : { finishReason }),
+		...(inputTokens === undefined ? {} : { inputTokens }),
+		...(outputTokens === undefined ? {} : { outputTokens })
+	};
+}
+
+function integer(value: unknown): number | undefined {
+	return typeof value === 'number' && Number.isInteger(value) ? value : undefined;
 }

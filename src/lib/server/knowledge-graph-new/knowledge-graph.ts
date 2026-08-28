@@ -11,6 +11,7 @@ import {
 	reconcileExtractions,
 	runGliner,
 	type CorpusSchema,
+	type AssertionModality,
 	type ExtractionResult,
 	type ExtractionSettings,
 	type Extractor,
@@ -20,6 +21,9 @@ import {
 type Provenance = {
 	extractors: Extractor[];
 	verified: boolean;
+	modality: AssertionModality;
+	modalityCue: string | null;
+	condition: string | null;
 	score: number | null;
 	offsets: [number, number, number, number] | null;
 	rawSubject: string;
@@ -76,7 +80,7 @@ export type BuildResult = {
 	graph: KnowledgeGraph;
 };
 
-const VERSION = 'kg-build-v4';
+const VERSION = 'kg-build-v15';
 
 export async function buildKnowledgeGraph(options: BuildOptions): Promise<BuildResult> {
 	const started = performance.now();
@@ -127,10 +131,15 @@ export async function buildKnowledgeGraph(options: BuildOptions): Promise<BuildR
 		log('discovering corpus schema');
 		schema = await discoverCorpusSchema(chunks, options);
 		await writeCache([{ key: schemaKey, value: schema }]);
-		log(`schema discovered in ${duration(performance.now() - schemaStarted)}`);
+		log(
+			`schema discovered in ${duration(performance.now() - schemaStarted)}: ` +
+				`${schema.entityTypes.length} entity types, ${schema.relationTypes.length} relations`
+		);
 	} else {
 		log(`schema cache hit in ${duration(performance.now() - schemaStarted)}`);
 	}
+	log(`entity types: ${schema.entityTypes.map((type) => type.name).join(', ')}`);
+	log(`relations: ${schema.relationTypes.map((type) => type.name).join(', ')}`);
 	progress(options, 'schema', 1, 1);
 
 	const keys = new Map(
@@ -179,6 +188,30 @@ export async function buildKnowledgeGraph(options: BuildOptions): Promise<BuildR
 					() => null,
 					(error) => (error instanceof Error ? error : new Error(String(error)))
 				);
+	const glinerError = await glinerPromise;
+	await cacheQueue;
+	if (glinerError) {
+		failures.push({
+			stage: 'gliner',
+			chunkId: null,
+			message: glinerError.message
+		});
+		log(`GLiNER failed after ${glinerCompleted} checkpoints: ${glinerError.message}`);
+	} else if (options.useGliner !== false) {
+		log(`GLiNER finished in ${duration(performance.now() - glinerStarted)}`);
+	}
+	for (const chunk of pending) {
+		if (!hasUsableText(chunk.content) || options.useGliner === false || glinerError) {
+			gliner.set(chunk.chunkId, gliner.get(chunk.chunkId) ?? emptyExtraction());
+		} else if (!gliner.has(chunk.chunkId)) {
+			failures.push({
+				stage: 'gliner',
+				chunkId: chunk.chunkId,
+				message: 'GLiNER returned no result for this chunk.'
+			});
+			gliner.set(chunk.chunkId, emptyExtraction());
+		}
+	}
 
 	let completed = chunks.length - pending.length;
 	let attempted = 0;
@@ -190,7 +223,7 @@ export async function buildKnowledgeGraph(options: BuildOptions): Promise<BuildR
 			const chunkStarted = performance.now();
 			try {
 				const result = hasUsableText(chunk.content)
-					? await extractWithLlm(chunk, schema, options)
+					? await extractWithLlm(chunk, schema, options, gliner.get(chunk.chunkId)?.entities ?? [])
 					: emptyExtraction();
 				llm.set(chunk.chunkId, result);
 				await cacheResult(keys.get(chunk.chunkId)!.llm, result);
@@ -211,30 +244,6 @@ export async function buildKnowledgeGraph(options: BuildOptions): Promise<BuildR
 			}
 		}
 		progress(options, 'extracting', ++completed, chunks.length);
-	}
-
-	const glinerError = await glinerPromise;
-	await cacheQueue;
-	if (glinerError) {
-		failures.push({
-			stage: 'gliner',
-			chunkId: null,
-			message: glinerError.message
-		});
-		log(`GLiNER failed after ${glinerCompleted} checkpoints: ${glinerError.message}`);
-	} else if (options.useGliner !== false) {
-		log(`GLiNER finished in ${duration(performance.now() - glinerStarted)}`);
-	}
-	for (const chunk of pending) {
-		if (!hasUsableText(chunk.content) || options.useGliner === false) {
-			gliner.set(chunk.chunkId, emptyExtraction());
-		} else if (!gliner.has(chunk.chunkId) && !glinerError) {
-			failures.push({
-				stage: 'gliner',
-				chunkId: chunk.chunkId,
-				message: 'GLiNER returned no result for this chunk.'
-			});
-		}
 	}
 
 	completed = chunks.length - pending.length;
@@ -391,6 +400,9 @@ export function tripletsCsv(graph: KnowledgeGraph): string {
 		assertion.object,
 		assertion.objectType,
 		assertion.status,
+		assertion.provenance.modality,
+		assertion.provenance.modalityCue,
+		assertion.provenance.condition,
 		assertion.startDate,
 		assertion.endDate,
 		assertion.provenance.extractors.join('+'),
@@ -409,6 +421,9 @@ export function tripletsCsv(graph: KnowledgeGraph): string {
 			'object',
 			'object_type',
 			'status',
+			'modality',
+			'modality_cue',
+			'condition',
 			'start_date',
 			'end_date',
 			'extractors',
@@ -476,9 +491,16 @@ function resolveAssertions(
 		const object = canonical.get(normalize(assertion.object)) ?? assertion.object;
 		return {
 			id: hash(
-				[scope, chunk.chunkId, subject, assertion.rawPredicate, object, assertion.evidence].join(
-					'\0'
-				)
+				[
+					scope,
+					chunk.chunkId,
+					subject,
+					assertion.rawPredicate,
+					object,
+					assertion.modality,
+					assertion.condition ?? '',
+					assertion.evidence
+				].join('\0')
 			),
 			documentId: chunk.documentId,
 			chunkId: chunk.chunkId,
@@ -495,6 +517,9 @@ function resolveAssertions(
 			provenance: {
 				extractors: assertion.extractors,
 				verified: assertion.verified,
+				modality: assertion.modality,
+				modalityCue: assertion.modalityCue,
+				condition: assertion.condition,
 				score: assertion.score,
 				offsets: assertion.offsets,
 				rawSubject: assertion.subject,
@@ -675,6 +700,9 @@ function provenance(value: unknown, subject: string, object: string): Provenance
 	const fallback: Provenance = {
 		extractors: [],
 		verified: false,
+		modality: 'observed',
+		modalityCue: null,
+		condition: null,
 		score: null,
 		offsets: null,
 		rawSubject: subject,

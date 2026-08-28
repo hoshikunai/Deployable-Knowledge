@@ -10,6 +10,11 @@ export interface SchemaSample {
 	text: string;
 }
 
+export interface SchemaDiscoveryBatchOptions {
+	maxBatches: number;
+	maxCharactersPerBatch: number;
+}
+
 interface IndexedChunk {
 	chunk: GraphChunk;
 	index: number;
@@ -83,6 +88,31 @@ export function buildSchemaSample(
 	};
 }
 
+export function buildSchemaDiscoveryBatches(
+	chunks: GraphChunk[],
+	options: SchemaDiscoveryBatchOptions
+): string[] {
+	if (!Number.isInteger(options.maxBatches) || options.maxBatches <= 0) {
+		throw new Error('Schema discovery batch count must be a positive integer.');
+	}
+	if (!Number.isInteger(options.maxCharactersPerBatch) || options.maxCharactersPerBatch < 128) {
+		throw new Error('Each schema discovery batch must allow at least 128 characters.');
+	}
+
+	const usable = chunks.filter((chunk) => chunk.content.trim());
+	if (!usable.length) return [];
+	const batchCount = Math.min(options.maxBatches, usable.length);
+	const groups = Array.from({ length: batchCount }, () => [] as GraphChunk[]);
+
+	// The selected sample is ordered by corpus position. Round-robin assignment
+	// spreads documents and sections across the small independent model calls.
+	for (let index = 0; index < usable.length; index += 1) {
+		groups[index % batchCount].push(usable[index]);
+	}
+
+	return groups.map((group) => formatSample(group, options.maxCharactersPerBatch));
+}
+
 function selectAcrossBands<T>(items: T[], count: number): T[] {
 	if (count <= 0) return [];
 	if (count >= items.length) return [...items];
@@ -105,10 +135,16 @@ function formatSample(chunks: GraphChunk[], maxCharacters: number): string {
 
 	const separatorCharacters = Math.max(0, chunks.length - 1) * 2;
 	const sectionBudget = Math.floor((maxCharacters - separatorCharacters) / chunks.length);
+	const documentLabels = new Map<string, string>();
 
 	return chunks
-		.map((chunk) => {
-			const header = `[document:${chunk.documentId} chunk:${chunk.chunkId}]\n`;
+		.map((chunk, index) => {
+			let documentLabel = documentLabels.get(chunk.documentId);
+			if (!documentLabel) {
+				documentLabel = `d${documentLabels.size + 1}`;
+				documentLabels.set(chunk.documentId, documentLabel);
+			}
+			const header = `[document:${documentLabel} sample:${index + 1}]\n`;
 
 			if (header.length >= sectionBudget) {
 				return header.slice(0, sectionBudget);

@@ -58,13 +58,23 @@ def main() -> None:
             flat_ner=False,
         )
 
-        for chunk, text, _entities, relations in zip(
+        for chunk, text, entities, relations in zip(
             batch, texts, entities_by_text, relations_by_text
         ):
             print(
                 json.dumps(
                     {
                         "chunkId": chunk["chunkId"],
+                        "entities": [
+                            {
+                                "text": item["text"],
+                                "type": item["label"],
+                                "start": item["start"],
+                                "end": item["end"],
+                                "score": item["score"],
+                            }
+                            for item in entities
+                        ],
                         "assertions": [
                             {
                                 "subject": item["head"]["text"],

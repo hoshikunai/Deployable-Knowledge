@@ -9,6 +9,7 @@ export type ProviderChatOptions = {
 	topK?: number;
 	maxTokens?: number;
 	reasoningBudget?: number;
+	thinking?: boolean | 'low' | 'medium' | 'high';
 	contextSize?: number | null;
 	gpuMode?: LlamaGpuMode;
 	// Provider-enforced structured output schema.
@@ -63,6 +64,9 @@ export type ProviderChatChunk = {
 	content?: string;
 	reasoningContent?: string;
 	toolCalls?: ProviderToolCallDelta[];
+	finishReason?: string;
+	inputTokens?: number;
+	outputTokens?: number;
 };
 
 export abstract class Provider {

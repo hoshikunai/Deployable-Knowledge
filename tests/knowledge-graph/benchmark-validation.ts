@@ -159,7 +159,19 @@ function isGoldAssertion(value: unknown): value is GoldAssertion {
 		isGoldEntity(value.object) &&
 		typeof value.evidence === 'string' &&
 		(value.status === 'asserted' || value.status === 'negated' || value.status === 'uncertain') &&
+		isAssertionModality(value.modality) &&
 		typeof value.required === 'boolean'
+	);
+}
+
+function isAssertionModality(value: unknown): boolean {
+	return (
+		value === 'observed' ||
+		value === 'habitual' ||
+		value === 'required' ||
+		value === 'recommended' ||
+		value === 'permitted' ||
+		value === 'prohibited'
 	);
 }
 

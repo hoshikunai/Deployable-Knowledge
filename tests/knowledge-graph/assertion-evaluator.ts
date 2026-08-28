@@ -12,7 +12,9 @@ export type EvaluatedGraphAssertion = Pick<
 	| 'object'
 	| 'objectType'
 	| 'status'
->;
+> & {
+	provenance: Pick<GraphAssertion['provenance'], 'modality'>;
+};
 
 export interface AssertionMatch {
 	actualAssertionId: string;
@@ -20,6 +22,7 @@ export interface AssertionMatch {
 	required: boolean;
 	typesCorrect: boolean;
 	statusCorrect: boolean;
+	modalityCorrect: boolean;
 }
 
 export interface AssertionEvaluation {
@@ -36,6 +39,7 @@ export interface AssertionEvaluation {
 	f1: number;
 	directionAccuracy: number;
 	endpointTypeAccuracy: number;
+	statusAccuracy: number;
 	modalityAccuracy: number;
 	canonicalRelationCoverage: number;
 	matches: AssertionMatch[];
@@ -58,7 +62,8 @@ export function evaluateAssertions(
 			typesCorrect:
 				normalize(candidate.subjectType) === normalize(gold.subject.type) &&
 				normalize(candidate.objectType) === normalize(gold.object.type),
-			statusCorrect: candidate.status === gold.status
+			statusCorrect: candidate.status === gold.status,
+			modalityCorrect: candidate.provenance.modality === gold.modality
 		};
 	});
 	const matchedActual = new Set(matching.keys());
@@ -94,7 +99,11 @@ export function evaluateAssertions(
 			matches.filter((match) => match.typesCorrect).length,
 			matches.length
 		),
-		modalityAccuracy: ratio(matches.filter((match) => match.statusCorrect).length, matches.length),
+		statusAccuracy: ratio(matches.filter((match) => match.statusCorrect).length, matches.length),
+		modalityAccuracy: ratio(
+			matches.filter((match) => match.modalityCorrect).length,
+			matches.length
+		),
 		canonicalRelationCoverage: ratio(
 			actual.filter((assertion) =>
 				benchmark.canonicalRelations.includes(assertion.canonicalPredicate)

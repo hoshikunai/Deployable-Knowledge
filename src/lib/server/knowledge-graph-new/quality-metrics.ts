@@ -26,8 +26,10 @@ export interface ReviewedAssertion {
 }
 
 export interface BenchmarkReview {
-	expectedUsefulAssertionCount: number;
-	recoveredUsefulAssertionCount: number;
+	// These counts require a complete gold inventory. Omit both when reviewing
+	// extraction precision without measuring recall.
+	expectedUsefulAssertionCount?: number;
+	recoveredUsefulAssertionCount?: number;
 	assertions: ReviewedAssertion[];
 }
 
@@ -39,7 +41,8 @@ export interface QualityMetrics {
 	directionAccuracy: number;
 	endpointTypeAccuracy: number;
 	canonicalRelationCoverage: number;
-	usefulAssertionRecall: number;
+	// null means that the review did not include a complete gold inventory.
+	usefulAssertionRecall: number | null;
 }
 
 export function calculateQualityMetrics(review: BenchmarkReview): QualityMetrics {
@@ -67,10 +70,10 @@ export function calculateQualityMetrics(review: BenchmarkReview): QualityMetrics
 			accepted.filter((assertion) => assertion.canonicalRelation !== null).length,
 			accepted.length
 		),
-		usefulAssertionRecall: ratio(
-			review.recoveredUsefulAssertionCount,
-			review.expectedUsefulAssertionCount
-		)
+		usefulAssertionRecall:
+			review.expectedUsefulAssertionCount === undefined
+				? null
+				: ratio(review.recoveredUsefulAssertionCount!, review.expectedUsefulAssertionCount)
 	};
 }
 
@@ -106,14 +109,18 @@ function percent(value: number): string {
 }
 
 function validateReview(review: BenchmarkReview): void {
-	if (review.expectedUsefulAssertionCount < 0) {
+	const expected = review.expectedUsefulAssertionCount;
+	const recovered = review.recoveredUsefulAssertionCount;
+	if ((expected === undefined) !== (recovered === undefined)) {
+		throw new Error('Expected and recovered assertion counts must be supplied together.');
+	}
+	if (expected === undefined || recovered === undefined) return;
+
+	if (expected < 0) {
 		throw new Error('Expected assertion count cannot be negative.');
 	}
 
-	if (
-		review.recoveredUsefulAssertionCount < 0 ||
-		review.recoveredUsefulAssertionCount > review.expectedUsefulAssertionCount
-	) {
+	if (recovered < 0 || recovered > expected) {
 		throw new Error('Recovered assertion count is outside the expected range.');
 	}
 }

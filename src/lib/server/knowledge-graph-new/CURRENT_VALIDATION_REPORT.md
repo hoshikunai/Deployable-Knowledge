@@ -4,6 +4,28 @@ Date: August 4, 2026
 Branch: `kg-new`  
 Reference: [Architecture and First-Run Findings](./ARCHITECTURE_AND_FINDINGS.md)
 
+> **Historical result:** This report measured the `kg-v5` schema pipeline. The
+> `kg-v20` adds bounded multi-pass discovery, deterministic relation/type closure
+> and relation deduplication, dynamic extraction type enums, compact prompt
+> labels, strict endpoint compatibility, generic role/group distinctions, and
+> semantic-quality filters for templates, provenance, fragments, and citations.
+> It also supplies exact GLiNER entity spans to the LLM as optional, untrusted
+> hints while retaining conservative GLiNER relation thresholds, and requires
+> endpoint mentions to occur at token boundaries rather than as substrings.
+> Grounding checks run again during reconciliation so cached extractor output
+> cannot bypass newer validation rules. Passive-use relations are rejected when
+> their declared subject is a person, role, or person group. Paragraph, section,
+> chapter, appendix, figure, and table locators remain provenance rather than
+> document entities.
+> Native extraction JSON schema uses one branch per canonical relation so a
+> predicate cannot emit endpoint types outside its declared subject/object sets.
+> Discovery requires relation names to read grammatically as subject-predicate-
+> object and explicitly rejects passive-use names for actor subjects.
+> Canonicalization merges relation names that differ only by leading auxiliary
+> verbs, while publication “details procedure” edges remain provenance.
+> None of the quality numbers below should be treated as measurements of
+> `kg-v20`; rerun the complete benchmark before claiming improvement.
+
 ## Executive Summary
 
 The current implementation does not meet the validation gates defined in
@@ -396,6 +418,26 @@ reduced the vocabulary to five relations. The model forced unsupported source
 meanings into the nearest relation even though the prompt instructed it to omit
 unrepresentable assertions.
 
+### Schema quality gate
+
+Implemented in extraction version `kg-v20`. Finalized schemas are now scored
+before GLiNER or LLM extraction begins. The corpus-agnostic gate measures:
+
+- endpoint-type closure;
+- removal of provenance, co-occurrence, and vague relations;
+- bounded endpoint-type sets;
+- distinct relation families;
+- retention of discovered relation concepts;
+- representation across successful discovery batches; and
+- consolidation-path reliability.
+
+Closure and semantic-relation validity are hard requirements. The weighted
+score must meet `KNOWLEDGE_GRAPH_SCHEMA_MIN_QUALITY_SCORE`, which defaults to
+`0.8`. A failure stops extraction with per-metric diagnostics; a passing report,
+including warnings, is stored under `schemaProvenance.qualityGate`. This gate is
+structural and consolidation-focused—it does not replace the labeled assertion
+and retrieval benchmark.
+
 ### Candidate duplication
 
 GLiNER emits nested, abbreviated, expanded, and repeated endpoint variants. They
@@ -410,9 +452,26 @@ tables, inventory lists, section headings, or page-number artifacts.
 
 ### Modality representation
 
-The status enum is too small for the corpus. Negative wording, requirements,
-permissions, recommendations, evaluation criteria, and conditional statements
-are not reliably preserved.
+Implemented in extraction version `kg-v19`. Assertion status, modal force, and
+conditional scope are now represented separately:
+
+- `status` records whether the relationship is asserted, negated, or uncertain;
+- `modality` records observed, habitual, required, recommended, permitted, or
+  prohibited force;
+- `modalityCue` preserves the exact words supporting that classification; and
+- `condition` preserves an exact source substring limiting when the assertion
+  applies.
+
+Deterministic reconciliation rejects missing or non-verbatim cues, treats bare
+`may` as permission only when the model and verifier support that reading,
+requires possibility readings to use uncertain status, and prevents an asserted
+prohibition from being flattened into a negated fact. The verifier independently
+checks modality and condition. These fields are retained in graph provenance and
+CSV exports.
+
+The gold evaluator now measures modality separately from assertion status. A
+fresh corpus benchmark is still required to measure the change's effect on
+accepted-assertion precision and recall.
 
 ## Required Changes Before Retesting
 
@@ -427,8 +486,9 @@ are not reliably preserved.
 7. Deduplicate nested GLiNER spans and alias variants before verification.
 8. Verify candidates in bounded batches and checkpoint each batch.
 9. Move document structure to provenance before graph reconciliation.
-10. Add explicit modality for required, prohibited, permitted, recommended,
-    conditional, evaluative, and descriptive statements.
+10. Validate the implemented modality cue and conditional-scope representation
+    on the labeled benchmark, including ambiguous `may`, prescriptive `will`,
+    prohibitions, and conditional requirements.
 11. Create complete expected-assertion labels for the benchmark so recall can be
     measured.
 12. Repeat the full 30-50 chunk gate before running a complete corpus build.

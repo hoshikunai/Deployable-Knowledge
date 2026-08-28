@@ -1,3 +1,5 @@
+import type { AssertionModality } from '../../src/lib/server/knowledge-graph-new/extraction';
+
 export interface GoldEntity {
 	canonical: string;
 	aliases?: string[];
@@ -13,6 +15,7 @@ export interface GoldAssertion {
 	object: GoldEntity;
 	evidence: string;
 	status: 'asserted' | 'negated' | 'uncertain';
+	modality: AssertionModality;
 	// Required assertions count toward recall. Optional assertions count as
 	// correct when produced but do not penalize the extractor when absent.
 	required: boolean;

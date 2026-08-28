@@ -40,6 +40,7 @@ const benchmark: GoldBenchmark = {
 			object: { canonical: 'amphibious ready group', aliases: ['ARG'], type: 'organization' },
 			evidence: content,
 			status: 'asserted',
+			modality: 'observed',
 			required: true
 		}
 	],
@@ -90,7 +91,8 @@ describe('assertion evaluation', () => {
 				canonicalPredicate: 'is_part_of',
 				object: 'ARG',
 				objectType: 'organization',
-				status: 'asserted'
+				status: 'asserted',
+				provenance: { modality: 'observed' }
 			}
 		];
 		const result = evaluateAssertions(benchmark, actual);
@@ -98,6 +100,7 @@ describe('assertion evaluation', () => {
 		assert.equal(result.recall, 1);
 		assert.equal(result.directionAccuracy, 1);
 		assert.equal(result.endpointTypeAccuracy, 1);
+		assert.equal(result.statusAccuracy, 1);
 		assert.equal(result.modalityAccuracy, 1);
 	});
 
@@ -112,7 +115,8 @@ describe('assertion evaluation', () => {
 				canonicalPredicate: 'is_part_of',
 				object: 'CRTS',
 				objectType: 'object',
-				status: 'asserted'
+				status: 'asserted',
+				provenance: { modality: 'observed' }
 			}
 		];
 		const result = evaluateAssertions(benchmark, actual);
@@ -120,6 +124,26 @@ describe('assertion evaluation', () => {
 		assert.equal(result.recall, 0);
 		assert.equal(result.reversedAssertionCount, 1);
 		assert.equal(result.directionAccuracy, 0);
+	});
+
+	it('measures modality separately from assertion status', () => {
+		const actual: EvaluatedGraphAssertion[] = [
+			{
+				id: 'actual-wrong-modality',
+				documentId: 'document-1',
+				chunkId: 'chunk-1',
+				subject: 'CRTS',
+				subjectType: 'object',
+				canonicalPredicate: 'is_part_of',
+				object: 'ARG',
+				objectType: 'organization',
+				status: 'asserted',
+				provenance: { modality: 'required' }
+			}
+		];
+		const result = evaluateAssertions(benchmark, actual);
+		assert.equal(result.statusAccuracy, 1);
+		assert.equal(result.modalityAccuracy, 0);
 	});
 });
 
@@ -146,7 +170,8 @@ describe('retrieval and graph-path evaluation', () => {
 					goldAssertionId: 'gold-1',
 					required: true,
 					typesCorrect: true,
-					statusCorrect: true
+					statusCorrect: true,
+					modalityCorrect: true
 				}
 			],
 			[1, 2]

@@ -7,6 +7,33 @@ The prototype is intentionally isolated. It reads the application's existing
 `document_chunks`, builds graph data, and saves inspectable assertions. It is not
 connected to the UI, ingestion flow, hybrid search, or RAG retrieval.
 
+> **Implementation update (August 28, 2026):** Schema discovery is now versioned
+> as `kg-v20`. It samples up to 30 chunks, runs three bounded corpus-diverse
+> discovery passes, consolidates their candidates, and deterministically closes
+> every retained relation over a maximum 24-type entity vocabulary. Extraction
+> types and predicates are constrained to native JSON-schema enums, and
+> `unknown`/`other` no longer bypass endpoint checks. Generic post-extraction
+> filters reject template specimens, document-layout provenance, citation-only
+> governance, clause endpoints, and groups mislabeled as named people. GLiNER
+> entity spans are supplied to the LLM as optional, untrusted hints; GLiNER
+> relation thresholds remain conservative. Evidence grounding requires exact
+> endpoint mentions at token boundaries, so `person` cannot match `personal`;
+> reconciliation repeats that check for cached extractor output. Passive-use
+> predicates cannot declare people, roles, or person groups as the item being
+> used. Document locators such as paragraph, section, appendix, and figure
+> references remain provenance rather than graph entities. Native extraction
+> schema binds every predicate to its allowed subject and object type sets. The
+> discovery prompts require relation names to read grammatically from subject to
+> object and reject passive-use names for actor subjects. Canonicalization also
+> ignores leading auxiliary verbs when merging relation names, and publication
+> “details procedure” relations remain provenance. A deterministic schema
+> quality gate checks closure, semantic validity, endpoint breadth, redundancy,
+> candidate retention, discovery-batch coverage, and consolidation reliability
+> before extraction starts. Assertions separately retain status, modality, the
+> exact modal cue, and conditional scope. The
+> completed-run findings below predate this change and remain the baseline that
+> `kg-v20` must beat.
+
 ## Architecture
 
 ```mermaid
@@ -14,18 +41,23 @@ flowchart TD
     A["Existing document_chunks"] --> B["Load chunks and calculate build signature"]
     B --> C{"Complete build cache hit?"}
     C -- Yes --> K["Load saved graph"]
-    C -- No --> D["Discover corpus schema from 18 sampled chunks"]
+    C -- No --> D["Sample up to 30 chunks across the corpus"]
 
-    D --> D1["10 universal entity types"]
-    D --> D2["Schema.org and PROV ontology seeds"]
-    D --> D3["LLM-selected corpus types and directed relations"]
+    D --> D0["Three bounded discovery passes"]
+    D0 --> D00["Consolidate candidates and enforce type closure"]
+
+    D00 --> D1["12 universal entity types"]
+    D00 --> D2["Schema.org and PROV ontology seeds"]
+    D00 --> D3["LLM-selected corpus types and directed relations"]
 
     D1 --> E
     D2 --> E
     D3 --> E["Corpus schema"]
 
-    E --> F["LLM extraction per chunk"]
     E --> G["GLiNER-Relex extraction in one Python worker"]
+    E --> F["Allowed extraction schema"]
+    G --> G1["Exact entity spans as untrusted hints"]
+    G1 --> F["LLM extraction per chunk"]
 
     F --> H["Exact evidence and endpoint validation"]
     G --> H
@@ -55,16 +87,22 @@ The build signature includes:
 
 An unchanged signature can reuse the complete saved graph.
 
-### 2. A corpus schema is discovered
+### 2. An adaptive, closed corpus schema is discovered
 
-The system samples up to 18 chunks and combines:
+The current system samples up to 30 chunks across documents and corpus
+positions. It divides them among three prompts capped at 8,000 characters each,
+then consolidates the independently proposed schemas. It combines:
 
 - 10 universal entity types;
 - lexically relevant Schema.org and PROV terms;
 - LLM-generated corpus-specific types and relations.
 
-The intended limits are 15 entity types and 20 directed relation types. Generic
-`related_to` and co-occurrence relationships are explicitly prohibited.
+The default limits are 24 entity types and 24 directed relation types. Relation
+endpoint types are prioritized when the vocabulary is full, and a missing
+endpoint type is promoted into the vocabulary before the relation is retained.
+This guarantees that the final relation vocabulary is closed over the final
+entity vocabulary. Generic `related_to` and co-occurrence relationships are
+explicitly prohibited.
 
 ### 3. LLM and GLiNER extraction run in parallel
 

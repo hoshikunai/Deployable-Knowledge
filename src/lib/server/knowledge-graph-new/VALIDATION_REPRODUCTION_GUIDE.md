@@ -1,5 +1,25 @@
 # Knowledge Graph Validation Reproduction Guide
 
+> **Version note:** The recorded findings were produced by the `kg-v5` schema
+> implementation preserved in commit `4b176d6`. Current `kg-v16` code performs
+> three bounded schema-discovery passes plus consolidation, deterministic schema
+> closure and relation deduplication, generic semantic-quality filtering, and
+> GLiNER-assisted LLM extraction using exact entity spans as untrusted hints.
+> Endpoint grounding also enforces token boundaries instead of substring-only
+> matches and is rechecked during reconciliation so stale cached results cannot
+> bypass it. The semantic schema filter also removes passive-use relations whose
+> subject endpoint is a person, role, or person group. Document locators such as
+> paragraph, section, appendix, figure, and table references are kept out of
+> entity endpoints. The native extraction schema has one branch per canonical
+> relation, binding its predicate to the allowed subject and object type sets.
+> Discovery also requires every relation name to read grammatically from subject
+> to object and disallows passive-use names for actor subjects. Relation
+> canonicalization ignores leading auxiliary verbs, and publication “details
+> procedure” relations are treated as provenance.
+> Its timing, request count, default sample size, and output will differ. Use the
+> old commit only to reproduce the historical numbers exactly; use the current
+> code to run the next comparison benchmark.
+
 This guide reproduces the validation described in
 [Current Validation Report](./CURRENT_VALIDATION_REPORT.md) against the gates in
 [Architecture and First-Run Findings](./ARCHITECTURE_AND_FINDINGS.md).
@@ -11,7 +31,7 @@ updates `kg_new_*` tables.
 
 ## Expected Duration
 
-On the test WSL machine with CPU-only `gemma4:latest`:
+On the test WSL machine with CPU-only `gemma4:e4b`:
 
 - Ollama cold load: approximately 2 minutes;
 - diagnostic schema discovery: approximately 8-9 minutes;
@@ -102,7 +122,7 @@ node --input-type=module -e "const response=await fetch('http://127.0.0.1:11434/
 The tested model was:
 
 ```text
-name: gemma4:latest
+name: gemma4:e4b
 parameter size: 8.0B
 quantization: Q4_K_M
 digest: c6eb396dbd5992bbe3f5cdb947e8bbc0ee413d7c17e2beaae69f5d569cf982eb
@@ -116,7 +136,7 @@ different model digest.
 Run a small native-schema request:
 
 ```bash
-node --input-type=module -e "const schema={type:'object',additionalProperties:false,properties:{ok:{type:'boolean'}},required:['ok']}; const body={model:'gemma4:latest',messages:[{role:'user',content:'Return an object whose ok field is true. Output only the object.'}],format:schema,options:{temperature:0,top_k:20,num_predict:256,num_ctx:16384},stream:false,keep_alive:'30m'}; const response=await fetch('http://127.0.0.1:11434/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const payload=await response.json(); console.log(JSON.stringify({status:response.status,content:payload.message?.content,thinking:payload.message?.thinking,doneReason:payload.done_reason},null,2));"
+node --input-type=module -e "const schema={type:'object',additionalProperties:false,properties:{ok:{type:'boolean'}},required:['ok']}; const body={model:'gemma4:e4b',messages:[{role:'user',content:'Return an object whose ok field is true. Output only the object.'}],format:schema,options:{temperature:0,top_k:20,num_predict:256,num_ctx:16384},stream:false,keep_alive:'30m'}; const response=await fetch('http://127.0.0.1:11434/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const payload=await response.json(); console.log(JSON.stringify({status:response.status,content:payload.message?.content,thinking:payload.message?.thinking,doneReason:payload.done_reason},null,2));"
 ```
 
 Expected content:
@@ -184,7 +204,7 @@ import { buildSchemaSample } from './kg-schema-sampling-benchmark.mjs';
 const outputPath = '/tmp/kg-current-findings-benchmark.json';
 const settings = {
 	providerId: 'ollama',
-	modelId: 'gemma4:latest',
+	modelId: 'gemma4:e4b',
 	providerOptions: { contextSize: 16_384 }
 };
 
@@ -234,6 +254,9 @@ function parseGlinerAssertion(item) {
 		startDate: item.startDate ?? null,
 		endDate: item.endDate ?? null,
 		status: item.status === 'negated' || item.status === 'uncertain' ? item.status : 'asserted',
+		modality: 'observed',
+		modalityCue: null,
+		condition: null,
 		extractors: ['gliner'],
 		verified: false,
 		score: typeof item.score === 'number' ? item.score : null,
@@ -243,10 +266,20 @@ function parseGlinerAssertion(item) {
 	};
 }
 
+function parseGlinerEntity(item) {
+	return {
+		text: String(item.text),
+		type: String(item.type),
+		start: Number(item.start),
+		end: Number(item.end),
+		score: typeof item.score === 'number' ? item.score : null
+	};
+}
+
 async function runGliner(chunks, schema) {
 	const payload = {
 		chunks,
-		entityTypes: [...schema.entityTypes.map((type) => type.name), 'other'],
+		entityTypes: schema.entityTypes.map((type) => type.name),
 		relationTypes: schema.relationTypes.map((type) => type.name)
 	};
 	const child = spawn(
@@ -273,7 +306,13 @@ async function runGliner(chunks, schema) {
 			.filter(Boolean)
 			.map((line) => {
 				const row = JSON.parse(line);
-				return [String(row.chunkId), { assertions: row.assertions.map(parseGlinerAssertion) }];
+				return [
+					String(row.chunkId),
+					{
+						assertions: row.assertions.map(parseGlinerAssertion),
+						entities: (row.entities ?? []).map(parseGlinerEntity)
+					}
+				];
 			})
 	);
 }
@@ -318,7 +357,8 @@ if (!state.schema) {
 	log('schema-complete', {
 		elapsedMs: state.timings.schemaMs,
 		entityTypes: state.schema.entityTypes.map((type) => type.name),
-		relations: state.schema.relationTypes.map((type) => type.name)
+		relations: state.schema.relationTypes.map((type) => type.name),
+		qualityGate: state.schema.schemaProvenance?.qualityGate
 	});
 }
 
@@ -347,7 +387,12 @@ for (const [index, chunk] of state.selected.entries()) {
 			title: chunk.title
 		});
 		try {
-			state.llm[chunk.chunkId] = await extractWithLlm(chunk, state.schema, settings);
+			state.llm[chunk.chunkId] = await extractWithLlm(
+				chunk,
+				state.schema,
+				settings,
+				state.gliner[chunk.chunkId]?.entities ?? []
+			);
 			state.timings[`llm:${chunk.chunkId}`] = Date.now() - started;
 			save();
 			log('llm-complete', {
@@ -578,6 +623,18 @@ node --input-type=module -e "import {readFileSync} from 'node:fs'; const state=J
 The reported diagnostic schema fails this check for `protocol` and
 `military_unit`.
 
+For extraction version `kg-v20` or later, also inspect the persisted schema
+quality gate:
+
+```bash
+node --input-type=module -e "import {readFileSync} from 'node:fs'; const state=JSON.parse(readFileSync('/tmp/kg-current-findings-benchmark.json','utf8')); const gate=state.schema?.schemaProvenance?.qualityGate; console.log(JSON.stringify(gate,null,2)); if(!gate||gate.status!=='passed') process.exitCode=1;"
+```
+
+The default minimum weighted score is `0.8`. Override it only for an explicitly
+documented diagnostic run with
+`KNOWLEDGE_GRAPH_SCHEMA_MIN_QUALITY_SCORE`; closure and semantic-relation errors
+remain fatal even when the numeric threshold is lowered.
+
 ## 15. Perform the Manual Quality Review
 
 Automated grounding is not a semantic quality label. Review every retained
@@ -603,9 +660,12 @@ Reject as not useful when an assertion is primarily:
 - a relation whose canonical predicate changes the source meaning.
 
 Use `calculateQualityMetrics()` from `quality-metrics.ts` after creating a
-review object with the interfaces defined in that file. Recall requires a
-separate manually authored expected-assertion inventory for the selected chunks;
-do not invent an expected count from model output.
+review object with the interfaces defined in that file. The reviewed-sample
+precision, direction, endpoint-type, and canonical-relation metrics do not
+require expected-assertion counts. Omit both recall-count fields when no complete
+gold inventory exists; `usefulAssertionRecall` will be `null`. Recall still
+requires a separately authored expected-assertion inventory for the selected
+chunks, so do not invent an expected count from model output.
 
 The required gates are:
 

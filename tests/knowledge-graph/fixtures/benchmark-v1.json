@@ -35,6 +35,7 @@
 			},
 			"evidence": "A casualty receiving and treatment ship (CRTS) is part of an amphibious ready group (ARG).",
 			"status": "asserted",
+			"modality": "observed",
 			"required": true
 		}
 	],
