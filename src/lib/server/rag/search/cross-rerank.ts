@@ -2,6 +2,7 @@
 
 import { AutoModelForSequenceClassification, AutoTokenizer } from '@huggingface/transformers';
 import { INFERENCE_THREADS } from '../embedding-model';
+import { CROSS_ENCODER_MODEL } from './retrieval-version';
 
 export type RerankCandidate = {
 	chunkId: string;
@@ -18,12 +19,10 @@ let model: ClassificationModel | undefined;
 
 async function initializeModel() {
 	if (!tokenizer) {
-		const modelId = 'Xenova/ms-marco-MiniLM-L-6-v2';
-		tokenizer = await AutoTokenizer.from_pretrained(modelId);
+		tokenizer = await AutoTokenizer.from_pretrained(CROSS_ENCODER_MODEL);
 	}
 	if (!model) {
-		const modelId = 'Xenova/ms-marco-MiniLM-L-6-v2';
-		model = await AutoModelForSequenceClassification.from_pretrained(modelId, {
+		model = await AutoModelForSequenceClassification.from_pretrained(CROSS_ENCODER_MODEL, {
 			session_options: { intraOpNumThreads: INFERENCE_THREADS, interOpNumThreads: 1 }
 		});
 	}

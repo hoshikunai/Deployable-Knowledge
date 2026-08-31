@@ -18,6 +18,6 @@ export async function configureDatabase(): Promise<void> {
 	await databaseClient.execute('PRAGMA journal_mode = WAL');
 }
 
-export const db = drizzle({ client: databaseClient, schema });
+export const db = drizzle({ client: databaseClient });
 export type Database = typeof db;
 export { schema };

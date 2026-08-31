@@ -6,3 +6,4 @@ export { SessionsRepository } from './sessions.repository';
 export { SyncedFoldersRepository } from './synced-folders.repository';
 export { WorkspaceLayoutsRepository } from './workspace-layouts.repository';
 export { RetrievalFeedbackRepository } from './retrieval-feedback.repository';
+export { RetrievalImpressionsRepository } from './retrieval-impressions.repository';

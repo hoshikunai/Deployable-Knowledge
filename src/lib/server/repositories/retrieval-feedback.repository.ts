@@ -1,10 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { hashRetrievalQuery } from '$lib/server/rag/search/retrieval-query';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { RetrievalMode } from '$lib/enums';
 import type { ChunkRatingValue } from '$lib/types';
 import { db } from '$lib/server/database/database';
 import { documentChunks, retrievalFeedback } from '$lib/server/database/schema';
-import { normalizeRetrievalQuery } from '$lib/utils';
 
 interface SetRetrievalFeedbackInput {
 	chunkId: string;
@@ -12,10 +12,6 @@ interface SetRetrievalFeedbackInput {
 	rating: ChunkRatingValue;
 	retrievalMode: RetrievalMode;
 	resultRank: number;
-}
-
-function hashQuery(query: string): string {
-	return createHash('sha256').update(normalizeRetrievalQuery(query)).digest('hex');
 }
 
 export class RetrievalFeedbackRepository {
@@ -34,7 +30,7 @@ export class RetrievalFeedbackRepository {
 			.from(retrievalFeedback)
 			.where(
 				and(
-					eq(retrievalFeedback.queryHash, hashQuery(query)),
+					eq(retrievalFeedback.queryHash, hashRetrievalQuery(query)),
 					inArray(retrievalFeedback.chunkId, uniqueChunkIds)
 				)
 			);
@@ -58,7 +54,7 @@ export class RetrievalFeedbackRepository {
 				id: randomUUID(),
 				chunkId: input.chunkId,
 				query: input.query.trim(),
-				queryHash: hashQuery(input.query),
+				queryHash: hashRetrievalQuery(input.query),
 				rating: input.rating,
 				retrievalMode: input.retrievalMode,
 				resultRank: input.resultRank,
@@ -86,7 +82,7 @@ export class RetrievalFeedbackRepository {
 			.where(
 				and(
 					eq(retrievalFeedback.chunkId, chunkId),
-					eq(retrievalFeedback.queryHash, hashQuery(query))
+					eq(retrievalFeedback.queryHash, hashRetrievalQuery(query))
 				)
 			);
 	}

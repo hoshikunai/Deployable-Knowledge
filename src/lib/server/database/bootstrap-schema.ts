@@ -10,6 +10,6 @@ import { db } from './database';
  * what it has applied in `__drizzle_migrations`, so a fresh install creates
  * everything and an upgrade runs only the new files.
  */
-export function bootstrapSchema(migrationsFolder: string): Promise<void> {
-	return migrate(db, { migrationsFolder });
+export async function bootstrapSchema(migrationsFolder: string): Promise<void> {
+	await migrate(db, { migrationsFolder });
 }

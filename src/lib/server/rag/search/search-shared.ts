@@ -1,6 +1,7 @@
 // Shared helpers for search modules
 
 import type { Document, DocumentChunk } from '../../database/schema';
+import type { RetrievalMode } from '$lib/enums';
 
 // Same chunk type values used by stored chunks and every search mode
 export type SearchChunkType = DocumentChunk['chunkType'];
@@ -31,6 +32,23 @@ export type ScoredSearchMatch = SearchMatchBase & {
 	score: number;
 };
 
+export interface RetrievalCandidateSnapshot {
+	chunkId: string;
+	retrievalMode: RetrievalMode;
+	baseRank: number;
+	displayedRank: number;
+	semanticScore: number | null;
+	bm25Score: number | null;
+	crossEncoderScore: number | null;
+	baseScore: number;
+}
+
+interface RetrievalScoreMaps {
+	semantic: ReadonlyMap<string, number>;
+	bm25: ReadonlyMap<string, number>;
+	crossEncoder: ReadonlyMap<string, number>;
+}
+
 export type RelevanceSearchMatch = SearchMatchBase & {
 	relevanceScore: number;
 };
@@ -52,4 +70,39 @@ export function cleanFilterValues<T extends string>(values: readonly T[] | undef
 	}
 
 	return [...cleaned];
+}
+
+export function buildRetrievalCandidateSnapshots(
+	retrievalMode: RetrievalMode,
+	baseResults: ScoredSearchMatch[],
+	displayedResults: ScoredSearchMatch[],
+	scores: RetrievalScoreMaps
+): RetrievalCandidateSnapshot[] {
+	const baseResultsByChunk = new Map(
+		baseResults.map((match, index) => [
+			match.chunkId,
+			{
+				rank: index + 1,
+				score: match.score
+			}
+		])
+	);
+
+	return displayedResults.map((match, index) => {
+		const baseResult = baseResultsByChunk.get(match.chunkId);
+		if (!baseResult) {
+			throw new Error(`Displayed chunk ${match.chunkId} is missing from the base ranking.`);
+		}
+
+		return {
+			chunkId: match.chunkId,
+			retrievalMode,
+			baseRank: baseResult.rank,
+			displayedRank: index + 1,
+			semanticScore: scores.semantic.get(match.chunkId) ?? null,
+			bm25Score: scores.bm25.get(match.chunkId) ?? null,
+			crossEncoderScore: scores.crossEncoder.get(match.chunkId) ?? null,
+			baseScore: baseResult.score
+		};
+	});
 }

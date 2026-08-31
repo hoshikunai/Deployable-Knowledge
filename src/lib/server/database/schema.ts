@@ -22,7 +22,7 @@ import {
 import type { WorkspaceLayoutSnapshot } from '$lib/types/workspace';
 
 export const appState = sqliteTable('app_state', {
-	id: text('id').primaryKey().default('app'),
+	id: text('id').notNull().primaryKey().default('app'),
 	activeProfileId: text('active_profile_id'),
 	activeLayoutId: text('active_layout_id'),
 	themeColor: text('theme_color', { enum: THEME_COLORS }).notNull().default(DEFAULT_THEME.color),
@@ -34,7 +34,7 @@ export const appState = sqliteTable('app_state', {
 export const workspaceLayouts = sqliteTable(
 	'workspace_layouts',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		name: text('name', { length: LAYOUT_NAME_MAX_LENGTH }).notNull(),
 		sortOrder: integer('sort_order').notNull().default(0),
 		snapshot: text('snapshot', { mode: 'json' }).$type<WorkspaceLayoutSnapshot>().notNull(),
@@ -47,7 +47,7 @@ export const workspaceLayouts = sqliteTable(
 export const promptTemplates = sqliteTable(
 	'prompt_templates',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		name: text('name', { length: 255 }).notNull(),
 		description: text('description', { length: 1024 }).notNull().default(''),
 		systemPrompt: text('system_prompt').notNull().default(''),
@@ -60,7 +60,7 @@ export const promptTemplates = sqliteTable(
 export const apiKeys = sqliteTable(
 	'api_keys',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		providerId: text('provider_id', { length: 128 }).notNull(),
 		apiKey: text('api_key').notNull(),
 		createdAt: integer('created_at', { mode: 'timestamp' }),
@@ -72,7 +72,7 @@ export const apiKeys = sqliteTable(
 export const sessions = sqliteTable(
 	'sessions',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		title: text('title').notNull().default(''),
 		createdAt: integer('created_at', { mode: 'timestamp' }),
 		updatedAt: integer('updated_at', { mode: 'timestamp' })
@@ -101,7 +101,7 @@ export const sessionMessages = sqliteTable(
 );
 
 export const notebookState = sqliteTable('notebook_state', {
-	id: text('id').primaryKey().default('default'),
+	id: text('id').notNull().primaryKey().default('default'),
 	activeNotebookId: text('active_notebook_id'),
 	updatedAt: text('updated_at').notNull()
 });
@@ -109,7 +109,7 @@ export const notebookState = sqliteTable('notebook_state', {
 export const notebooks = sqliteTable(
 	'notebooks',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		title: text('title').notNull(),
 		activePageId: text('active_page_id'),
 		sortOrder: integer('sort_order').notNull().default(0),
@@ -125,7 +125,7 @@ export const notebooks = sqliteTable(
 export const notebookPages = sqliteTable(
 	'notebook_pages',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		notebookId: text('notebook_id')
 			.notNull()
 			.references(() => notebooks.id, { onDelete: 'cascade' }),
@@ -147,7 +147,7 @@ export const notebookPages = sqliteTable(
 export const notebookSources = sqliteTable(
 	'notebook_sources',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		notebookId: text('notebook_id')
 			.notNull()
 			.references(() => notebooks.id, { onDelete: 'cascade' }),
@@ -163,7 +163,7 @@ export const notebookSources = sqliteTable(
 );
 
 export const providerRecords = sqliteTable('providers', {
-	id: text('id').primaryKey(),
+	id: text('id').notNull().primaryKey(),
 	apiKey: text('api_key').notNull().default(''),
 	updatedAt: text('updated_at').notNull()
 });
@@ -171,7 +171,7 @@ export const providerRecords = sqliteTable('providers', {
 export const profiles = sqliteTable(
 	'profiles',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		name: text('name', { length: 255 }).notNull(),
 		provider: text({ length: 128 }).notNull().default(DEFAULT_ASSISTANT_CONFIG.provider),
 		model: text({ length: 128 }).notNull().default(DEFAULT_ASSISTANT_CONFIG.model),
@@ -210,7 +210,7 @@ export const profiles = sqliteTable(
 export const documents = sqliteTable(
 	'documents',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		title: text('title').notNull(),
 		sourcePath: text('source_path').notNull(),
 		sourceType: text('source_type', {
@@ -232,7 +232,7 @@ export const documents = sqliteTable(
 );
 
 export const tags = sqliteTable('tags', {
-	name: text('name', { length: 40 }).primaryKey(),
+	name: text('name', { length: 40 }).notNull().primaryKey(),
 	createdAt: text('created_at').notNull()
 });
 
@@ -256,7 +256,7 @@ export const documentTags = sqliteTable(
 export const documentChunks = sqliteTable(
 	'document_chunks',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		documentId: text('document_id')
 			.notNull()
 			.references(() => documents.id, { onDelete: 'cascade' }),
@@ -279,10 +279,60 @@ export const documentChunks = sqliteTable(
 	]
 );
 
+export const retrievalImpressions = sqliteTable(
+	'retrieval_impressions',
+	{
+		id: text('id').notNull().primaryKey(),
+		query: text('query').notNull(),
+		queryHash: text('query_hash', { length: 64 }).notNull(),
+		requestedTopK: integer('requested_top_k').notNull(),
+		documentIds: text('document_ids', { mode: 'json' }).$type<string[]>().notNull(),
+		embeddingModel: text('embedding_model').notNull(),
+		rerankerModel: text('reranker_model').notNull(),
+		scoringVersion: text('scoring_version').notNull(),
+		createdAt: text('created_at').notNull()
+	},
+	(table) => [
+		index('retrieval_impressions_query_idx').on(table.queryHash),
+		index('retrieval_impressions_created_idx').on(table.createdAt)
+	]
+);
+
+export const retrievalImpressionResults = sqliteTable(
+	'retrieval_impression_results',
+	{
+		id: text('id').notNull().primaryKey(),
+		impressionId: text('impression_id')
+			.notNull()
+			.references(() => retrievalImpressions.id, { onDelete: 'cascade' }),
+		chunkId: text('chunk_id')
+			.notNull()
+			.references(() => documentChunks.id, { onDelete: 'cascade' }),
+		retrievalMode: text('retrieval_mode', {
+			enum: ['semantic', 'bm25', 'hybrid']
+		}).notNull(),
+		baseRank: integer('base_rank').notNull(),
+		displayedRank: integer('displayed_rank').notNull(),
+		semanticScore: real('semantic_score'),
+		bm25Score: real('bm25_score'),
+		crossEncoderScore: real('cross_encoder_score'),
+		baseScore: real('base_score').notNull()
+	},
+	(table) => [
+		index('retrieval_impression_results_impression_idx').on(table.impressionId),
+		index('retrieval_impression_results_chunk_idx').on(table.chunkId),
+		uniqueIndex('retrieval_impression_results_candidate_idx').on(
+			table.impressionId,
+			table.retrievalMode,
+			table.chunkId
+		)
+	]
+);
+
 export const retrievalFeedback = sqliteTable(
 	'retrieval_feedback',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull().primaryKey(),
 		chunkId: text('chunk_id')
 			.notNull()
 			.references(() => documentChunks.id, { onDelete: 'cascade' }),
@@ -439,3 +489,9 @@ export type PromptTemplateFormValue = Pick<
 	'name' | 'description' | 'systemPrompt'
 > &
 	Partial<Pick<PromptTemplate, 'id'>>;
+
+export type RetrievalImpression = typeof retrievalImpressions.$inferSelect;
+export type NewRetrievalImpression = typeof retrievalImpressions.$inferInsert;
+
+export type RetrievalImpressionResult = typeof retrievalImpressionResults.$inferSelect;
+export type NewRetrievalImpressionResult = typeof retrievalImpressionResults.$inferInsert;
