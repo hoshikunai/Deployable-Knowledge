@@ -79,20 +79,15 @@
 		}
 	}
 
-	async function rateChunk(
-		result: ApiSearchMatch,
-		index: number,
-		rating: ChunkRatingValue | null
-	): Promise<void> {
+	async function rateChunk(result: ApiSearchMatch, rating: ChunkRatingValue | null): Promise<void> {
 		if (!resultQuery) return;
 
 		try {
 			await chunkRatingsStore.update({
 				chunkId: result.chunkId,
+				impressionResultId: result.impressionResultId,
 				query: resultQuery,
-				rating,
-				retrievalMode,
-				resultRank: index + 1
+				rating
 			});
 		} catch (ratingError) {
 			toast.error(ratingError instanceof Error ? ratingError.message : 'Failed to save rating');
@@ -153,7 +148,7 @@
 					{#each activeResults as result, index (result.chunkId)}
 						<SearchResultCard
 							{index}
-							onRatingChange={(rating) => void rateChunk(result, index, rating)}
+							onRatingChange={(rating) => void rateChunk(result, rating)}
 							onSaveChunk={(chunkId) => void saveChunk(chunkId)}
 							onSendToNotebook={(match) => void sendToNotebook(match)}
 							rating={chunkRatingsStore.ratingFor(resultQuery, result.chunkId)}

@@ -336,6 +336,10 @@ export const retrievalFeedback = sqliteTable(
 		chunkId: text('chunk_id')
 			.notNull()
 			.references(() => documentChunks.id, { onDelete: 'cascade' }),
+		impressionResultId: text('impression_result_id').references(
+			() => retrievalImpressionResults.id,
+			{ onDelete: 'set null' }
+		),
 		query: text('query').notNull(),
 		queryHash: text('query_hash', { length: 64 }).notNull(),
 		rating: integer('rating').notNull(),
@@ -350,6 +354,7 @@ export const retrievalFeedback = sqliteTable(
 		check('retrieval_feedback_rating_check', sql`${table.rating} between 1 and 5`),
 		index('retrieval_feedback_chunk_idx').on(table.chunkId),
 		index('retrieval_feedback_query_idx').on(table.queryHash),
+		index('retrieval_feedback_impression_result_idx').on(table.impressionResultId),
 		uniqueIndex('retrieval_feedback_chunk_query_idx').on(table.chunkId, table.queryHash)
 	]
 );

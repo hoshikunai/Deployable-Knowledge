@@ -1,14 +1,13 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { ChunkRatingsService } from '$lib/services';
-import type { ApiChunkRatingRequest, ApiSearchResults, ChunkRatingValue } from '$lib/types';
+import type { ApiSearchResults, ChunkRatingValue } from '$lib/types';
 import { normalizeRetrievalQuery } from '$lib/utils';
 
 interface ChunkRatingUpdate {
 	chunkId: string;
+	impressionResultId: string;
 	query: string;
 	rating: ChunkRatingValue | null;
-	retrievalMode: ApiChunkRatingRequest['retrievalMode'];
-	resultRank: number;
 }
 
 class ChunkRatingsStore {
@@ -53,10 +52,9 @@ class ChunkRatingsStore {
 				this.ratings.set(key, response.rating);
 			} else {
 				const response = await ChunkRatingsService.set(input.chunkId, {
+					impressionResultId: input.impressionResultId,
 					query: input.query,
-					rating: input.rating,
-					retrievalMode: input.retrievalMode,
-					resultRank: input.resultRank
+					rating: input.rating
 				});
 				this.ratings.set(key, response.rating);
 			}

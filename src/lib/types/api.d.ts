@@ -383,10 +383,9 @@ export type ApiChatStreamEvent =
 	| { type: 'error'; message: string };
 
 export interface ApiChunkRatingRequest {
+	impressionResultId: string;
 	query: string;
 	rating: ChunkRatingValue;
-	retrievalMode: RetrievalMode;
-	resultRank: number;
 }
 
 export interface ApiChunkRatingDeleteRequest {
@@ -406,6 +405,7 @@ export interface ApiSearchMatch {
 	pageIndex: number;
 	chunkIndex: number;
 	content: string;
+	impressionResultId: string;
 	rating: ChunkRatingValue | null;
 }
 

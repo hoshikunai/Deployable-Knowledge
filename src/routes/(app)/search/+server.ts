@@ -15,16 +15,31 @@ import {
 import type { ApiSearchMatch, ApiSearchResults } from '$lib/types';
 import type { RequestHandler } from './$types';
 
-type UnratedSearchMatch = Omit<ApiSearchMatch, 'rating'>;
+type SearchMatchWithoutFeedback = Omit<ApiSearchMatch, 'impressionResultId' | 'rating'>;
 
-function attachRatings(
-	matches: UnratedSearchMatch[],
-	ratings: ReadonlyMap<string, ApiSearchMatch['rating']>
+function resultKey(retrievalMode: RetrievalMode, chunkId: string): string {
+	return `${retrievalMode}\u0000${chunkId}`;
+}
+
+function attachFeedback(
+	retrievalMode: RetrievalMode,
+	matches: SearchMatchWithoutFeedback[],
+	ratings: ReadonlyMap<string, ApiSearchMatch['rating']>,
+	impressionResultIds: ReadonlyMap<string, string>
 ): ApiSearchMatch[] {
-	return matches.map((match) => ({
-		...match,
-		rating: ratings.get(match.chunkId) ?? null
-	}));
+	return matches.map((match) => {
+		const impressionResultId = impressionResultIds.get(resultKey(retrievalMode, match.chunkId));
+
+		if (!impressionResultId) {
+			throw new Error(`Missing impression result for ${retrievalMode}:${match.chunkId}.`);
+		}
+
+		return {
+			...match,
+			impressionResultId,
+			rating: ratings.get(match.chunkId) ?? null
+		};
+	});
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -56,7 +71,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			documentIds: docs
 		});
 
-		await RetrievalImpressionsRepository.record({
+		const recordedImpression = await RetrievalImpressionsRepository.record({
 			query: execution.results.query,
 			requestedTopK: topK,
 			documentIds,
@@ -66,14 +81,36 @@ export const GET: RequestHandler = async ({ url }) => {
 			candidates: execution.candidates
 		});
 
+		const impressionResultIds = new Map(
+			recordedImpression.results.map((result) => [
+				resultKey(result.retrievalMode, result.chunkId),
+				result.id
+			])
+		);
+
 		const data = execution.results;
 		const chunkIds = [...data.semantic, ...data.bm25, ...data.hybrid].map(({ chunkId }) => chunkId);
 		const ratings = await RetrievalFeedbackRepository.findRatings(query, chunkIds);
 
 		const response: ApiSearchResults = {
-			[RetrievalMode.SEMANTIC]: attachRatings(data.semantic, ratings),
-			[RetrievalMode.BM25]: attachRatings(data.bm25, ratings),
-			[RetrievalMode.HYBRID]: attachRatings(data.hybrid, ratings)
+			[RetrievalMode.SEMANTIC]: attachFeedback(
+				RetrievalMode.SEMANTIC,
+				data.semantic,
+				ratings,
+				impressionResultIds
+			),
+			[RetrievalMode.BM25]: attachFeedback(
+				RetrievalMode.BM25,
+				data.bm25,
+				ratings,
+				impressionResultIds
+			),
+			[RetrievalMode.HYBRID]: attachFeedback(
+				RetrievalMode.HYBRID,
+				data.hybrid,
+				ratings,
+				impressionResultIds
+			)
 		};
 
 		diagnosticEvents.searchCompleted({

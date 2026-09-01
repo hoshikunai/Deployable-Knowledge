@@ -14,10 +14,26 @@ interface RecordRetrievalImpressionInput {
 	candidates: RetrievalCandidateSnapshot[];
 }
 
+export interface RecordedRetrievalImpressionResult {
+	id: string;
+	chunkId: string;
+	retrievalMode: RetrievalCandidateSnapshot['retrievalMode'];
+}
+
+export interface RecordedRetrievalImpression {
+	id: string;
+	results: RecordedRetrievalImpressionResult[];
+}
+
 export class RetrievalImpressionsRepository {
-	static async record(input: RecordRetrievalImpressionInput): Promise<string> {
+	static async record(input: RecordRetrievalImpressionInput): Promise<RecordedRetrievalImpression> {
 		const impressionId = randomUUID();
 		const createdAt = new Date().toISOString();
+		const resultRows = input.candidates.map((candidate) => ({
+			id: randomUUID(),
+			impressionId,
+			...candidate
+		}));
 
 		await db.transaction(async (transaction) => {
 			await transaction.insert(retrievalImpressions).values({
@@ -32,17 +48,18 @@ export class RetrievalImpressionsRepository {
 				createdAt
 			});
 
-			if (input.candidates.length === 0) return;
-
-			await transaction.insert(retrievalImpressionResults).values(
-				input.candidates.map((candidate) => ({
-					id: randomUUID(),
-					impressionId,
-					...candidate
-				}))
-			);
+			if (resultRows.length > 0) {
+				await transaction.insert(retrievalImpressionResults).values(resultRows);
+			}
 		});
 
-		return impressionId;
+		return {
+			id: impressionId,
+			results: resultRows.map(({ id, chunkId, retrievalMode }) => ({
+				id,
+				chunkId,
+				retrievalMode
+			}))
+		};
 	}
 }

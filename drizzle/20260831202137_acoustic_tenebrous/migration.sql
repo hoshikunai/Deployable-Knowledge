@@ -1,0 +1,2 @@
+ALTER TABLE `retrieval_feedback` ADD `impression_result_id` text REFERENCES retrieval_impression_results(id) ON DELETE SET NULL;--> statement-breakpoint
+CREATE INDEX `retrieval_feedback_impression_result_idx` ON `retrieval_feedback` (`impression_result_id`);

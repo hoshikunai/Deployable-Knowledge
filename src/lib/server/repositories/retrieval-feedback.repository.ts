@@ -1,17 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { hashRetrievalQuery } from '$lib/server/rag/search/retrieval-query';
 import { and, eq, inArray } from 'drizzle-orm';
-import type { RetrievalMode } from '$lib/enums';
-import type { ChunkRatingValue } from '$lib/types';
 import { db } from '$lib/server/database/database';
-import { documentChunks, retrievalFeedback } from '$lib/server/database/schema';
+import {
+	retrievalFeedback,
+	retrievalImpressionResults,
+	retrievalImpressions
+} from '$lib/server/database/schema';
+import { hashRetrievalQuery } from '$lib/server/rag/search/retrieval-query';
+import type { ChunkRatingValue } from '$lib/types';
 
 interface SetRetrievalFeedbackInput {
 	chunkId: string;
+	impressionResultId: string;
 	query: string;
 	rating: ChunkRatingValue;
-	retrievalMode: RetrievalMode;
-	resultRank: number;
 }
 
 export class RetrievalFeedbackRepository {
@@ -39,13 +41,28 @@ export class RetrievalFeedbackRepository {
 	}
 
 	static async set(input: SetRetrievalFeedbackInput) {
-		const chunk = await db
-			.select({ id: documentChunks.id })
-			.from(documentChunks)
-			.where(eq(documentChunks.id, input.chunkId))
+		const query = input.query.trim();
+		const queryHash = hashRetrievalQuery(query);
+		const attribution = await db
+			.select({
+				retrievalMode: retrievalImpressionResults.retrievalMode,
+				resultRank: retrievalImpressionResults.displayedRank
+			})
+			.from(retrievalImpressionResults)
+			.innerJoin(
+				retrievalImpressions,
+				eq(retrievalImpressions.id, retrievalImpressionResults.impressionId)
+			)
+			.where(
+				and(
+					eq(retrievalImpressionResults.id, input.impressionResultId),
+					eq(retrievalImpressionResults.chunkId, input.chunkId),
+					eq(retrievalImpressions.queryHash, queryHash)
+				)
+			)
 			.get();
 
-		if (!chunk) return null;
+		if (!attribution) return null;
 
 		const timestamp = new Date().toISOString();
 		const [row] = await db
@@ -53,21 +70,23 @@ export class RetrievalFeedbackRepository {
 			.values({
 				id: randomUUID(),
 				chunkId: input.chunkId,
-				query: input.query.trim(),
-				queryHash: hashRetrievalQuery(input.query),
+				impressionResultId: input.impressionResultId,
+				query,
+				queryHash,
 				rating: input.rating,
-				retrievalMode: input.retrievalMode,
-				resultRank: input.resultRank,
+				retrievalMode: attribution.retrievalMode,
+				resultRank: attribution.resultRank,
 				createdAt: timestamp,
 				updatedAt: timestamp
 			})
 			.onConflictDoUpdate({
 				target: [retrievalFeedback.chunkId, retrievalFeedback.queryHash],
 				set: {
-					query: input.query.trim(),
+					impressionResultId: input.impressionResultId,
+					query,
 					rating: input.rating,
-					retrievalMode: input.retrievalMode,
-					resultRank: input.resultRank,
+					retrievalMode: attribution.retrievalMode,
+					resultRank: attribution.resultRank,
 					updatedAt: timestamp
 				}
 			})
