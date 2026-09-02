@@ -1,9 +1,8 @@
-import { CHUNK_RATING_VALUES } from '$lib/constants';
+import { CHUNK_RATING_VALUES, HUMAN_EXPERT_FEEDBACK_SOURCE } from '$lib/constants';
 import { RetrievalMode } from '$lib/enums';
 import { RetrievalTrainingRepository } from '$lib/server/repositories';
-import type { ChunkRatingValue } from '$lib/types';
+import type { ChunkRatingValue, RetrievalFeedbackSource } from '$lib/types';
 import {
-	RETRIEVAL_TARGET_BY_RATING,
 	RETRIEVAL_TRAINING_DATASET_VERSION,
 	type RetrievalTrainingDataset,
 	type RetrievalTrainingExample
@@ -11,8 +10,10 @@ import {
 
 const RETRIEVAL_MODES = new Set<string>(Object.values(RetrievalMode));
 
-export async function buildRetrievalTrainingDataset(): Promise<RetrievalTrainingDataset> {
-	const rows = await RetrievalTrainingRepository.readDatasetRows();
+export async function buildRetrievalTrainingDataset(
+	feedbackSource: RetrievalFeedbackSource = HUMAN_EXPERT_FEEDBACK_SOURCE
+): Promise<RetrievalTrainingDataset> {
+	const rows = await RetrievalTrainingRepository.readDatasetRows(feedbackSource);
 	const examples: RetrievalTrainingExample[] = [];
 	const ratingCounts: Record<ChunkRatingValue, number> = {
 		1: 0,
@@ -82,7 +83,9 @@ export async function buildRetrievalTrainingDataset(): Promise<RetrievalTraining
 			chunkId: row.resultChunkId,
 			queryHash: row.queryHash,
 			rating,
-			target: RETRIEVAL_TARGET_BY_RATING[rating],
+			feedbackSource: row.feedbackSource,
+			feedbackConfidence: row.feedbackConfidence,
+			feedbackRationale: row.feedbackRationale,
 			retrievalMode,
 			baseRank: row.baseRank,
 			displayedRank: row.displayedRank,
@@ -108,9 +111,11 @@ export async function buildRetrievalTrainingDataset(): Promise<RetrievalTraining
 
 	return {
 		version: RETRIEVAL_TRAINING_DATASET_VERSION,
+		feedbackSource,
 		generatedAt: new Date().toISOString(),
 		examples,
 		stats: {
+			feedbackSource,
 			totalFeedback: rows.length,
 			attributedFeedback: examples.length,
 			unattributedFeedback,

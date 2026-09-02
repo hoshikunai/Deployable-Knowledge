@@ -1,5 +1,8 @@
 export { buildRetrievalTrainingDataset } from './build-retrieval-training-dataset';
 export { buildRetrievalTrainingFeatures } from './build-retrieval-training-features';
+export { buildRetrievalPreferencePairs } from './build-retrieval-preference-pairs';
+export { buildQueryGroupedCrossValidationFolds } from './build-query-grouped-cross-validation-folds';
+export { crossValidateRetrievalRanker } from './cross-validate-retrieval-ranker';
 export { evaluateRetrievalRanker } from './evaluate-retrieval-ranker';
 export {
 	fitRetrievalFeatureScaler,
@@ -10,10 +13,9 @@ export {
 	RetrievalTrainingReadinessError,
 	selectRetrievalTrainingCohort
 } from './select-retrieval-training-cohort';
-export { splitRetrievalTrainingDataset } from './split-retrieval-training-dataset';
 export {
-	predictRetrievalRating,
-	trainLinearRetrievalRanker
-} from './train-linear-retrieval-ranker';
+	predictRetrievalUtility,
+	trainPairwiseRetrievalRanker
+} from './train-pairwise-retrieval-ranker';
 export * from './retrieval-training.types';
 export * from './retrieval-model.types';

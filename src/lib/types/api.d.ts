@@ -11,7 +11,7 @@ import type {
 	WorkspaceLayout
 } from './database';
 import type { WorkspaceLayoutSnapshot } from './workspace';
-import type { ChunkRatingValue } from '$lib/constants';
+import type { ChunkRatingValue, RetrievalFeedbackSource } from '$lib/constants';
 
 export type LlamaGpuMode = 'auto' | 'cpu' | 'cuda' | 'vulkan';
 
@@ -34,6 +34,7 @@ export interface AssistantConfig {
 export type ChatMode = 'document' | 'notebook';
 
 export type { ChunkRatingValue } from '$lib/constants/chunk-rating';
+export type { RetrievalFeedbackSource } from '$lib/constants/retrieval-feedback';
 
 export interface ApiAgentTool {
 	id: string;
@@ -397,6 +398,17 @@ export interface ApiChunkRatingResponse {
 	rating: ChunkRatingValue | null;
 }
 
+export interface ApiAiProxyChunkRatingRequest extends ApiChunkRatingRequest {
+	confidence: number;
+	rationale: string;
+}
+
+export interface ApiAiProxyChunkRatingResponse extends ApiChunkRatingResponse {
+	feedbackSource: RetrievalFeedbackSource;
+	confidence: number | null;
+	rationale: string | null;
+}
+
 export interface ApiSearchMatch {
 	chunkId: string;
 	documentId: string;
@@ -416,7 +428,9 @@ export type ApiActiveAssistantProfile = AssistantProfile | null;
 export interface ApiRetrievalTrainingEvaluation {
 	rankingStrategy: string;
 	blendWeight: number;
-	meanAbsoluteError: number;
+	crossValidationFolds: number;
+	pairwiseAccuracy: number;
+	evaluatedPairs: number;
 	baselineNdcgAt5: number | null;
 	trainedNdcgAt5: number | null;
 	ndcgImprovement: number | null;
@@ -431,10 +445,17 @@ export interface ApiRetrievalTrainingEvaluation {
 export interface ApiRetrievalTrainingRunResponse {
 	runId: string;
 	modelId: string;
+	feedbackSource: RetrievalFeedbackSource;
 	trainingExamples: number;
 	validationExamples: number;
+	trainingPairs: number;
+	validationPairs: number;
 	distinctQueries: number;
 	evaluation: ApiRetrievalTrainingEvaluation;
+}
+
+export interface ApiRetrievalTrainingRunRequest {
+	feedbackSource?: RetrievalFeedbackSource;
 }
 
 export interface ApiRetrievalModelActivationRequest {

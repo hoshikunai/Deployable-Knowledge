@@ -18,7 +18,8 @@ export const APP_PREVIEW = {
 };
 
 export const API_CHUNK_RATINGS = {
-	byChunkId: (chunkId: string) => `/chunks/${segment(chunkId)}/rating`
+	byChunkId: (chunkId: string) => `/chunks/${segment(chunkId)}/rating`,
+	proxyByChunkId: (chunkId: string) => `/chunks/${segment(chunkId)}/proxy-rating`
 };
 
 export function documentViewerHref(

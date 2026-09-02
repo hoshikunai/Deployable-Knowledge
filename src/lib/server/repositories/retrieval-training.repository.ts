@@ -1,4 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
+import type { RetrievalFeedbackSource } from '$lib/constants';
 import { db } from '$lib/server/database/database';
 import {
 	retrievalFeedback,
@@ -7,7 +8,7 @@ import {
 } from '$lib/server/database/schema';
 
 export class RetrievalTrainingRepository {
-	static readDatasetRows() {
+	static readDatasetRows(feedbackSource: RetrievalFeedbackSource) {
 		return db
 			.select({
 				feedbackId: retrievalFeedback.id,
@@ -17,6 +18,9 @@ export class RetrievalTrainingRepository {
 				rating: retrievalFeedback.rating,
 				feedbackRetrievalMode: retrievalFeedback.retrievalMode,
 				feedbackResultRank: retrievalFeedback.resultRank,
+				feedbackSource: retrievalFeedback.feedbackSource,
+				feedbackConfidence: retrievalFeedback.confidence,
+				feedbackRationale: retrievalFeedback.rationale,
 				feedbackUpdatedAt: retrievalFeedback.updatedAt,
 				resultId: retrievalImpressionResults.id,
 				resultChunkId: retrievalImpressionResults.chunkId,
@@ -43,6 +47,7 @@ export class RetrievalTrainingRepository {
 				retrievalImpressions,
 				eq(retrievalImpressionResults.impressionId, retrievalImpressions.id)
 			)
+			.where(eq(retrievalFeedback.feedbackSource, feedbackSource))
 			.orderBy(desc(retrievalFeedback.updatedAt));
 	}
 }

@@ -14,7 +14,9 @@ import {
 import {
 	DEFAULT_ASSISTANT_CONFIG,
 	DEFAULT_THEME,
+	HUMAN_EXPERT_FEEDBACK_SOURCE,
 	LAYOUT_NAME_MAX_LENGTH,
+	RETRIEVAL_FEEDBACK_SOURCES,
 	SYNCED_FILE_STATES,
 	THEME_COLORS,
 	THEME_MODES
@@ -350,6 +352,11 @@ export const retrievalFeedback = sqliteTable(
 		query: text('query').notNull(),
 		queryHash: text('query_hash', { length: 64 }).notNull(),
 		rating: integer('rating').notNull(),
+		feedbackSource: text('feedback_source', { enum: RETRIEVAL_FEEDBACK_SOURCES })
+			.notNull()
+			.default(HUMAN_EXPERT_FEEDBACK_SOURCE),
+		confidence: real('confidence'),
+		rationale: text('rationale'),
 		retrievalMode: text('retrieval_mode', {
 			enum: ['semantic', 'bm25', 'hybrid']
 		}).notNull(),
@@ -359,10 +366,19 @@ export const retrievalFeedback = sqliteTable(
 	},
 	(table) => [
 		check('retrieval_feedback_rating_check', sql`${table.rating} between 1 and 5`),
+		check(
+			'retrieval_feedback_confidence_check',
+			sql`${table.confidence} is null or ${table.confidence} between 0 and 1`
+		),
 		index('retrieval_feedback_chunk_idx').on(table.chunkId),
 		index('retrieval_feedback_query_idx').on(table.queryHash),
+		index('retrieval_feedback_source_idx').on(table.feedbackSource),
 		index('retrieval_feedback_impression_result_idx').on(table.impressionResultId),
-		uniqueIndex('retrieval_feedback_chunk_query_idx').on(table.chunkId, table.queryHash)
+		uniqueIndex('retrieval_feedback_chunk_query_source_idx').on(
+			table.chunkId,
+			table.queryHash,
+			table.feedbackSource
+		)
 	]
 );
 
@@ -373,6 +389,9 @@ export const retrievalTrainingRuns = sqliteTable(
 		status: text('status', {
 			enum: ['training', 'completed', 'failed']
 		}).notNull(),
+		feedbackSource: text('feedback_source', { enum: RETRIEVAL_FEEDBACK_SOURCES })
+			.notNull()
+			.default(HUMAN_EXPERT_FEEDBACK_SOURCE),
 		datasetVersion: integer('dataset_version').notNull(),
 		featureVersion: integer('feature_version').notNull(),
 		embeddingModel: text('embedding_model').notNull(),
@@ -395,6 +414,7 @@ export const retrievalTrainingRuns = sqliteTable(
 	},
 	(table) => [
 		index('retrieval_training_runs_status_idx').on(table.status),
+		index('retrieval_training_runs_source_idx').on(table.feedbackSource),
 		index('retrieval_training_runs_started_idx').on(table.startedAt)
 	]
 );

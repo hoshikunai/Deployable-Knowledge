@@ -2,7 +2,7 @@ import { RetrievalMode } from '$lib/enums';
 import { buildRetrievalFeatureVector } from '$lib/server/rag/training/build-retrieval-training-features';
 import { scaleRetrievalFeatureVector } from '$lib/server/rag/training/retrieval-feature-scaler';
 import { LEARNED_RANKING_BLEND_WEIGHT } from '$lib/server/rag/training/retrieval-training-constants';
-import { predictRetrievalRating } from '$lib/server/rag/training/train-linear-retrieval-ranker';
+import { predictRetrievalUtility } from '$lib/server/rag/training/train-pairwise-retrieval-ranker';
 import { loadActiveRetrievalModel } from './active-retrieval-model';
 import { blendLearnedRanking } from './blend-learned-ranking';
 import type { RetrievalScoreMaps, ScoredSearchMatch } from './search-shared';
@@ -52,7 +52,7 @@ export async function rerankWithActiveRetrievalModel(
 				standardDeviations: model.standardDeviations
 			});
 
-			const learnedScore = predictRetrievalRating(
+			const learnedScore = predictRetrievalUtility(
 				{
 					weights: model.weights,
 					intercept: model.intercept

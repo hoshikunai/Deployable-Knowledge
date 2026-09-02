@@ -1,3 +1,4 @@
+import { HUMAN_EXPERT_FEEDBACK_SOURCE } from '$lib/constants';
 import {
 	getActiveRetrievalModelId,
 	setActiveRetrievalModelId
@@ -5,14 +6,18 @@ import {
 import { EMBEDDING_MODEL } from '$lib/server/rag/embedding-model';
 import { RETRIEVAL_FEATURE_NAMES } from '$lib/server/rag/training/build-retrieval-training-features';
 import {
+	CROSS_VALIDATION_FOLD_COUNT,
 	LEARNED_RANKING_BLEND_WEIGHT,
 	MAXIMUM_ACTIVATION_GROUP_NDCG_REGRESSION,
 	MINIMUM_ACTIVATION_NDCG_IMPROVEMENT,
 	MINIMUM_ACTIVATION_NON_TIE_WIN_RATE,
 	MINIMUM_ACTIVATION_RANKING_GROUPS,
 	RETRIEVAL_FEATURE_VERSION,
-	RETRIEVAL_RANKING_STRATEGY
+	RETRIEVAL_PAIR_WEIGHTING_STRATEGY,
+	RETRIEVAL_RANKING_STRATEGY,
+	RETRIEVAL_TRAINING_ALGORITHM
 } from '$lib/server/rag/training/retrieval-training-constants';
+import { RETRIEVAL_TRAINING_DATASET_VERSION } from '$lib/server/rag/training/retrieval-training.types';
 import { RetrievalModelsRepository } from '$lib/server/repositories/retrieval-models.repository';
 import { CROSS_ENCODER_MODEL, RETRIEVAL_SCORING_VERSION } from './retrieval-version';
 
@@ -39,12 +44,25 @@ async function requireCompatibleRetrievalModel(modelId: string): Promise<ActiveR
 		throw new Error(`Retrieval model ${modelId} does not have a completed training run.`);
 	}
 
+	if (run.feedbackSource !== HUMAN_EXPERT_FEEDBACK_SOURCE) {
+		throw new Error(`Retrieval model ${modelId} was not trained from human expert feedback.`);
+	}
+
 	if (
+		run.datasetVersion !== RETRIEVAL_TRAINING_DATASET_VERSION ||
 		run.embeddingModel !== EMBEDDING_MODEL ||
 		run.rerankerModel !== CROSS_ENCODER_MODEL ||
 		run.scoringVersion !== RETRIEVAL_SCORING_VERSION
 	) {
 		throw new Error(`Retrieval model ${modelId} is incompatible with the current search stack.`);
+	}
+
+	if (
+		run.hyperparameters.algorithm !== RETRIEVAL_TRAINING_ALGORITHM ||
+		run.hyperparameters.crossValidationFolds !== CROSS_VALIDATION_FOLD_COUNT ||
+		run.hyperparameters.pairWeightingStrategy !== RETRIEVAL_PAIR_WEIGHTING_STRATEGY
+	) {
+		throw new Error(`Retrieval model ${modelId} uses an incompatible training strategy.`);
 	}
 
 	if (
@@ -84,6 +102,12 @@ async function requireCompatibleRetrievalModel(modelId: string): Promise<ActiveR
 		!evaluation ||
 		evaluation.rankingStrategy !== RETRIEVAL_RANKING_STRATEGY ||
 		evaluation.blendWeight !== LEARNED_RANKING_BLEND_WEIGHT ||
+		evaluation.crossValidationFolds !== CROSS_VALIDATION_FOLD_COUNT ||
+		!Number.isFinite(evaluation.pairwiseAccuracy) ||
+		evaluation.pairwiseAccuracy < 0 ||
+		evaluation.pairwiseAccuracy > 1 ||
+		!Number.isInteger(evaluation.evaluatedPairs) ||
+		evaluation.evaluatedPairs < 1 ||
 		evaluation.ndcgImprovement === null ||
 		evaluation.ndcgImprovement < MINIMUM_ACTIVATION_NDCG_IMPROVEMENT ||
 		evaluation.evaluatedRankingGroups < MINIMUM_ACTIVATION_RANKING_GROUPS

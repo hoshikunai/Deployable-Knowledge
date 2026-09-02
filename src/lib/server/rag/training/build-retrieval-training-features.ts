@@ -26,10 +26,11 @@ export interface RetrievalFeatureInput {
 
 export interface PreparedRetrievalTrainingExample {
 	feedbackId: string;
+	impressionId: string;
+	impressionResultId: string;
 	queryHash: string;
 	retrievalMode: RetrievalMode;
 	rating: RetrievalTrainingExample['rating'];
-	target: number;
 	baseRank: number;
 	features: number[];
 }
@@ -61,10 +62,11 @@ export function buildRetrievalTrainingFeatures(
 ): PreparedRetrievalTrainingExample[] {
 	return examples.map((example) => ({
 		feedbackId: example.feedbackId,
+		impressionId: example.impressionId,
+		impressionResultId: example.impressionResultId,
 		queryHash: example.queryHash,
 		retrievalMode: example.retrievalMode,
 		rating: example.rating,
-		target: example.target,
 		baseRank: example.baseRank,
 		features: buildRetrievalFeatureVector(example)
 	}));

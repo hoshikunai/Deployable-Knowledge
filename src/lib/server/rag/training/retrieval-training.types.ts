@@ -1,15 +1,7 @@
 import type { RetrievalMode } from '$lib/enums';
-import type { ChunkRatingValue } from '$lib/types';
+import type { ChunkRatingValue, RetrievalFeedbackSource } from '$lib/types';
 
-export const RETRIEVAL_TRAINING_DATASET_VERSION = 1 as const;
-
-export const RETRIEVAL_TARGET_BY_RATING = {
-	1: -1,
-	2: -0.5,
-	3: 0,
-	4: 0.5,
-	5: 1
-} satisfies Record<ChunkRatingValue, number>;
+export const RETRIEVAL_TRAINING_DATASET_VERSION = 2 as const;
 
 export interface RetrievalTrainingExample {
 	feedbackId: string;
@@ -18,7 +10,9 @@ export interface RetrievalTrainingExample {
 	chunkId: string;
 	queryHash: string;
 	rating: ChunkRatingValue;
-	target: number;
+	feedbackSource: RetrievalFeedbackSource;
+	feedbackConfidence: number | null;
+	feedbackRationale: string | null;
 	retrievalMode: RetrievalMode;
 	baseRank: number;
 	displayedRank: number;
@@ -35,6 +29,7 @@ export interface RetrievalTrainingExample {
 }
 
 export interface RetrievalTrainingDatasetStats {
+	feedbackSource: RetrievalFeedbackSource;
 	totalFeedback: number;
 	attributedFeedback: number;
 	unattributedFeedback: number;
@@ -51,6 +46,7 @@ export interface RetrievalTrainingDatasetStats {
 
 export interface RetrievalTrainingDataset {
 	version: typeof RETRIEVAL_TRAINING_DATASET_VERSION;
+	feedbackSource: RetrievalFeedbackSource;
 	generatedAt: string;
 	examples: RetrievalTrainingExample[];
 	stats: RetrievalTrainingDatasetStats;

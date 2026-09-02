@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
+import type { RetrievalFeedbackSource } from '$lib/constants';
 import { db } from '$lib/server/database/database';
 import { retrievalRankerModels, retrievalTrainingRuns } from '$lib/server/database/schema';
 import type {
@@ -7,9 +8,10 @@ import type {
 	RetrievalTrainingHyperparameters
 } from '$lib/server/rag/training/retrieval-model.types';
 import type { RetrievalFeatureScaler } from '$lib/server/rag/training/retrieval-feature-scaler';
-import type { TrainedLinearRetrievalRanker } from '$lib/server/rag/training/train-linear-retrieval-ranker';
+import type { TrainedPairwiseRetrievalRanker } from '$lib/server/rag/training/train-pairwise-retrieval-ranker';
 
 interface StartRetrievalTrainingRunInput {
+	feedbackSource: RetrievalFeedbackSource;
 	datasetVersion: number;
 	featureVersion: number;
 	embeddingModel: string;
@@ -29,7 +31,7 @@ interface CompleteRetrievalTrainingRunInput {
 	featureVersion: number;
 	featureNames: readonly string[];
 	scaler: RetrievalFeatureScaler;
-	ranker: TrainedLinearRetrievalRanker;
+	ranker: TrainedPairwiseRetrievalRanker;
 	evaluation: RetrievalTrainingEvaluation;
 	regularization: number;
 }
@@ -41,6 +43,7 @@ export class RetrievalModelsRepository {
 			.values({
 				id: randomUUID(),
 				status: 'training',
+				feedbackSource: input.feedbackSource,
 				datasetVersion: input.datasetVersion,
 				featureVersion: input.featureVersion,
 				embeddingModel: input.embeddingModel,

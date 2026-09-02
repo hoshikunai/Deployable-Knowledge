@@ -1,12 +1,13 @@
 export const RETRIEVAL_FEATURE_VERSION = 1 as const;
 
-export const RETRIEVAL_RANKING_STRATEGY = 'hybrid-rank-blend-v1' as const;
-export const LEARNED_RANKING_BLEND_WEIGHT = 0.15;
-export const RETRIEVAL_RATING_BALANCE_STRATEGY = 'inverse-frequency' as const;
+export const RETRIEVAL_TRAINING_ALGORITHM = 'pairwise-logistic-v1' as const;
+export const RETRIEVAL_RANKING_STRATEGY = 'pairwise-logistic-rank-blend-v2' as const;
+export const LEARNED_RANKING_BLEND_WEIGHT = 0.35;
+export const RETRIEVAL_PAIR_WEIGHTING_STRATEGY = 'rating-gap-equal-impression' as const;
+export const CROSS_VALIDATION_FOLD_COUNT = 5;
 
 export const MINIMUM_TRAINING_EXAMPLES = 30;
 export const MINIMUM_DISTINCT_QUERIES = 10;
-export const VALIDATION_FRACTION = 0.2;
 export const MINIMUM_ACTIVATION_RANKING_GROUPS = 10;
 export const MINIMUM_ACTIVATION_NDCG_IMPROVEMENT = 0.005;
 export const MINIMUM_ACTIVATION_NON_TIE_WIN_RATE = 0.6;
