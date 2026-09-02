@@ -98,6 +98,14 @@ export const API_DIAGNOSTICS = {
 
 export const API_SEARCH = '/search';
 
+export const API_RETRIEVAL_TRAINING = {
+	RUNS: '/retrieval-training/runs'
+};
+
+export const API_RETRIEVAL_MODELS = {
+	ACTIVE: '/retrieval-models/active'
+};
+
 export const API_SESSIONS = {
 	BASE: '/sessions',
 	byId: (id: string) => `/sessions/${segment(id)}`,

@@ -412,3 +412,35 @@ export interface ApiSearchMatch {
 export type ApiSearchResults = Record<RetrievalMode, ApiSearchMatch[]>;
 
 export type ApiActiveAssistantProfile = AssistantProfile | null;
+
+export interface ApiRetrievalTrainingEvaluation {
+	rankingStrategy: string;
+	blendWeight: number;
+	meanAbsoluteError: number;
+	baselineNdcgAt5: number | null;
+	trainedNdcgAt5: number | null;
+	ndcgImprovement: number | null;
+	evaluatedExamples: number;
+	evaluatedRankingGroups: number;
+	improvedRankingGroups: number;
+	degradedRankingGroups: number;
+	tiedRankingGroups: number;
+	worstRankingGroupNdcgDelta: number | null;
+}
+
+export interface ApiRetrievalTrainingRunResponse {
+	runId: string;
+	modelId: string;
+	trainingExamples: number;
+	validationExamples: number;
+	distinctQueries: number;
+	evaluation: ApiRetrievalTrainingEvaluation;
+}
+
+export interface ApiRetrievalModelActivationRequest {
+	modelId: string;
+}
+
+export interface ApiRetrievalModelActivationResponse {
+	activeModelId: string | null;
+}

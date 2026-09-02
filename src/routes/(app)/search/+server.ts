@@ -78,6 +78,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			embeddingModel: EMBEDDING_MODEL,
 			rerankerModel: CROSS_ENCODER_MODEL,
 			scoringVersion: RETRIEVAL_SCORING_VERSION,
+			rankerModelId: execution.rankerModelId,
 			candidates: execution.candidates
 		});
 

@@ -11,6 +11,7 @@ interface RecordRetrievalImpressionInput {
 	embeddingModel: string;
 	rerankerModel: string;
 	scoringVersion: string;
+	rankerModelId: string | null;
 	candidates: RetrievalCandidateSnapshot[];
 }
 
@@ -45,6 +46,7 @@ export class RetrievalImpressionsRepository {
 				embeddingModel: input.embeddingModel,
 				rerankerModel: input.rerankerModel,
 				scoringVersion: input.scoringVersion,
+				rankerModelId: input.rankerModelId,
 				createdAt
 			});
 

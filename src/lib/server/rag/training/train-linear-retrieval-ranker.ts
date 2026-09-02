@@ -17,6 +17,24 @@ export interface TrainedLinearRetrievalRanker extends LinearRetrievalRankerParam
 	trainingLoss: number;
 }
 
+function buildRatingWeights(
+	examples: PreparedRetrievalTrainingExample[]
+): Map<PreparedRetrievalTrainingExample['rating'], number> {
+	const ratingCounts = new Map<PreparedRetrievalTrainingExample['rating'], number>();
+
+	for (const example of examples) {
+		ratingCounts.set(example.rating, (ratingCounts.get(example.rating) ?? 0) + 1);
+	}
+
+	const representedRatingCount = ratingCounts.size;
+	return new Map(
+		[...ratingCounts].map(([rating, count]) => [
+			rating,
+			examples.length / (representedRatingCount * count)
+		])
+	);
+}
+
 export function predictRetrievalRating(
 	ranker: LinearRetrievalRankerParameters,
 	features: number[]
@@ -41,6 +59,15 @@ export function trainLinearRetrievalRanker(
 	const featureCount = examples[0].features.length;
 	const weights = new Array<number>(featureCount).fill(0);
 	let intercept = 0;
+	const ratingWeights = buildRatingWeights(examples);
+	const exampleWeights = examples.map((example) => {
+		const weight = ratingWeights.get(example.rating);
+		if (weight === undefined) {
+			throw new Error(`Training rating ${example.rating} does not have a class weight.`);
+		}
+		return weight;
+	});
+	const totalExampleWeight = exampleWeights.reduce((total, weight) => total + weight, 0);
 
 	let bestWeights = [...weights];
 	let bestIntercept = intercept;
@@ -53,19 +80,20 @@ export function trainLinearRetrievalRanker(
 		let interceptGradient = 0;
 		let squaredErrorTotal = 0;
 
-		for (const example of examples) {
+		for (const [exampleIndex, example] of examples.entries()) {
 			const prediction = predictRetrievalRating({ weights, intercept }, example.features);
 			const error = prediction - example.target;
+			const exampleWeight = exampleWeights[exampleIndex];
 
-			squaredErrorTotal += error * error;
-			interceptGradient += 2 * error;
+			squaredErrorTotal += exampleWeight * error * error;
+			interceptGradient += 2 * exampleWeight * error;
 
 			for (let featureIndex = 0; featureIndex < featureCount; featureIndex += 1) {
-				weightGradients[featureIndex] += 2 * error * example.features[featureIndex];
+				weightGradients[featureIndex] += 2 * exampleWeight * error * example.features[featureIndex];
 			}
 		}
 
-		const meanSquaredError = squaredErrorTotal / examples.length;
+		const meanSquaredError = squaredErrorTotal / totalExampleWeight;
 		const regularizationLoss =
 			TRAINING_L2_REGULARIZATION * weights.reduce((total, weight) => total + weight * weight, 0);
 		const loss = meanSquaredError + regularizationLoss;
@@ -89,10 +117,10 @@ export function trainLinearRetrievalRanker(
 			break;
 		}
 
-		intercept -= TRAINING_LEARNING_RATE * (interceptGradient / examples.length);
+		intercept -= TRAINING_LEARNING_RATE * (interceptGradient / totalExampleWeight);
 
 		for (let featureIndex = 0; featureIndex < featureCount; featureIndex += 1) {
-			const dataGradient = weightGradients[featureIndex] / examples.length;
+			const dataGradient = weightGradients[featureIndex] / totalExampleWeight;
 			const regularizationGradient = 2 * TRAINING_L2_REGULARIZATION * weights[featureIndex];
 
 			weights[featureIndex] -= TRAINING_LEARNING_RATE * (dataGradient + regularizationGradient);

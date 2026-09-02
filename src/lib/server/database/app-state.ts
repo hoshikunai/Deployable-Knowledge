@@ -88,3 +88,25 @@ export async function clearActiveLayoutId(layoutId: string): Promise<void> {
 		.set({ activeLayoutId: null })
 		.where(eq(appState.activeLayoutId, layoutId));
 }
+
+export async function getActiveRetrievalModelId(): Promise<string | null> {
+	const state = await db.select().from(appState).where(eq(appState.id, APP_STATE_ID)).get();
+	return state?.activeRetrievalModelId ?? null;
+}
+
+export async function setActiveRetrievalModelId(
+	activeRetrievalModelId: string | null
+): Promise<void> {
+	await db
+		.insert(appState)
+		.values({
+			id: APP_STATE_ID,
+			activeRetrievalModelId
+		})
+		.onConflictDoUpdate({
+			target: appState.id,
+			set: {
+				activeRetrievalModelId
+			}
+		});
+}

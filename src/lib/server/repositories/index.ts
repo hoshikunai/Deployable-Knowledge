@@ -8,3 +8,4 @@ export { WorkspaceLayoutsRepository } from './workspace-layouts.repository';
 export { RetrievalFeedbackRepository } from './retrieval-feedback.repository';
 export { RetrievalImpressionsRepository } from './retrieval-impressions.repository';
 export { RetrievalTrainingRepository } from './retrieval-training.repository';
+export { RetrievalModelsRepository } from './retrieval-models.repository';

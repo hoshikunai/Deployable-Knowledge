@@ -41,9 +41,10 @@ export interface RetrievalCandidateSnapshot {
 	bm25Score: number | null;
 	crossEncoderScore: number | null;
 	baseScore: number;
+	learnedScore: number | null;
 }
 
-interface RetrievalScoreMaps {
+export interface RetrievalScoreMaps {
 	semantic: ReadonlyMap<string, number>;
 	bm25: ReadonlyMap<string, number>;
 	crossEncoder: ReadonlyMap<string, number>;
@@ -76,7 +77,8 @@ export function buildRetrievalCandidateSnapshots(
 	retrievalMode: RetrievalMode,
 	baseResults: ScoredSearchMatch[],
 	displayedResults: ScoredSearchMatch[],
-	scores: RetrievalScoreMaps
+	scores: RetrievalScoreMaps,
+	learnedScores: ReadonlyMap<string, number> = new Map()
 ): RetrievalCandidateSnapshot[] {
 	const baseResultsByChunk = new Map(
 		baseResults.map((match, index) => [
@@ -102,7 +104,8 @@ export function buildRetrievalCandidateSnapshots(
 			semanticScore: scores.semantic.get(match.chunkId) ?? null,
 			bm25Score: scores.bm25.get(match.chunkId) ?? null,
 			crossEncoderScore: scores.crossEncoder.get(match.chunkId) ?? null,
-			baseScore: baseResult.score
+			baseScore: baseResult.score,
+			learnedScore: learnedScores.get(match.chunkId) ?? null
 		};
 	});
 }

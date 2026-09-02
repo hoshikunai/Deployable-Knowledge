@@ -57,10 +57,12 @@ export function fitRetrievalFeatureScaler(
 	};
 }
 
-export function scaleRetrievalTrainingExamples(
-	examples: PreparedRetrievalTrainingExample[],
+export function scaleRetrievalFeatureVector(
+	features: number[],
 	scaler: RetrievalFeatureScaler
-): PreparedRetrievalTrainingExample[] {
+): number[] {
+	validateFeatureLength(features);
+
 	if (
 		scaler.means.length !== RETRIEVAL_FEATURE_NAMES.length ||
 		scaler.standardDeviations.length !== RETRIEVAL_FEATURE_NAMES.length
@@ -68,21 +70,24 @@ export function scaleRetrievalTrainingExamples(
 		throw new Error('The retrieval feature scaler has an invalid feature count.');
 	}
 
-	return examples.map((example) => {
-		validateFeatureLength(example.features);
+	const scaled = features.map(
+		(value, featureIndex) =>
+			(value - scaler.means[featureIndex]) / scaler.standardDeviations[featureIndex]
+	);
 
-		const features = example.features.map(
-			(value, featureIndex) =>
-				(value - scaler.means[featureIndex]) / scaler.standardDeviations[featureIndex]
-		);
+	if (!scaled.every(Number.isFinite)) {
+		throw new Error('Scaling produced a non-finite retrieval feature.');
+	}
 
-		if (!features.every(Number.isFinite)) {
-			throw new Error(`Scaling example ${example.feedbackId} produced a non-finite feature.`);
-		}
+	return scaled;
+}
 
-		return {
-			...example,
-			features
-		};
-	});
+export function scaleRetrievalTrainingExamples(
+	examples: PreparedRetrievalTrainingExample[],
+	scaler: RetrievalFeatureScaler
+): PreparedRetrievalTrainingExample[] {
+	return examples.map((example) => ({
+		...example,
+		features: scaleRetrievalFeatureVector(example.features, scaler)
+	}));
 }

@@ -5,9 +5,11 @@ import { searchSemantic } from './semantic-search';
 import { searchBm25 } from './bm25-search';
 import { rerankCandidates } from './cross-rerank';
 import { feedbackCandidateLimit, rerankWithRetrievalFeedback } from './feedback-rerank';
+import { rerankWithActiveRetrievalModel } from './learned-rerank';
 import {
 	buildRetrievalCandidateSnapshots,
 	type RetrievalCandidateSnapshot,
+	type RetrievalScoreMaps,
 	type ScoredSearchMatch,
 	type SearchMatchBase,
 	type SearchOptionsBase,
@@ -24,6 +26,7 @@ export interface SearchMethodResults {
 export interface SearchMethodExecution {
 	results: SearchMethodResults;
 	candidates: RetrievalCandidateSnapshot[];
+	rankerModelId: string | null;
 }
 
 interface CollectedMethodResults {
@@ -109,6 +112,14 @@ async function collectMethodResults(options: SearchOptionsBase): Promise<Collect
 	};
 }
 
+function buildRetrievalScoreMaps(search: CollectedMethodResults): RetrievalScoreMaps {
+	return {
+		semantic: new Map(search.semanticScored.map((match) => [match.chunkId, match.score])),
+		bm25: new Map(search.bm25Scored.map((match) => [match.chunkId, match.score])),
+		crossEncoder: search.crossEncoderScores
+	};
+}
+
 export async function searchAllMethodsWithTrace(
 	options: SearchOptionsBase
 ): Promise<SearchMethodExecution> {
@@ -118,17 +129,18 @@ export async function searchAllMethodsWithTrace(
 		topK: feedbackCandidateLimit(topK)
 	});
 
+	const scoreMaps = buildRetrievalScoreMaps(search);
+	const learnedHybrid = await rerankWithActiveRetrievalModel(
+		RetrievalMode.HYBRID,
+		search.hybridScored,
+		scoreMaps
+	);
+
 	const [semantic, bm25, hybrid] = await Promise.all([
 		rerankWithRetrievalFeedback(search.query, search.semanticScored, topK),
 		rerankWithRetrievalFeedback(search.query, search.bm25Scored, topK),
-		rerankWithRetrievalFeedback(search.query, search.hybridScored, topK)
+		rerankWithRetrievalFeedback(search.query, learnedHybrid.matches, topK)
 	]);
-
-	const scoreMaps = {
-		semantic: new Map(search.semanticScored.map((match) => [match.chunkId, match.score])),
-		bm25: new Map(search.bm25Scored.map((match) => [match.chunkId, match.score])),
-		crossEncoder: search.crossEncoderScores
-	};
 
 	return {
 		results: {
@@ -149,9 +161,11 @@ export async function searchAllMethodsWithTrace(
 				RetrievalMode.HYBRID,
 				search.hybridScored,
 				hybrid,
-				scoreMaps
+				scoreMaps,
+				learnedHybrid.scores
 			)
-		]
+		],
+		rankerModelId: learnedHybrid.modelId
 	};
 }
 
@@ -164,9 +178,14 @@ export async function searchHybrid(
 	options: SearchOptionsBase
 ): Promise<SearchResult<ScoredSearchMatch>> {
 	const search = await collectMethodResults(options);
+	const learnedHybrid = await rerankWithActiveRetrievalModel(
+		RetrievalMode.HYBRID,
+		search.hybridScored,
+		buildRetrievalScoreMaps(search)
+	);
 
 	return {
 		query: search.query,
-		results: search.hybridScored
+		results: learnedHybrid.matches
 	};
 }

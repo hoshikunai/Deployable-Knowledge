@@ -15,6 +15,15 @@ export const RETRIEVAL_FEATURE_NAMES = [
 	'modeHybrid'
 ] as const;
 
+export interface RetrievalFeatureInput {
+	retrievalMode: RetrievalMode;
+	baseRank: number;
+	semanticScore: number | null;
+	bm25Score: number | null;
+	crossEncoderScore: number | null;
+	baseScore: number;
+}
+
 export interface PreparedRetrievalTrainingExample {
 	feedbackId: string;
 	queryHash: string;
@@ -25,36 +34,38 @@ export interface PreparedRetrievalTrainingExample {
 	features: number[];
 }
 
+export function buildRetrievalFeatureVector(input: RetrievalFeatureInput): number[] {
+	const features = [
+		input.baseScore,
+		input.semanticScore ?? 0,
+		Number(input.semanticScore !== null),
+		input.bm25Score ?? 0,
+		Number(input.bm25Score !== null),
+		input.crossEncoderScore ?? 0,
+		Number(input.crossEncoderScore !== null),
+		1 / Math.max(input.baseRank, 1),
+		Number(input.retrievalMode === RetrievalMode.SEMANTIC),
+		Number(input.retrievalMode === RetrievalMode.BM25),
+		Number(input.retrievalMode === RetrievalMode.HYBRID)
+	];
+
+	if (!features.every(Number.isFinite)) {
+		throw new Error('Retrieval feature vector contains a non-finite value.');
+	}
+
+	return features;
+}
+
 export function buildRetrievalTrainingFeatures(
 	examples: RetrievalTrainingExample[]
 ): PreparedRetrievalTrainingExample[] {
-	return examples.map((example) => {
-		const features = [
-			example.baseScore,
-			example.semanticScore ?? 0,
-			Number(example.semanticScore !== null),
-			example.bm25Score ?? 0,
-			Number(example.bm25Score !== null),
-			example.crossEncoderScore ?? 0,
-			Number(example.crossEncoderScore !== null),
-			1 / Math.max(example.baseRank, 1),
-			Number(example.retrievalMode === RetrievalMode.SEMANTIC),
-			Number(example.retrievalMode === RetrievalMode.BM25),
-			Number(example.retrievalMode === RetrievalMode.HYBRID)
-		];
-
-		if (!features.every(Number.isFinite)) {
-			throw new Error(`Training example ${example.feedbackId} contains a non-finite feature.`);
-		}
-
-		return {
-			feedbackId: example.feedbackId,
-			queryHash: example.queryHash,
-			retrievalMode: example.retrievalMode,
-			rating: example.rating,
-			target: example.target,
-			baseRank: example.baseRank,
-			features
-		};
-	});
+	return examples.map((example) => ({
+		feedbackId: example.feedbackId,
+		queryHash: example.queryHash,
+		retrievalMode: example.retrievalMode,
+		rating: example.rating,
+		target: example.target,
+		baseRank: example.baseRank,
+		features: buildRetrievalFeatureVector(example)
+	}));
 }

@@ -20,11 +20,16 @@ import {
 	THEME_MODES
 } from '$lib/constants';
 import type { WorkspaceLayoutSnapshot } from '$lib/types/workspace';
+import type {
+	RetrievalTrainingEvaluation,
+	RetrievalTrainingHyperparameters
+} from '$lib/server/rag/training/retrieval-model.types';
 
 export const appState = sqliteTable('app_state', {
 	id: text('id').notNull().primaryKey().default('app'),
 	activeProfileId: text('active_profile_id'),
 	activeLayoutId: text('active_layout_id'),
+	activeRetrievalModelId: text('active_retrieval_model_id'),
 	themeColor: text('theme_color', { enum: THEME_COLORS }).notNull().default(DEFAULT_THEME.color),
 	themeMode: text('theme_mode', { enum: THEME_MODES }).notNull().default(DEFAULT_THEME.mode)
 });
@@ -290,6 +295,7 @@ export const retrievalImpressions = sqliteTable(
 		embeddingModel: text('embedding_model').notNull(),
 		rerankerModel: text('reranker_model').notNull(),
 		scoringVersion: text('scoring_version').notNull(),
+		rankerModelId: text('ranker_model_id'),
 		createdAt: text('created_at').notNull()
 	},
 	(table) => [
@@ -316,7 +322,8 @@ export const retrievalImpressionResults = sqliteTable(
 		semanticScore: real('semantic_score'),
 		bm25Score: real('bm25_score'),
 		crossEncoderScore: real('cross_encoder_score'),
-		baseScore: real('base_score').notNull()
+		baseScore: real('base_score').notNull(),
+		learnedScore: real('learned_score')
 	},
 	(table) => [
 		index('retrieval_impression_results_impression_idx').on(table.impressionId),
@@ -356,6 +363,63 @@ export const retrievalFeedback = sqliteTable(
 		index('retrieval_feedback_query_idx').on(table.queryHash),
 		index('retrieval_feedback_impression_result_idx').on(table.impressionResultId),
 		uniqueIndex('retrieval_feedback_chunk_query_idx').on(table.chunkId, table.queryHash)
+	]
+);
+
+export const retrievalTrainingRuns = sqliteTable(
+	'retrieval_training_runs',
+	{
+		id: text('id').notNull().primaryKey(),
+		status: text('status', {
+			enum: ['training', 'completed', 'failed']
+		}).notNull(),
+		datasetVersion: integer('dataset_version').notNull(),
+		featureVersion: integer('feature_version').notNull(),
+		embeddingModel: text('embedding_model').notNull(),
+		rerankerModel: text('reranker_model').notNull(),
+		scoringVersion: text('scoring_version').notNull(),
+		trainingExamples: integer('training_examples').notNull(),
+		validationExamples: integer('validation_examples').notNull(),
+		distinctQueries: integer('distinct_queries').notNull(),
+		totalFeedback: integer('total_feedback').notNull(),
+		attributedFeedback: integer('attributed_feedback').notNull(),
+		unattributedFeedback: integer('unattributed_feedback').notNull(),
+		inconsistentFeedback: integer('inconsistent_feedback').notNull(),
+		hyperparameters: text('hyperparameters', { mode: 'json' })
+			.$type<RetrievalTrainingHyperparameters>()
+			.notNull(),
+		evaluation: text('evaluation', { mode: 'json' }).$type<RetrievalTrainingEvaluation>(),
+		error: text('error'),
+		startedAt: text('started_at').notNull(),
+		completedAt: text('completed_at')
+	},
+	(table) => [
+		index('retrieval_training_runs_status_idx').on(table.status),
+		index('retrieval_training_runs_started_idx').on(table.startedAt)
+	]
+);
+
+export const retrievalRankerModels = sqliteTable(
+	'retrieval_ranker_models',
+	{
+		id: text('id').notNull().primaryKey(),
+		trainingRunId: text('training_run_id')
+			.notNull()
+			.references(() => retrievalTrainingRuns.id, { onDelete: 'cascade' }),
+		featureVersion: integer('feature_version').notNull(),
+		featureNames: text('feature_names', { mode: 'json' }).$type<string[]>().notNull(),
+		means: text('means', { mode: 'json' }).$type<number[]>().notNull(),
+		standardDeviations: text('standard_deviations', { mode: 'json' }).$type<number[]>().notNull(),
+		weights: text('weights', { mode: 'json' }).$type<number[]>().notNull(),
+		intercept: real('intercept').notNull(),
+		regularization: real('regularization').notNull(),
+		epochs: integer('epochs').notNull(),
+		trainingLoss: real('training_loss').notNull(),
+		createdAt: text('created_at').notNull()
+	},
+	(table) => [
+		uniqueIndex('retrieval_ranker_models_training_run_idx').on(table.trainingRunId),
+		index('retrieval_ranker_models_created_idx').on(table.createdAt)
 	]
 );
 
@@ -500,3 +564,9 @@ export type NewRetrievalImpression = typeof retrievalImpressions.$inferInsert;
 
 export type RetrievalImpressionResult = typeof retrievalImpressionResults.$inferSelect;
 export type NewRetrievalImpressionResult = typeof retrievalImpressionResults.$inferInsert;
+
+export type RetrievalTrainingRun = typeof retrievalTrainingRuns.$inferSelect;
+export type NewRetrievalTrainingRun = typeof retrievalTrainingRuns.$inferInsert;
+
+export type RetrievalRankerModel = typeof retrievalRankerModels.$inferSelect;
+export type NewRetrievalRankerModel = typeof retrievalRankerModels.$inferInsert;

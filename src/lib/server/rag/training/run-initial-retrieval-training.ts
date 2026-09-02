@@ -1,5 +1,9 @@
+import { RetrievalModelsRepository } from '$lib/server/repositories';
 import { buildRetrievalTrainingDataset } from './build-retrieval-training-dataset';
-import { buildRetrievalTrainingFeatures } from './build-retrieval-training-features';
+import {
+	buildRetrievalTrainingFeatures,
+	RETRIEVAL_FEATURE_NAMES
+} from './build-retrieval-training-features';
 import {
 	evaluateRetrievalRanker,
 	type RetrievalTrainingEvaluation
@@ -9,9 +13,16 @@ import {
 	scaleRetrievalTrainingExamples,
 	type RetrievalFeatureScaler
 } from './retrieval-feature-scaler';
+import type { RetrievalTrainingHyperparameters } from './retrieval-model.types';
 import {
 	RETRIEVAL_FEATURE_VERSION,
-	TRAINING_L2_REGULARIZATION
+	TRAINING_EARLY_STOPPING_PATIENCE,
+	TRAINING_L2_REGULARIZATION,
+	TRAINING_LEARNING_RATE,
+	TRAINING_LOSS_TOLERANCE,
+	TRAINING_MAX_EPOCHS,
+	RETRIEVAL_RATING_BALANCE_STRATEGY,
+	VALIDATION_FRACTION
 } from './retrieval-training-constants';
 import type { RetrievalTrainingDatasetStats } from './retrieval-training.types';
 import {
@@ -25,6 +36,8 @@ import {
 } from './train-linear-retrieval-ranker';
 
 export interface InitialRetrievalTrainingResult {
+	runId: string;
+	modelId: string;
 	featureVersion: typeof RETRIEVAL_FEATURE_VERSION;
 	embeddingModel: string;
 	rerankerModel: string;
@@ -45,25 +58,74 @@ export async function runInitialRetrievalTraining(): Promise<InitialRetrievalTra
 	const preparedExamples = buildRetrievalTrainingFeatures(cohort.examples);
 	const split = splitRetrievalTrainingDataset(preparedExamples);
 
-	const scaler = fitRetrievalFeatureScaler(split.training);
-	const scaledTraining = scaleRetrievalTrainingExamples(split.training, scaler);
-	const scaledValidation = scaleRetrievalTrainingExamples(split.validation, scaler);
+	const hyperparameters: RetrievalTrainingHyperparameters = {
+		learningRate: TRAINING_LEARNING_RATE,
+		l2Regularization: TRAINING_L2_REGULARIZATION,
+		maxEpochs: TRAINING_MAX_EPOCHS,
+		earlyStoppingPatience: TRAINING_EARLY_STOPPING_PATIENCE,
+		lossTolerance: TRAINING_LOSS_TOLERANCE,
+		validationFraction: VALIDATION_FRACTION,
+		ratingBalanceStrategy: RETRIEVAL_RATING_BALANCE_STRATEGY
+	};
 
-	const ranker = trainLinearRetrievalRanker(scaledTraining);
-	const evaluation = evaluateRetrievalRanker(ranker, scaledValidation);
-
-	return {
+	const run = await RetrievalModelsRepository.startTrainingRun({
+		datasetVersion: dataset.version,
 		featureVersion: RETRIEVAL_FEATURE_VERSION,
 		embeddingModel: cohort.embeddingModel,
 		rerankerModel: cohort.rerankerModel,
 		scoringVersion: cohort.scoringVersion,
-		trainingExamples: scaledTraining.length,
-		validationExamples: scaledValidation.length,
+		trainingExamples: split.training.length,
+		validationExamples: split.validation.length,
 		distinctQueries: cohort.distinctQueries,
-		datasetStats: dataset.stats,
-		scaler,
-		ranker,
-		evaluation,
-		regularization: TRAINING_L2_REGULARIZATION
-	};
+		totalFeedback: dataset.stats.totalFeedback,
+		attributedFeedback: dataset.stats.attributedFeedback,
+		unattributedFeedback: dataset.stats.unattributedFeedback,
+		inconsistentFeedback: dataset.stats.inconsistentFeedback,
+		hyperparameters
+	});
+
+	try {
+		const scaler = fitRetrievalFeatureScaler(split.training);
+		const scaledTraining = scaleRetrievalTrainingExamples(split.training, scaler);
+		const scaledValidation = scaleRetrievalTrainingExamples(split.validation, scaler);
+
+		const ranker = trainLinearRetrievalRanker(scaledTraining);
+		const evaluation = evaluateRetrievalRanker(ranker, scaledValidation);
+
+		const saved = await RetrievalModelsRepository.completeTrainingRun(run.id, {
+			featureVersion: RETRIEVAL_FEATURE_VERSION,
+			featureNames: RETRIEVAL_FEATURE_NAMES,
+			scaler,
+			ranker,
+			evaluation,
+			regularization: TRAINING_L2_REGULARIZATION
+		});
+
+		return {
+			runId: saved.run.id,
+			modelId: saved.model.id,
+			featureVersion: RETRIEVAL_FEATURE_VERSION,
+			embeddingModel: cohort.embeddingModel,
+			rerankerModel: cohort.rerankerModel,
+			scoringVersion: cohort.scoringVersion,
+			trainingExamples: scaledTraining.length,
+			validationExamples: scaledValidation.length,
+			distinctQueries: cohort.distinctQueries,
+			datasetStats: dataset.stats,
+			scaler,
+			ranker,
+			evaluation,
+			regularization: TRAINING_L2_REGULARIZATION
+		};
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unknown retrieval training failure.';
+
+		try {
+			await RetrievalModelsRepository.failTrainingRun(run.id, message);
+		} catch (persistenceError) {
+			console.error(`Failed to mark retrieval training run ${run.id} as failed.`, persistenceError);
+		}
+
+		throw error;
+	}
 }

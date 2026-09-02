@@ -1,19 +1,19 @@
 import type { PreparedRetrievalTrainingExample } from './build-retrieval-training-features';
+import type { RetrievalTrainingEvaluation } from './retrieval-model.types';
+import { blendLearnedRanking } from '$lib/server/rag/search/blend-learned-ranking';
 import {
 	predictRetrievalRating,
 	type LinearRetrievalRankerParameters
 } from './train-linear-retrieval-ranker';
+import {
+	LEARNED_RANKING_BLEND_WEIGHT,
+	RETRIEVAL_RANKING_STRATEGY
+} from './retrieval-training-constants';
+
+export type { RetrievalTrainingEvaluation } from './retrieval-model.types';
 
 const NDCG_LIMIT = 5;
-
-export interface RetrievalTrainingEvaluation {
-	meanAbsoluteError: number;
-	baselineNdcgAt5: number | null;
-	trainedNdcgAt5: number | null;
-	ndcgImprovement: number | null;
-	evaluatedExamples: number;
-	evaluatedRankingGroups: number;
-}
+const NDCG_TIE_TOLERANCE = 1e-9;
 
 function discountedCumulativeGain(examples: PreparedRetrievalTrainingExample[]): number {
 	return examples.slice(0, NDCG_LIMIT).reduce((total, example, index) => {
@@ -55,35 +55,37 @@ export function evaluateRetrievalRanker(
 		groups.set(groupKey, group);
 	}
 
-	const baselineScores: number[] = [];
-	const trainedScores: number[] = [];
+	const rankingGroupScores: Array<{ baseline: number; trained: number }> = [];
 
 	for (const group of groups.values()) {
 		if (group.length < 2) continue;
 
 		const ideal = [...group].sort((left, right) => right.rating - left.rating);
 		const baseline = [...group].sort((left, right) => left.baseRank - right.baseRank);
-		const trained = [...group].sort((left, right) => {
-			const rightPrediction = predictRetrievalRating(ranker, right.features);
-			const leftPrediction = predictRetrievalRating(ranker, left.features);
-			const predictionDifference = rightPrediction - leftPrediction;
+		const trained = blendLearnedRanking(
+			baseline.map((example) => ({
+				value: example,
+				learnedScore: predictRetrievalRating(ranker, example.features)
+			})),
+			LEARNED_RANKING_BLEND_WEIGHT
+		).map(({ value }) => value);
 
-			if (predictionDifference !== 0) return predictionDifference;
-			return left.baseRank - right.baseRank;
+		rankingGroupScores.push({
+			baseline: calculateNdcg(baseline, ideal),
+			trained: calculateNdcg(trained, ideal)
 		});
-
-		baselineScores.push(calculateNdcg(baseline, ideal));
-		trainedScores.push(calculateNdcg(trained, ideal));
 	}
 
 	const baselineNdcgAt5 =
-		baselineScores.length > 0
-			? baselineScores.reduce((total, score) => total + score, 0) / baselineScores.length
+		rankingGroupScores.length > 0
+			? rankingGroupScores.reduce((total, scores) => total + scores.baseline, 0) /
+				rankingGroupScores.length
 			: null;
 
 	const trainedNdcgAt5 =
-		trainedScores.length > 0
-			? trainedScores.reduce((total, score) => total + score, 0) / trainedScores.length
+		rankingGroupScores.length > 0
+			? rankingGroupScores.reduce((total, scores) => total + scores.trained, 0) /
+				rankingGroupScores.length
 			: null;
 
 	let ndcgImprovement: number | null = null;
@@ -91,12 +93,29 @@ export function evaluateRetrievalRanker(
 		ndcgImprovement = trainedNdcgAt5 - baselineNdcgAt5;
 	}
 
+	const rankingGroupDeltas = rankingGroupScores.map(({ baseline, trained }) => trained - baseline);
+	const improvedRankingGroups = rankingGroupDeltas.filter(
+		(delta) => delta > NDCG_TIE_TOLERANCE
+	).length;
+	const degradedRankingGroups = rankingGroupDeltas.filter(
+		(delta) => delta < -NDCG_TIE_TOLERANCE
+	).length;
+	const tiedRankingGroups =
+		rankingGroupDeltas.length - improvedRankingGroups - degradedRankingGroups;
+
 	return {
+		rankingStrategy: RETRIEVAL_RANKING_STRATEGY,
+		blendWeight: LEARNED_RANKING_BLEND_WEIGHT,
 		meanAbsoluteError: absoluteErrorTotal / validationExamples.length,
 		baselineNdcgAt5,
 		trainedNdcgAt5,
 		ndcgImprovement,
 		evaluatedExamples: validationExamples.length,
-		evaluatedRankingGroups: baselineScores.length
+		evaluatedRankingGroups: rankingGroupScores.length,
+		improvedRankingGroups,
+		degradedRankingGroups,
+		tiedRankingGroups,
+		worstRankingGroupNdcgDelta:
+			rankingGroupDeltas.length > 0 ? Math.min(...rankingGroupDeltas) : null
 	};
 }

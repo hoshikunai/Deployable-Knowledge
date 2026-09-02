@@ -6,10 +6,14 @@ export {
 	scaleRetrievalTrainingExamples
 } from './retrieval-feature-scaler';
 export { runInitialRetrievalTraining } from './run-initial-retrieval-training';
-export { selectRetrievalTrainingCohort } from './select-retrieval-training-cohort';
+export {
+	RetrievalTrainingReadinessError,
+	selectRetrievalTrainingCohort
+} from './select-retrieval-training-cohort';
 export { splitRetrievalTrainingDataset } from './split-retrieval-training-dataset';
 export {
 	predictRetrievalRating,
 	trainLinearRetrievalRanker
 } from './train-linear-retrieval-ranker';
 export * from './retrieval-training.types';
+export * from './retrieval-model.types';
