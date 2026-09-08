@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "6e79d224-42eb-4f33-8673-ac0af8cef625",
+  "id": "22817a87-b238-48b1-ada9-44a09f5ff69c",
   "prevIds": [
-    "1127efc7-3ad2-4c1b-82d0-c36e325447dc"
+    "c5a3e128-258d-4f89-b42d-67f61adc1e70"
   ],
   "ddl": [
     {
@@ -52,6 +52,14 @@
     },
     {
       "name": "providers",
+      "entityType": "tables"
+    },
+    {
+      "name": "retrieval_benchmark_cases",
+      "entityType": "tables"
+    },
+    {
+      "name": "retrieval_benchmark_judgments",
       "entityType": "tables"
     },
     {
@@ -175,6 +183,16 @@
       "default": null,
       "generated": null,
       "name": "active_layout_id",
+      "entityType": "columns",
+      "table": "app_state"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "active_retrieval_model_id",
       "entityType": "columns",
       "table": "app_state"
     },
@@ -709,16 +727,6 @@
       "table": "profiles"
     },
     {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "context_size",
-      "entityType": "columns",
-      "table": "profiles"
-    },
-    {
       "type": "text",
       "notNull": true,
       "autoincrement": false,
@@ -876,6 +884,96 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text(255)",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "query",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "document_ids",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "case_id",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "chunk_id",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "relevance",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "retrieval_feedback"
     },
     {
@@ -925,6 +1023,36 @@
       "default": null,
       "generated": null,
       "name": "rating",
+      "entityType": "columns",
+      "table": "retrieval_feedback"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'human_expert'",
+      "generated": null,
+      "name": "feedback_source",
+      "entityType": "columns",
+      "table": "retrieval_feedback"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "confidence",
+      "entityType": "columns",
+      "table": "retrieval_feedback"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rationale",
       "entityType": "columns",
       "table": "retrieval_feedback"
     },
@@ -1020,11 +1148,21 @@
     },
     {
       "type": "integer",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "displayed_rank",
+      "entityType": "columns",
+      "table": "retrieval_impression_results"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "was_displayed",
       "entityType": "columns",
       "table": "retrieval_impression_results"
     },
@@ -1065,6 +1203,16 @@
       "default": null,
       "generated": null,
       "name": "base_score",
+      "entityType": "columns",
+      "table": "retrieval_impression_results"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "learned_score",
       "entityType": "columns",
       "table": "retrieval_impression_results"
     },
@@ -1145,6 +1293,16 @@
       "default": null,
       "generated": null,
       "name": "scoring_version",
+      "entityType": "columns",
+      "table": "retrieval_impressions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ranker_model_id",
       "entityType": "columns",
       "table": "retrieval_impressions"
     },
@@ -1295,6 +1453,16 @@
       "default": null,
       "generated": null,
       "name": "status",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'human_expert'",
+      "generated": null,
+      "name": "feedback_source",
       "entityType": "columns",
       "table": "retrieval_training_runs"
     },
@@ -1590,7 +1758,7 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
@@ -1629,12 +1797,22 @@
       "table": "synced_files"
     },
     {
-      "type": "integer",
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
-      "default": "false",
+      "default": "'synced'",
       "generated": null,
-      "name": "ignored",
+      "name": "state",
+      "entityType": "columns",
+      "table": "synced_files"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message",
       "entityType": "columns",
       "table": "synced_files"
     },
@@ -1865,6 +2043,36 @@
     },
     {
       "columns": [
+        "case_id"
+      ],
+      "tableTo": "retrieval_benchmark_cases",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_retrieval_benchmark_judgments_case_id_retrieval_benchmark_cases_id_fk",
+      "entityType": "fks",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "columns": [
+        "chunk_id"
+      ],
+      "tableTo": "document_chunks",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_retrieval_benchmark_judgments_chunk_id_document_chunks_id_fk",
+      "entityType": "fks",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "columns": [
         "chunk_id"
       ],
       "tableTo": "document_chunks",
@@ -1985,6 +2193,16 @@
     },
     {
       "columns": [
+        "case_id",
+        "chunk_id"
+      ],
+      "nameExplicit": false,
+      "name": "retrieval_benchmark_judgments_pk",
+      "entityType": "pks",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "columns": [
         "folder_id",
         "relative_path"
       ],
@@ -2090,6 +2308,15 @@
       "nameExplicit": false,
       "name": "providers_pk",
       "table": "providers",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "retrieval_benchmark_cases_pk",
+      "table": "retrieval_benchmark_cases",
       "entityType": "pks"
     },
     {
@@ -2453,6 +2680,34 @@
     {
       "columns": [
         {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_benchmark_cases_created_idx",
+      "entityType": "indexes",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "columns": [
+        {
+          "value": "chunk_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_benchmark_judgments_chunk_idx",
+      "entityType": "indexes",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "columns": [
+        {
           "value": "chunk_id",
           "isExpression": false
         }
@@ -2481,6 +2736,20 @@
     {
       "columns": [
         {
+          "value": "feedback_source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_feedback_source_idx",
+      "entityType": "indexes",
+      "table": "retrieval_feedback"
+    },
+    {
+      "columns": [
+        {
           "value": "impression_result_id",
           "isExpression": false
         }
@@ -2501,12 +2770,16 @@
         {
           "value": "query_hash",
           "isExpression": false
+        },
+        {
+          "value": "feedback_source",
+          "isExpression": false
         }
       ],
       "isUnique": true,
       "where": null,
       "origin": "manual",
-      "name": "retrieval_feedback_chunk_query_idx",
+      "name": "retrieval_feedback_chunk_query_source_idx",
       "entityType": "indexes",
       "table": "retrieval_feedback"
     },
@@ -2633,6 +2906,20 @@
     {
       "columns": [
         {
+          "value": "feedback_source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_training_runs_source_idx",
+      "entityType": "indexes",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "columns": [
+        {
           "value": "started_at",
           "isExpression": false
         }
@@ -2717,6 +3004,24 @@
     {
       "columns": [
         {
+          "value": "folder_id",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "synced_files_state_idx",
+      "entityType": "indexes",
+      "table": "synced_files"
+    },
+    {
+      "columns": [
+        {
           "value": "sort_order",
           "isExpression": false
         }
@@ -2729,10 +3034,28 @@
       "table": "workspace_layouts"
     },
     {
+      "value": "\"relevance\" between 1 and 5",
+      "name": "retrieval_benchmark_judgments_relevance_check",
+      "entityType": "checks",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
       "value": "\"rating\" between 1 and 5",
       "name": "retrieval_feedback_rating_check",
       "entityType": "checks",
       "table": "retrieval_feedback"
+    },
+    {
+      "value": "\"confidence\" is null or \"confidence\" between 0 and 1",
+      "name": "retrieval_feedback_confidence_check",
+      "entityType": "checks",
+      "table": "retrieval_feedback"
+    },
+    {
+      "value": "\"was_displayed\" = (\"displayed_rank\" is not null)",
+      "name": "retrieval_impression_results_display_state_check",
+      "entityType": "checks",
+      "table": "retrieval_impression_results"
     }
   ],
   "renames": []

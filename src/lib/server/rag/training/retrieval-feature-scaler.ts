@@ -1,9 +1,9 @@
 import {
 	RETRIEVAL_FEATURE_NAMES,
+	RETRIEVAL_UNSCALED_FEATURE_NAMES,
 	type PreparedRetrievalTrainingExample
 } from './build-retrieval-training-features';
 
-const CONTINUOUS_FEATURE_INDEXES = new Set([0, 1, 3, 5, 7]);
 const MINIMUM_STANDARD_DEVIATION = 1e-8;
 
 export interface RetrievalFeatureScaler {
@@ -30,15 +30,15 @@ export function fitRetrievalFeatureScaler(
 		validateFeatureLength(example.features);
 	}
 
-	const means = RETRIEVAL_FEATURE_NAMES.map((_, featureIndex) => {
-		if (!CONTINUOUS_FEATURE_INDEXES.has(featureIndex)) return 0;
+	const means = RETRIEVAL_FEATURE_NAMES.map((featureName, featureIndex) => {
+		if (RETRIEVAL_UNSCALED_FEATURE_NAMES.has(featureName)) return 0;
 
 		const total = examples.reduce((sum, example) => sum + example.features[featureIndex], 0);
 		return total / examples.length;
 	});
 
-	const standardDeviations = RETRIEVAL_FEATURE_NAMES.map((_, featureIndex) => {
-		if (!CONTINUOUS_FEATURE_INDEXES.has(featureIndex)) return 1;
+	const standardDeviations = RETRIEVAL_FEATURE_NAMES.map((featureName, featureIndex) => {
+		if (RETRIEVAL_UNSCALED_FEATURE_NAMES.has(featureName)) return 1;
 
 		const squaredDifferenceTotal = examples.reduce((sum, example) => {
 			const difference = example.features[featureIndex] - means[featureIndex];

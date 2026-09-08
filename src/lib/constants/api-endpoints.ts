@@ -107,6 +107,11 @@ export const API_RETRIEVAL_MODELS = {
 	ACTIVE: '/retrieval-models/active'
 };
 
+export const API_RETRIEVAL_BENCHMARKS = {
+	CASES: '/retrieval-benchmarks/cases',
+	RUN: '/retrieval-benchmarks/run'
+};
+
 export const API_SESSIONS = {
 	BASE: '/sessions',
 	byId: (id: string) => `/sessions/${segment(id)}`,

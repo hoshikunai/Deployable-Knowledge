@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import type { RetrievalFeedbackSource } from '$lib/constants';
 import { db } from '$lib/server/database/database';
 import {
@@ -8,6 +8,24 @@ import {
 } from '$lib/server/database/schema';
 
 export class RetrievalTrainingRepository {
+	static async readCandidateRows(impressionIds: string[]) {
+		if (impressionIds.length === 0) return [];
+
+		return db
+			.select({
+				impressionResultId: retrievalImpressionResults.id,
+				impressionId: retrievalImpressionResults.impressionId,
+				retrievalMode: retrievalImpressionResults.retrievalMode,
+				baseRank: retrievalImpressionResults.baseRank,
+				semanticScore: retrievalImpressionResults.semanticScore,
+				bm25Score: retrievalImpressionResults.bm25Score,
+				crossEncoderScore: retrievalImpressionResults.crossEncoderScore,
+				baseScore: retrievalImpressionResults.baseScore
+			})
+			.from(retrievalImpressionResults)
+			.where(inArray(retrievalImpressionResults.impressionId, impressionIds));
+	}
+
 	static readDatasetRows(feedbackSource: RetrievalFeedbackSource) {
 		return db
 			.select({

@@ -1,7 +1,17 @@
 import type { RetrievalMode } from '$lib/enums';
 import type { ChunkRatingValue, RetrievalFeedbackSource } from '$lib/types';
 
-export const RETRIEVAL_TRAINING_DATASET_VERSION = 2 as const;
+export const RETRIEVAL_TRAINING_DATASET_VERSION = 4 as const;
+
+export interface RetrievalTrainingCandidate {
+	impressionResultId: string;
+	retrievalMode: RetrievalMode;
+	baseRank: number;
+	semanticScore: number | null;
+	bm25Score: number | null;
+	crossEncoderScore: number | null;
+	baseScore: number;
+}
 
 export interface RetrievalTrainingExample {
 	feedbackId: string;
@@ -26,6 +36,7 @@ export interface RetrievalTrainingExample {
 	scoringVersion: string;
 	impressionCreatedAt: string;
 	feedbackUpdatedAt: string;
+	candidateGroup: RetrievalTrainingCandidate[];
 }
 
 export interface RetrievalTrainingDatasetStats {

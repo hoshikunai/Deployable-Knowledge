@@ -81,7 +81,8 @@ export class RetrievalFeedbackRepository {
 		const attribution = await db
 			.select({
 				retrievalMode: retrievalImpressionResults.retrievalMode,
-				resultRank: retrievalImpressionResults.displayedRank
+				resultRank: retrievalImpressionResults.displayedRank,
+				wasDisplayed: retrievalImpressionResults.wasDisplayed
 			})
 			.from(retrievalImpressionResults)
 			.innerJoin(
@@ -92,12 +93,13 @@ export class RetrievalFeedbackRepository {
 				and(
 					eq(retrievalImpressionResults.id, input.impressionResultId),
 					eq(retrievalImpressionResults.chunkId, input.chunkId),
+					eq(retrievalImpressionResults.wasDisplayed, true),
 					eq(retrievalImpressions.queryHash, queryHash)
 				)
 			)
 			.get();
 
-		if (!attribution) return null;
+		if (!attribution || !attribution.wasDisplayed || attribution.resultRank === null) return null;
 
 		const timestamp = new Date().toISOString();
 		const [row] = await db

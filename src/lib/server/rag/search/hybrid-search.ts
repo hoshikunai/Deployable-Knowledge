@@ -29,6 +29,17 @@ export interface SearchMethodExecution {
 	rankerModelId: string | null;
 }
 
+export interface RetrievalBenchmarkSearchExecution {
+	query: string;
+	activeModelId: string | null;
+	rankings: {
+		semantic: ScoredSearchMatch[];
+		bm25: ScoredSearchMatch[];
+		hybridBaseline: ScoredSearchMatch[];
+		hybridLearned: ScoredSearchMatch[];
+	};
+}
+
 interface CollectedMethodResults {
 	query: string;
 	semanticScored: ScoredSearchMatch[];
@@ -187,5 +198,27 @@ export async function searchHybrid(
 	return {
 		query: search.query,
 		results: learnedHybrid.matches
+	};
+}
+
+export async function searchForRetrievalBenchmark(
+	options: SearchOptionsBase
+): Promise<RetrievalBenchmarkSearchExecution> {
+	const search = await collectMethodResults(options);
+	const learnedHybrid = await rerankWithActiveRetrievalModel(
+		RetrievalMode.HYBRID,
+		search.hybridScored,
+		buildRetrievalScoreMaps(search)
+	);
+
+	return {
+		query: search.query,
+		activeModelId: learnedHybrid.modelId,
+		rankings: {
+			semantic: search.semanticScored,
+			bm25: search.bm25Scored,
+			hybridBaseline: search.hybridScored,
+			hybridLearned: learnedHybrid.matches
+		}
 	};
 }

@@ -36,7 +36,8 @@ export interface RetrievalCandidateSnapshot {
 	chunkId: string;
 	retrievalMode: RetrievalMode;
 	baseRank: number;
-	displayedRank: number;
+	displayedRank: number | null;
+	wasDisplayed: boolean;
 	semanticScore: number | null;
 	bm25Score: number | null;
 	crossEncoderScore: number | null;
@@ -80,31 +81,30 @@ export function buildRetrievalCandidateSnapshots(
 	scores: RetrievalScoreMaps,
 	learnedScores: ReadonlyMap<string, number> = new Map()
 ): RetrievalCandidateSnapshot[] {
-	const baseResultsByChunk = new Map(
-		baseResults.map((match, index) => [
-			match.chunkId,
-			{
-				rank: index + 1,
-				score: match.score
-			}
-		])
+	const baseChunkIds = new Set(baseResults.map(({ chunkId }) => chunkId));
+	const displayedRanks = new Map(
+		displayedResults.map(({ chunkId }, index) => [chunkId, index + 1])
 	);
 
-	return displayedResults.map((match, index) => {
-		const baseResult = baseResultsByChunk.get(match.chunkId);
-		if (!baseResult) {
-			throw new Error(`Displayed chunk ${match.chunkId} is missing from the base ranking.`);
+	for (const match of displayedResults) {
+		if (!baseChunkIds.has(match.chunkId)) {
+			throw new Error(`Displayed chunk ${match.chunkId} is missing from the candidate pool.`);
 		}
+	}
+
+	return baseResults.map((match, index) => {
+		const displayedRank = displayedRanks.get(match.chunkId) ?? null;
 
 		return {
 			chunkId: match.chunkId,
 			retrievalMode,
-			baseRank: baseResult.rank,
-			displayedRank: index + 1,
+			baseRank: index + 1,
+			displayedRank,
+			wasDisplayed: displayedRank !== null,
 			semanticScore: scores.semantic.get(match.chunkId) ?? null,
 			bm25Score: scores.bm25.get(match.chunkId) ?? null,
 			crossEncoderScore: scores.crossEncoder.get(match.chunkId) ?? null,
-			baseScore: baseResult.score,
+			baseScore: match.score,
 			learnedScore: learnedScores.get(match.chunkId) ?? null
 		};
 	});

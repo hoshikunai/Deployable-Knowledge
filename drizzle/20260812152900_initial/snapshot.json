@@ -1068,16 +1068,6 @@
       "entityType": "columns"
     },
     {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "context_size",
-      "table": "profiles",
-      "entityType": "columns"
-    },
-    {
       "type": "text",
       "notNull": true,
       "autoincrement": false,
@@ -1505,7 +1495,7 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
@@ -1544,12 +1534,22 @@
       "entityType": "columns"
     },
     {
-      "type": "integer",
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
-      "default": "false",
+      "default": "'synced'",
       "generated": null,
-      "name": "ignored",
+      "name": "state",
+      "table": "synced_files",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message",
       "table": "synced_files",
       "entityType": "columns"
     },
@@ -1588,6 +1588,24 @@
       "where": null,
       "origin": "manual",
       "name": "synced_files_document_idx",
+      "table": "synced_files",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "folder_id",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "synced_files_state_idx",
       "table": "synced_files",
       "entityType": "indexes"
     },

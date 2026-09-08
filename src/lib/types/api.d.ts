@@ -465,3 +465,52 @@ export interface ApiRetrievalModelActivationRequest {
 export interface ApiRetrievalModelActivationResponse {
 	activeModelId: string | null;
 }
+
+export interface ApiRetrievalBenchmarkJudgment {
+	chunkId: string;
+	relevance: ChunkRatingValue;
+}
+
+export interface ApiRetrievalBenchmarkCase {
+	id: string;
+	name: string;
+	query: string;
+	documentIds: string[];
+	judgments: ApiRetrievalBenchmarkJudgment[];
+	createdAt: string;
+}
+
+export interface ApiRetrievalBenchmarkCaseCreateRequest {
+	name: string;
+	query: string;
+	documentIds?: string[];
+	judgments: ApiRetrievalBenchmarkJudgment[];
+}
+
+export interface ApiRetrievalBenchmarkCasesResponse {
+	cases: ApiRetrievalBenchmarkCase[];
+}
+
+export interface ApiRetrievalBenchmarkMetrics {
+	recallAtK: number;
+	reciprocalRank: number;
+	ndcgAt5: number;
+}
+
+export type ApiRetrievalBenchmarkRanking = 'semantic' | 'bm25' | 'hybridBaseline' | 'hybridLearned';
+
+export interface ApiRetrievalBenchmarkCaseResult {
+	caseId: string;
+	name: string;
+	query: string;
+	metrics: Record<ApiRetrievalBenchmarkRanking, ApiRetrievalBenchmarkMetrics>;
+}
+
+export interface ApiRetrievalBenchmarkReport {
+	generatedAt: string;
+	topK: number;
+	caseCount: number;
+	activeModelId: string | null;
+	cases: ApiRetrievalBenchmarkCaseResult[];
+	aggregate: Record<ApiRetrievalBenchmarkRanking, ApiRetrievalBenchmarkMetrics>;
+}

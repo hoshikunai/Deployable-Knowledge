@@ -4,16 +4,56 @@ import { RetrievalTrainingRepository } from '$lib/server/repositories';
 import type { ChunkRatingValue, RetrievalFeedbackSource } from '$lib/types';
 import {
 	RETRIEVAL_TRAINING_DATASET_VERSION,
+	type RetrievalTrainingCandidate,
 	type RetrievalTrainingDataset,
 	type RetrievalTrainingExample
 } from './retrieval-training.types';
 
 const RETRIEVAL_MODES = new Set<string>(Object.values(RetrievalMode));
 
+function retrievalGroupKey(impressionId: string, retrievalMode: RetrievalMode): string {
+	return `${impressionId}\u0000${retrievalMode}`;
+}
+
 export async function buildRetrievalTrainingDataset(
 	feedbackSource: RetrievalFeedbackSource = HUMAN_EXPERT_FEEDBACK_SOURCE
 ): Promise<RetrievalTrainingDataset> {
 	const rows = await RetrievalTrainingRepository.readDatasetRows(feedbackSource);
+	const impressionIds = [
+		...new Set(
+			rows.flatMap((row) => {
+				if (row.impressionId === null) return [];
+				return [row.impressionId];
+			})
+		)
+	];
+	const candidateRows = await RetrievalTrainingRepository.readCandidateRows(impressionIds);
+	const candidateGroups = new Map<string, RetrievalTrainingCandidate[]>();
+
+	for (const candidate of candidateRows) {
+		if (!RETRIEVAL_MODES.has(candidate.retrievalMode)) continue;
+
+		const retrievalMode = candidate.retrievalMode as RetrievalMode;
+		const key = retrievalGroupKey(candidate.impressionId, retrievalMode);
+		const group = candidateGroups.get(key) ?? [];
+
+		group.push({
+			impressionResultId: candidate.impressionResultId,
+			retrievalMode,
+			baseRank: candidate.baseRank,
+			semanticScore: candidate.semanticScore,
+			bm25Score: candidate.bm25Score,
+			crossEncoderScore: candidate.crossEncoderScore,
+			baseScore: candidate.baseScore
+		});
+
+		candidateGroups.set(key, group);
+	}
+
+	for (const group of candidateGroups.values()) {
+		group.sort((left, right) => left.baseRank - right.baseRank);
+	}
+
 	const examples: RetrievalTrainingExample[] = [];
 	const ratingCounts: Record<ChunkRatingValue, number> = {
 		1: 0,
@@ -76,6 +116,16 @@ export async function buildRetrievalTrainingDataset(
 		}
 
 		const retrievalMode = row.resultRetrievalMode as RetrievalMode;
+		const candidateGroup = candidateGroups.get(retrievalGroupKey(row.impressionId, retrievalMode));
+
+		if (
+			!candidateGroup ||
+			!candidateGroup.some((candidate) => candidate.impressionResultId === row.resultId)
+		) {
+			inconsistentFeedback += 1;
+			continue;
+		}
+
 		examples.push({
 			feedbackId: row.feedbackId,
 			impressionId: row.impressionId,
@@ -98,7 +148,8 @@ export async function buildRetrievalTrainingDataset(
 			rerankerModel: row.rerankerModel,
 			scoringVersion: row.scoringVersion,
 			impressionCreatedAt: row.impressionCreatedAt,
-			feedbackUpdatedAt: row.feedbackUpdatedAt
+			feedbackUpdatedAt: row.feedbackUpdatedAt,
+			candidateGroup
 		});
 
 		queryHashes.add(row.queryHash);

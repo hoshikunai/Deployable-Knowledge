@@ -1,4 +1,4 @@
-export const RETRIEVAL_FEATURE_VERSION = 1 as const;
+export const RETRIEVAL_FEATURE_VERSION = 2 as const;
 
 export const RETRIEVAL_TRAINING_ALGORITHM = 'pairwise-logistic-v1' as const;
 export const RETRIEVAL_RANKING_STRATEGY = 'pairwise-logistic-rank-blend-v2' as const;

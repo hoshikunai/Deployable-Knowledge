@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "1127efc7-3ad2-4c1b-82d0-c36e325447dc",
+  "id": "c5a3e128-258d-4f89-b42d-67f61adc1e70",
   "prevIds": [
-    "d7a8baf0-8855-4380-99ea-a3b1eed60495"
+    "0bfd4a31-3fb6-4797-97ff-e9d0e2a4c919"
   ],
   "ddl": [
     {
@@ -55,6 +55,14 @@
       "entityType": "tables"
     },
     {
+      "name": "retrieval_benchmark_cases",
+      "entityType": "tables"
+    },
+    {
+      "name": "retrieval_benchmark_judgments",
+      "entityType": "tables"
+    },
+    {
       "name": "retrieval_feedback",
       "entityType": "tables"
     },
@@ -64,6 +72,14 @@
     },
     {
       "name": "retrieval_impressions",
+      "entityType": "tables"
+    },
+    {
+      "name": "retrieval_ranker_models",
+      "entityType": "tables"
+    },
+    {
+      "name": "retrieval_training_runs",
       "entityType": "tables"
     },
     {
@@ -167,6 +183,16 @@
       "default": null,
       "generated": null,
       "name": "active_layout_id",
+      "entityType": "columns",
+      "table": "app_state"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "active_retrieval_model_id",
       "entityType": "columns",
       "table": "app_state"
     },
@@ -701,16 +727,6 @@
       "table": "profiles"
     },
     {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "context_size",
-      "entityType": "columns",
-      "table": "profiles"
-    },
-    {
       "type": "text",
       "notNull": true,
       "autoincrement": false,
@@ -868,6 +884,96 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text(255)",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "query",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "document_ids",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "case_id",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "chunk_id",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "relevance",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "retrieval_feedback"
     },
     {
@@ -917,6 +1023,36 @@
       "default": null,
       "generated": null,
       "name": "rating",
+      "entityType": "columns",
+      "table": "retrieval_feedback"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'human_expert'",
+      "generated": null,
+      "name": "feedback_source",
+      "entityType": "columns",
+      "table": "retrieval_feedback"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "confidence",
+      "entityType": "columns",
+      "table": "retrieval_feedback"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rationale",
       "entityType": "columns",
       "table": "retrieval_feedback"
     },
@@ -1061,6 +1197,16 @@
       "table": "retrieval_impression_results"
     },
     {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "learned_score",
+      "entityType": "columns",
+      "table": "retrieval_impression_results"
+    },
+    {
       "type": "text",
       "notNull": false,
       "autoincrement": false,
@@ -1142,6 +1288,16 @@
     },
     {
       "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ranker_model_id",
+      "entityType": "columns",
+      "table": "retrieval_impressions"
+    },
+    {
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,
@@ -1149,6 +1305,326 @@
       "name": "created_at",
       "entityType": "columns",
       "table": "retrieval_impressions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "training_run_id",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feature_version",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feature_names",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "means",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "standard_deviations",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "weights",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "intercept",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "regularization",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "epochs",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "training_loss",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'human_expert'",
+      "generated": null,
+      "name": "feedback_source",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "dataset_version",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feature_version",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "embedding_model",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reranker_model",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scoring_version",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "training_examples",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "validation_examples",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "distinct_queries",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "total_feedback",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attributed_feedback",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "unattributed_feedback",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "inconsistent_feedback",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "hyperparameters",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evaluation",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "retrieval_training_runs"
     },
     {
       "type": "integer",
@@ -1272,7 +1748,7 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
@@ -1311,12 +1787,22 @@
       "table": "synced_files"
     },
     {
-      "type": "integer",
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
-      "default": "false",
+      "default": "'synced'",
       "generated": null,
-      "name": "ignored",
+      "name": "state",
+      "entityType": "columns",
+      "table": "synced_files"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message",
       "entityType": "columns",
       "table": "synced_files"
     },
@@ -1547,6 +2033,36 @@
     },
     {
       "columns": [
+        "case_id"
+      ],
+      "tableTo": "retrieval_benchmark_cases",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_retrieval_benchmark_judgments_case_id_retrieval_benchmark_cases_id_fk",
+      "entityType": "fks",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "columns": [
+        "chunk_id"
+      ],
+      "tableTo": "document_chunks",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_retrieval_benchmark_judgments_chunk_id_document_chunks_id_fk",
+      "entityType": "fks",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "columns": [
         "chunk_id"
       ],
       "tableTo": "document_chunks",
@@ -1607,6 +2123,21 @@
     },
     {
       "columns": [
+        "training_run_id"
+      ],
+      "tableTo": "retrieval_training_runs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_retrieval_ranker_models_training_run_id_retrieval_training_runs_id_fk",
+      "entityType": "fks",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "columns": [
         "session_id"
       ],
       "tableTo": "sessions",
@@ -1649,6 +2180,16 @@
       "name": "synced_files_document_id_documents_id_fk",
       "entityType": "fks",
       "table": "synced_files"
+    },
+    {
+      "columns": [
+        "case_id",
+        "chunk_id"
+      ],
+      "nameExplicit": false,
+      "name": "retrieval_benchmark_judgments_pk",
+      "entityType": "pks",
+      "table": "retrieval_benchmark_judgments"
     },
     {
       "columns": [
@@ -1764,6 +2305,15 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "retrieval_benchmark_cases_pk",
+      "table": "retrieval_benchmark_cases",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "retrieval_feedback_pk",
       "table": "retrieval_feedback",
       "entityType": "pks"
@@ -1784,6 +2334,24 @@
       "nameExplicit": false,
       "name": "retrieval_impressions_pk",
       "table": "retrieval_impressions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "retrieval_ranker_models_pk",
+      "table": "retrieval_ranker_models",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "retrieval_training_runs_pk",
+      "table": "retrieval_training_runs",
       "entityType": "pks"
     },
     {
@@ -2102,6 +2670,34 @@
     {
       "columns": [
         {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_benchmark_cases_created_idx",
+      "entityType": "indexes",
+      "table": "retrieval_benchmark_cases"
+    },
+    {
+      "columns": [
+        {
+          "value": "chunk_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_benchmark_judgments_chunk_idx",
+      "entityType": "indexes",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
+      "columns": [
+        {
           "value": "chunk_id",
           "isExpression": false
         }
@@ -2130,6 +2726,20 @@
     {
       "columns": [
         {
+          "value": "feedback_source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_feedback_source_idx",
+      "entityType": "indexes",
+      "table": "retrieval_feedback"
+    },
+    {
+      "columns": [
+        {
           "value": "impression_result_id",
           "isExpression": false
         }
@@ -2150,12 +2760,16 @@
         {
           "value": "query_hash",
           "isExpression": false
+        },
+        {
+          "value": "feedback_source",
+          "isExpression": false
         }
       ],
       "isUnique": true,
       "where": null,
       "origin": "manual",
-      "name": "retrieval_feedback_chunk_query_idx",
+      "name": "retrieval_feedback_chunk_query_source_idx",
       "entityType": "indexes",
       "table": "retrieval_feedback"
     },
@@ -2240,6 +2854,76 @@
     {
       "columns": [
         {
+          "value": "training_run_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_ranker_models_training_run_idx",
+      "entityType": "indexes",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_ranker_models_created_idx",
+      "entityType": "indexes",
+      "table": "retrieval_ranker_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_training_runs_status_idx",
+      "entityType": "indexes",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "columns": [
+        {
+          "value": "feedback_source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_training_runs_source_idx",
+      "entityType": "indexes",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "columns": [
+        {
+          "value": "started_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "retrieval_training_runs_started_idx",
+      "entityType": "indexes",
+      "table": "retrieval_training_runs"
+    },
+    {
+      "columns": [
+        {
           "value": "session_id",
           "isExpression": false
         }
@@ -2310,6 +2994,24 @@
     {
       "columns": [
         {
+          "value": "folder_id",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "synced_files_state_idx",
+      "entityType": "indexes",
+      "table": "synced_files"
+    },
+    {
+      "columns": [
+        {
           "value": "sort_order",
           "isExpression": false
         }
@@ -2322,8 +3024,20 @@
       "table": "workspace_layouts"
     },
     {
+      "value": "\"relevance\" between 1 and 5",
+      "name": "retrieval_benchmark_judgments_relevance_check",
+      "entityType": "checks",
+      "table": "retrieval_benchmark_judgments"
+    },
+    {
       "value": "\"rating\" between 1 and 5",
       "name": "retrieval_feedback_rating_check",
+      "entityType": "checks",
+      "table": "retrieval_feedback"
+    },
+    {
+      "value": "\"confidence\" is null or \"confidence\" between 0 and 1",
+      "name": "retrieval_feedback_confidence_check",
       "entityType": "checks",
       "table": "retrieval_feedback"
     }

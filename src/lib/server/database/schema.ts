@@ -320,7 +320,8 @@ export const retrievalImpressionResults = sqliteTable(
 			enum: ['semantic', 'bm25', 'hybrid']
 		}).notNull(),
 		baseRank: integer('base_rank').notNull(),
-		displayedRank: integer('displayed_rank').notNull(),
+		displayedRank: integer('displayed_rank'),
+		wasDisplayed: integer('was_displayed', { mode: 'boolean' }).notNull().default(true),
 		semanticScore: real('semantic_score'),
 		bm25Score: real('bm25_score'),
 		crossEncoderScore: real('cross_encoder_score'),
@@ -328,6 +329,10 @@ export const retrievalImpressionResults = sqliteTable(
 		learnedScore: real('learned_score')
 	},
 	(table) => [
+		check(
+			'retrieval_impression_results_display_state_check',
+			sql`${table.wasDisplayed} = (${table.displayedRank} is not null)`
+		),
 		index('retrieval_impression_results_impression_idx').on(table.impressionId),
 		index('retrieval_impression_results_chunk_idx').on(table.chunkId),
 		uniqueIndex('retrieval_impression_results_candidate_idx').on(
@@ -440,6 +445,37 @@ export const retrievalRankerModels = sqliteTable(
 	(table) => [
 		uniqueIndex('retrieval_ranker_models_training_run_idx').on(table.trainingRunId),
 		index('retrieval_ranker_models_created_idx').on(table.createdAt)
+	]
+);
+
+export const retrievalBenchmarkCases = sqliteTable(
+	'retrieval_benchmark_cases',
+	{
+		id: text('id').notNull().primaryKey(),
+		name: text('name', { length: 255 }).notNull(),
+		query: text('query').notNull(),
+		documentIds: text('document_ids', { mode: 'json' }).$type<string[]>().notNull(),
+		createdAt: text('created_at').notNull()
+	},
+	(table) => [index('retrieval_benchmark_cases_created_idx').on(table.createdAt)]
+);
+
+export const retrievalBenchmarkJudgments = sqliteTable(
+	'retrieval_benchmark_judgments',
+	{
+		caseId: text('case_id')
+			.notNull()
+			.references(() => retrievalBenchmarkCases.id, { onDelete: 'cascade' }),
+		chunkId: text('chunk_id')
+			.notNull()
+			.references(() => documentChunks.id, { onDelete: 'cascade' }),
+		relevance: integer('relevance').notNull(),
+		createdAt: text('created_at').notNull()
+	},
+	(table) => [
+		primaryKey({ columns: [table.caseId, table.chunkId] }),
+		check('retrieval_benchmark_judgments_relevance_check', sql`${table.relevance} between 1 and 5`),
+		index('retrieval_benchmark_judgments_chunk_idx').on(table.chunkId)
 	]
 );
 
@@ -590,3 +626,9 @@ export type NewRetrievalTrainingRun = typeof retrievalTrainingRuns.$inferInsert;
 
 export type RetrievalRankerModel = typeof retrievalRankerModels.$inferSelect;
 export type NewRetrievalRankerModel = typeof retrievalRankerModels.$inferInsert;
+
+export type RetrievalBenchmarkCaseRecord = typeof retrievalBenchmarkCases.$inferSelect;
+export type NewRetrievalBenchmarkCaseRecord = typeof retrievalBenchmarkCases.$inferInsert;
+
+export type RetrievalBenchmarkJudgmentRecord = typeof retrievalBenchmarkJudgments.$inferSelect;
+export type NewRetrievalBenchmarkJudgmentRecord = typeof retrievalBenchmarkJudgments.$inferInsert;

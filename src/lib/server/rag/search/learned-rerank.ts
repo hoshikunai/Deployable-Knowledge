@@ -1,5 +1,5 @@
 import { RetrievalMode } from '$lib/enums';
-import { buildRetrievalFeatureVector } from '$lib/server/rag/training/build-retrieval-training-features';
+import { buildRetrievalFeatureVectors } from '$lib/server/rag/training/build-retrieval-training-features';
 import { scaleRetrievalFeatureVector } from '$lib/server/rag/training/retrieval-feature-scaler';
 import { LEARNED_RANKING_BLEND_WEIGHT } from '$lib/server/rag/training/retrieval-training-constants';
 import { predictRetrievalUtility } from '$lib/server/rag/training/train-pairwise-retrieval-ranker';
@@ -37,15 +37,22 @@ export async function rerankWithActiveRetrievalModel(
 	}
 
 	try {
+		const featureInputs = matches.map((match, originalIndex) => ({
+			retrievalMode,
+			baseRank: originalIndex + 1,
+			semanticScore: scoreMaps.semantic.get(match.chunkId) ?? null,
+			bm25Score: scoreMaps.bm25.get(match.chunkId) ?? null,
+			crossEncoderScore: scoreMaps.crossEncoder.get(match.chunkId) ?? null,
+			baseScore: match.score
+		}));
+		const featureVectors = buildRetrievalFeatureVectors(featureInputs);
+
 		const candidates = matches.map((match, originalIndex) => {
-			const features = buildRetrievalFeatureVector({
-				retrievalMode,
-				baseRank: originalIndex + 1,
-				semanticScore: scoreMaps.semantic.get(match.chunkId) ?? null,
-				bm25Score: scoreMaps.bm25.get(match.chunkId) ?? null,
-				crossEncoderScore: scoreMaps.crossEncoder.get(match.chunkId) ?? null,
-				baseScore: match.score
-			});
+			const features = featureVectors[originalIndex];
+
+			if (!features) {
+				throw new Error(`Missing retrieval features for chunk ${match.chunkId}.`);
+			}
 
 			const scaledFeatures = scaleRetrievalFeatureVector(features, {
 				means: model.means,
