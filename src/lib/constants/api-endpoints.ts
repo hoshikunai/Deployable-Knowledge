@@ -18,8 +18,7 @@ export const APP_PREVIEW = {
 };
 
 export const API_CHUNK_RATINGS = {
-	byChunkId: (chunkId: string) => `/chunks/${segment(chunkId)}/rating`,
-	proxyByChunkId: (chunkId: string) => `/chunks/${segment(chunkId)}/proxy-rating`
+	byChunkId: (chunkId: string) => `/chunks/${segment(chunkId)}/rating`
 };
 
 export function documentViewerHref(
@@ -121,6 +120,8 @@ export const API_SESSIONS = {
 export const API_SETUP = '/setup';
 
 export const API_THEME = '/theme';
+
+export const API_EXPERIMENTAL_RETRIEVAL_TRAINING = '/settings/experimental-retrieval-training';
 
 export const API_TOOLS = '/tools';
 

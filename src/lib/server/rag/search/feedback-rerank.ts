@@ -41,6 +41,8 @@ export async function rerankWithRetrievalFeedback(
 	matches: ScoredSearchMatch[],
 	limit: number
 ): Promise<ScoredSearchMatch[]> {
+	// The caller gates this path for normal search; keeping this function pure avoids
+	// feedback access when experimental retrieval training is disabled.
 	const resultLimit = Math.max(0, Math.floor(limit));
 	if (matches.length === 0 || resultLimit === 0) return [];
 

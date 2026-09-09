@@ -15,6 +15,7 @@ import {
 	type SearchOptionsBase,
 	type SearchResult
 } from './search-shared';
+import { getExperimentalRetrievalTrainingEnabled } from '$lib/server/database/app-state';
 
 export interface SearchMethodResults {
 	query: string;
@@ -141,17 +142,24 @@ export async function searchAllMethodsWithTrace(
 	});
 
 	const scoreMaps = buildRetrievalScoreMaps(search);
+	const trainingEnabled = await getExperimentalRetrievalTrainingEnabled();
 	const learnedHybrid = await rerankWithActiveRetrievalModel(
 		RetrievalMode.HYBRID,
 		search.hybridScored,
 		scoreMaps
 	);
 
-	const [semantic, bm25, hybrid] = await Promise.all([
-		rerankWithRetrievalFeedback(search.query, search.semanticScored, topK),
-		rerankWithRetrievalFeedback(search.query, search.bm25Scored, topK),
-		rerankWithRetrievalFeedback(search.query, learnedHybrid.matches, topK)
-	]);
+	const [semantic, bm25, hybrid] = trainingEnabled
+		? await Promise.all([
+				rerankWithRetrievalFeedback(search.query, search.semanticScored, topK),
+				rerankWithRetrievalFeedback(search.query, search.bm25Scored, topK),
+				rerankWithRetrievalFeedback(search.query, learnedHybrid.matches, topK)
+			])
+		: [
+				search.semanticScored.slice(0, topK),
+				search.bm25Scored.slice(0, topK),
+				search.hybridScored.slice(0, topK)
+			];
 
 	return {
 		results: {

@@ -20,6 +20,7 @@ import {
 import { RETRIEVAL_TRAINING_DATASET_VERSION } from '$lib/server/rag/training/retrieval-training.types';
 import { RetrievalModelsRepository } from '$lib/server/repositories/retrieval-models.repository';
 import { CROSS_ENCODER_MODEL, RETRIEVAL_SCORING_VERSION } from './retrieval-version';
+import { getExperimentalRetrievalTrainingEnabled } from '$lib/server/database/app-state';
 
 export interface ActiveRetrievalModel {
 	id: string;
@@ -163,6 +164,7 @@ export async function deactivateRetrievalModel(): Promise<void> {
 }
 
 export async function loadActiveRetrievalModel(): Promise<ActiveRetrievalModel | null> {
+	if (!(await getExperimentalRetrievalTrainingEnabled())) return null;
 	const modelId = await getActiveRetrievalModelId();
 	if (!modelId) return null;
 

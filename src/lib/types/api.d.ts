@@ -398,15 +398,8 @@ export interface ApiChunkRatingResponse {
 	rating: ChunkRatingValue | null;
 }
 
-export interface ApiAiProxyChunkRatingRequest extends ApiChunkRatingRequest {
-	confidence: number;
-	rationale: string;
-}
-
-export interface ApiAiProxyChunkRatingResponse extends ApiChunkRatingResponse {
-	feedbackSource: RetrievalFeedbackSource;
-	confidence: number | null;
-	rationale: string | null;
+export interface ExperimentalRetrievalTrainingSettings {
+	enabled: boolean;
 }
 
 export interface ApiSearchMatch {
@@ -417,7 +410,7 @@ export interface ApiSearchMatch {
 	pageIndex: number;
 	chunkIndex: number;
 	content: string;
-	impressionResultId: string;
+	impressionResultId?: string;
 	rating: ChunkRatingValue | null;
 }
 
@@ -452,10 +445,6 @@ export interface ApiRetrievalTrainingRunResponse {
 	validationPairs: number;
 	distinctQueries: number;
 	evaluation: ApiRetrievalTrainingEvaluation;
-}
-
-export interface ApiRetrievalTrainingRunRequest {
-	feedbackSource?: RetrievalFeedbackSource;
 }
 
 export interface ApiRetrievalModelActivationRequest {

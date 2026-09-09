@@ -7,6 +7,7 @@ import type {
 	ApiChunkRatingResponse,
 	ChunkRatingValue
 } from '$lib/types';
+import { requireExperimentalRetrievalTraining } from '$lib/server/retrieval/experimental-retrieval-training';
 
 function isRequestObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -26,6 +27,14 @@ function isChunkRating(value: unknown): value is ChunkRatingValue {
 }
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
+	try {
+		await requireExperimentalRetrievalTraining();
+	} catch (error) {
+		return json(
+			{ error: error instanceof Error ? error.message : 'Feature disabled.' },
+			{ status: 403 }
+		);
+	}
 	const chunkId = params.id;
 	if (!chunkId) return json({ error: 'Missing chunk id.' }, { status: 400 });
 
@@ -68,6 +77,14 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 };
 
 export const DELETE: RequestHandler = async ({ params, request }) => {
+	try {
+		await requireExperimentalRetrievalTraining();
+	} catch (error) {
+		return json(
+			{ error: error instanceof Error ? error.message : 'Feature disabled.' },
+			{ status: 403 }
+		);
+	}
 	const chunkId = params.id;
 	if (!chunkId) return json({ error: 'Missing chunk id.' }, { status: 400 });
 

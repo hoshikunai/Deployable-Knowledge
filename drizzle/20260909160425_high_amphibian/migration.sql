@@ -1,0 +1,1 @@
+ALTER TABLE `app_state` ADD `experimental_retrieval_training_enabled` integer DEFAULT false NOT NULL;

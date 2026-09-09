@@ -5,6 +5,7 @@ import {
 	ProfilesService,
 	PromptTemplatesService,
 	ProvidersService,
+	ExperimentalRetrievalTrainingService,
 	ToolsService
 } from '$lib/services';
 import type {
@@ -29,6 +30,8 @@ class SettingsStore {
 	loading = $state(false);
 	ready = $state(false);
 	error = $state<string | null>(null);
+	experimentalRetrievalTrainingEnabled = $state(false);
+	experimentalRetrievalTrainingSaving = $state(false);
 	lastQuery = $state('');
 	modelToolSupport = $state<'unknown' | 'supported' | 'unsupported'>('unknown');
 	private capabilityRequestId = 0;
@@ -95,7 +98,12 @@ class SettingsStore {
 		try {
 			await this.loadTools();
 			await this.loadActiveProfile();
-			await Promise.all([this.loadProfiles(), this.loadPromptTemplates(), this.loadProviders()]);
+			await Promise.all([
+				this.loadProfiles(),
+				this.loadPromptTemplates(),
+				this.loadProviders(),
+				this.loadExperimentalRetrievalTraining()
+			]);
 			this.initialized = true;
 			void this.refreshModelCapability();
 		} catch (error) {
@@ -103,6 +111,31 @@ class SettingsStore {
 		} finally {
 			this.loading = false;
 			this.ready = true;
+		}
+	}
+
+	private async loadExperimentalRetrievalTraining(): Promise<void> {
+		const settings = await ExperimentalRetrievalTrainingService.get();
+		this.experimentalRetrievalTrainingEnabled = settings.enabled;
+	}
+
+	async setExperimentalRetrievalTrainingEnabled(enabled: boolean): Promise<void> {
+		if (
+			enabled === this.experimentalRetrievalTrainingEnabled ||
+			this.experimentalRetrievalTrainingSaving
+		)
+			return;
+		const previous = this.experimentalRetrievalTrainingEnabled;
+		this.experimentalRetrievalTrainingEnabled = enabled;
+		this.experimentalRetrievalTrainingSaving = true;
+		try {
+			const settings = await ExperimentalRetrievalTrainingService.update(enabled);
+			this.experimentalRetrievalTrainingEnabled = settings.enabled;
+		} catch (error) {
+			this.experimentalRetrievalTrainingEnabled = previous;
+			throw error;
+		} finally {
+			this.experimentalRetrievalTrainingSaving = false;
 		}
 	}
 

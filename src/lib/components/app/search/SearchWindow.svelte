@@ -80,7 +80,7 @@
 	}
 
 	async function rateChunk(result: ApiSearchMatch, rating: ChunkRatingValue | null): Promise<void> {
-		if (!resultQuery) return;
+		if (!resultQuery || !result.impressionResultId) return;
 
 		try {
 			await chunkRatingsStore.update({
@@ -153,6 +153,7 @@
 							onSendToNotebook={(match) => void sendToNotebook(match)}
 							rating={chunkRatingsStore.ratingFor(resultQuery, result.chunkId)}
 							ratingSaving={chunkRatingsStore.isSaving(resultQuery, result.chunkId)}
+							showRating={settingsStore.experimentalRetrievalTrainingEnabled}
 							{result}
 						/>
 					{:else}

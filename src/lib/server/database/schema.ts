@@ -32,6 +32,11 @@ export const appState = sqliteTable('app_state', {
 	activeProfileId: text('active_profile_id'),
 	activeLayoutId: text('active_layout_id'),
 	activeRetrievalModelId: text('active_retrieval_model_id'),
+	experimentalRetrievalTrainingEnabled: integer('experimental_retrieval_training_enabled', {
+		mode: 'boolean'
+	})
+		.notNull()
+		.default(false),
 	themeColor: text('theme_color', { enum: THEME_COLORS }).notNull().default(DEFAULT_THEME.color),
 	themeMode: text('theme_mode', { enum: THEME_MODES }).notNull().default(DEFAULT_THEME.mode)
 });

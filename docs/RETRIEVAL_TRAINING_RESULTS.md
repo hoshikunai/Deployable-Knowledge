@@ -10,19 +10,15 @@ Ranking strategy: `pairwise-logistic-rank-blend-v3`
 
 - Backup: `/tmp/dk-retrieval-training.CX6nBOGy`
 - Raw human response: `/tmp/dk-retrieval-training.CX6nBOGy/human-response.json`
-- Raw ai-proxy response: `/tmp/dk-retrieval-training.CX6nBOGy/ai-proxy-response.json`
 - SQLite backup was created with Node's SQLite backup API at `/tmp/dk-retrieval-training.CX6nBOGy/app.db`.
-
-The held-out broad-corpus proxy judgments were not imported into `retrieval_feedback`, and were not used for training or tuning.
 
 ## Data readiness
 
 | Feedback source | Total ratings | Attributed and compatible | Distinct normalized queries | Rating distribution (1/2/3/4/5) | Within-impression preference pairs | Groups with hidden candidates | Readiness |
 | --------------- | ------------: | ------------------------: | --------------------------: | ------------------------------- | ---------------------------------: | ----------------------------: | --------- |
 | `human_expert`  |           304 |                       303 |                          43 | 21 / 38 / 66 / 88 / 91          |                              1,270 |                             0 | Ready     |
-| `ai_proxy`      |            50 |                        50 |                          10 | 1 / 6 / 9 / 12 / 22             |                                 77 |                             0 | Ready     |
 
-Both sources met the minimums of 30 compatible ratings, 10 distinct queries, and training preferences in every cross-validation fold. The historical groups available for training contain displayed results only; no missing candidates were fabricated.
+The human source met the minimums of 30 compatible ratings, 10 distinct queries, and training preferences in every cross-validation fold. The historical groups available for training contain displayed results only; no missing candidates were fabricated.
 
 ## Human-expert model
 
@@ -47,33 +43,6 @@ Activation gates:
 - Non-tie win rate ≥ 0.60: **PASS** (0.714286)
 - Worst group NDCG change ≥ -0.02: **FAIL** (-0.030498)
 - Compatibility and parameter validation: **PASS** (dataset/features/strategy compatible; 20 finite weights and positive finite scaler standard deviations)
-
-Result: not eligible for activation.
-
-## AI-proxy model
-
-- Run ID: `f69cb4d2-e4fc-4175-b82c-1e6d6d4883b0`
-- Model ID: `b056e7af-0c40-462d-a251-7e7902e0ae98`
-- Status: completed
-- Training examples / preference pairs: 50 / 77
-- Distinct queries / cross-validation folds: 10 / 5
-- Pairwise accuracy: 0.786369
-- Baseline NDCG@5: 0.959611
-- Trained NDCG@5: 0.961411
-- NDCG improvement: 0.001800
-- Evaluated hybrid ranking groups: 10
-- Improved / degraded / tied groups: 2 / 0 / 8
-- Non-tie win rate: 1.000000
-- Worst group NDCG change: 0
-
-Activation gates:
-
-- Evaluated hybrid groups ≥ 10: **PASS** (10)
-- NDCG improvement ≥ 0.005: **FAIL** (0.001800)
-- Non-tie win rate ≥ 0.60: **PASS** (1.000000)
-- Worst group NDCG change ≥ -0.02: **PASS** (0)
-- Compatibility and parameter validation: **PASS** (model parameters are valid)
-- Human-source requirement for live activation: **FAIL** (`ai_proxy` models are never eligible for live activation)
 
 Result: not eligible for activation.
 

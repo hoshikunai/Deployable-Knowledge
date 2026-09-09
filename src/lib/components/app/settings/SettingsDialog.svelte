@@ -27,6 +27,8 @@
 	import { DiagnosticsConsole } from '$lib/components/app/diagnostics';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Label } from '$lib/components/ui/label';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { settingsDialogStore, settingsStore, type SettingsSection } from '$lib/stores';
 
@@ -63,7 +65,12 @@
 				'bm25',
 				'hybrid',
 				'retrieved chunks',
-				'rag'
+				'rag',
+				'experimental',
+				'rating',
+				'feedback',
+				'training',
+				'retrieval'
 			]
 		},
 		{
@@ -298,6 +305,31 @@
 									hint="Optional style, role, or response guidance."
 								>
 									<SettingsPersonaField />
+								</SettingsFieldGroup>
+								<SettingsFieldGroup
+									icon={SlidersHorizontal}
+									title="Experimental"
+									hint="Try local retrieval improvements with your ratings."
+								>
+									<div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5">
+										<Checkbox
+											checked={settingsStore.experimentalRetrievalTrainingEnabled}
+											disabled={settingsStore.experimentalRetrievalTrainingSaving}
+											id="settings-user-rating-training"
+											onCheckedChange={(checked) =>
+												settingsStore
+													.setExperimentalRetrievalTrainingEnabled(checked === true)
+													.catch(() => undefined)}
+										/>
+										<div class="grid gap-0.5">
+											<Label for="settings-user-rating-training" class="text-sm font-medium">
+												User rating training
+											</Label>
+											<p class="m-0 text-xs text-muted-foreground">
+												Use your chunk ratings to experiment with local retrieval improvements.
+											</p>
+										</div>
+									</div>
 								</SettingsFieldGroup>
 							</div>
 						{/if}

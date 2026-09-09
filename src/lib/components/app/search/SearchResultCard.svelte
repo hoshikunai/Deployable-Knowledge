@@ -17,6 +17,7 @@
 		onSendToNotebook: (result: ApiSearchMatch) => Promise<void> | void;
 		rating: ChunkRatingValue | null;
 		ratingSaving?: boolean;
+		showRating?: boolean;
 		result: ApiSearchMatch;
 	}
 
@@ -27,6 +28,7 @@
 		onSendToNotebook,
 		rating,
 		ratingSaving = false,
+		showRating = false,
 		result
 	}: Props = $props();
 
@@ -44,7 +46,9 @@
 			<span>{locationLabel}</span>
 		</div>
 
-		<SearchResultRating disabled={ratingSaving} onChange={onRatingChange} {rating} />
+		{#if showRating}
+			<SearchResultRating disabled={ratingSaving} onChange={onRatingChange} {rating} />
+		{/if}
 	</div>
 
 	<p class="m-0 whitespace-pre-wrap text-sm leading-relaxed">{result.content}</p>

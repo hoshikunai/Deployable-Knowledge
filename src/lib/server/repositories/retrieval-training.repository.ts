@@ -1,5 +1,5 @@
 import { desc, eq, inArray } from 'drizzle-orm';
-import type { RetrievalFeedbackSource } from '$lib/constants';
+import { HUMAN_EXPERT_FEEDBACK_SOURCE } from '$lib/constants';
 import { db } from '$lib/server/database/database';
 import {
 	retrievalFeedback,
@@ -26,7 +26,7 @@ export class RetrievalTrainingRepository {
 			.where(inArray(retrievalImpressionResults.impressionId, impressionIds));
 	}
 
-	static readDatasetRows(feedbackSource: RetrievalFeedbackSource) {
+	static readDatasetRows() {
 		return db
 			.select({
 				feedbackId: retrievalFeedback.id,
@@ -65,7 +65,7 @@ export class RetrievalTrainingRepository {
 				retrievalImpressions,
 				eq(retrievalImpressionResults.impressionId, retrievalImpressions.id)
 			)
-			.where(eq(retrievalFeedback.feedbackSource, feedbackSource))
+			.where(eq(retrievalFeedback.feedbackSource, HUMAN_EXPERT_FEEDBACK_SOURCE))
 			.orderBy(desc(retrievalFeedback.updatedAt));
 	}
 }

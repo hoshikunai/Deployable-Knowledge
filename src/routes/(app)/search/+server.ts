@@ -14,6 +14,7 @@ import {
 } from '$lib/server/repositories';
 import type { ApiSearchMatch, ApiSearchResults } from '$lib/types';
 import type { RequestHandler } from './$types';
+import { getExperimentalRetrievalTrainingEnabled } from '$lib/server/database/app-state';
 
 type SearchMatchWithoutFeedback = Omit<ApiSearchMatch, 'impressionResultId' | 'rating'>;
 
@@ -25,18 +26,18 @@ function attachFeedback(
 	retrievalMode: RetrievalMode,
 	matches: SearchMatchWithoutFeedback[],
 	ratings: ReadonlyMap<string, ApiSearchMatch['rating']>,
-	impressionResultIds: ReadonlyMap<string, string>
+	impressionResultIds: ReadonlyMap<string, string>,
+	trainingEnabled: boolean
 ): ApiSearchMatch[] {
 	return matches.map((match) => {
 		const impressionResultId = impressionResultIds.get(resultKey(retrievalMode, match.chunkId));
-
-		if (!impressionResultId) {
+		if (trainingEnabled && !impressionResultId) {
 			throw new Error(`Missing impression result for ${retrievalMode}:${match.chunkId}.`);
 		}
 
 		return {
 			...match,
-			impressionResultId,
+			...(impressionResultId ? { impressionResultId } : {}),
 			rating: ratings.get(match.chunkId) ?? null
 		};
 	});
@@ -71,19 +72,22 @@ export const GET: RequestHandler = async ({ url }) => {
 			documentIds: docs
 		});
 
-		const recordedImpression = await RetrievalImpressionsRepository.record({
-			query: execution.results.query,
-			requestedTopK: topK,
-			documentIds,
-			embeddingModel: EMBEDDING_MODEL,
-			rerankerModel: CROSS_ENCODER_MODEL,
-			scoringVersion: RETRIEVAL_SCORING_VERSION,
-			rankerModelId: execution.rankerModelId,
-			candidates: execution.candidates
-		});
+		const trainingEnabled = await getExperimentalRetrievalTrainingEnabled();
+		const recordedImpression = trainingEnabled
+			? await RetrievalImpressionsRepository.record({
+					query: execution.results.query,
+					requestedTopK: topK,
+					documentIds,
+					embeddingModel: EMBEDDING_MODEL,
+					rerankerModel: CROSS_ENCODER_MODEL,
+					scoringVersion: RETRIEVAL_SCORING_VERSION,
+					rankerModelId: execution.rankerModelId,
+					candidates: execution.candidates
+				})
+			: null;
 
 		const impressionResultIds = new Map(
-			recordedImpression.results.map((result) => [
+			(recordedImpression?.results ?? []).map((result) => [
 				resultKey(result.retrievalMode, result.chunkId),
 				result.id
 			])
@@ -91,26 +95,31 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		const data = execution.results;
 		const chunkIds = [...data.semantic, ...data.bm25, ...data.hybrid].map(({ chunkId }) => chunkId);
-		const ratings = await RetrievalFeedbackRepository.findRatings(query, chunkIds);
+		const ratings = trainingEnabled
+			? await RetrievalFeedbackRepository.findRatings(query, chunkIds)
+			: new Map();
 
 		const response: ApiSearchResults = {
 			[RetrievalMode.SEMANTIC]: attachFeedback(
 				RetrievalMode.SEMANTIC,
 				data.semantic,
 				ratings,
-				impressionResultIds
+				impressionResultIds,
+				trainingEnabled
 			),
 			[RetrievalMode.BM25]: attachFeedback(
 				RetrievalMode.BM25,
 				data.bm25,
 				ratings,
-				impressionResultIds
+				impressionResultIds,
+				trainingEnabled
 			),
 			[RetrievalMode.HYBRID]: attachFeedback(
 				RetrievalMode.HYBRID,
 				data.hybrid,
 				ratings,
-				impressionResultIds
+				impressionResultIds,
+				trainingEnabled
 			)
 		};
 

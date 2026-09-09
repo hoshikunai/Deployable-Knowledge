@@ -1,7 +1,7 @@
 import { CHUNK_RATING_VALUES, HUMAN_EXPERT_FEEDBACK_SOURCE } from '$lib/constants';
 import { RetrievalMode } from '$lib/enums';
 import { RetrievalTrainingRepository } from '$lib/server/repositories';
-import type { ChunkRatingValue, RetrievalFeedbackSource } from '$lib/types';
+import type { ChunkRatingValue } from '$lib/types';
 import {
 	RETRIEVAL_TRAINING_DATASET_VERSION,
 	type RetrievalTrainingCandidate,
@@ -15,10 +15,9 @@ function retrievalGroupKey(impressionId: string, retrievalMode: RetrievalMode): 
 	return `${impressionId}\u0000${retrievalMode}`;
 }
 
-export async function buildRetrievalTrainingDataset(
-	feedbackSource: RetrievalFeedbackSource = HUMAN_EXPERT_FEEDBACK_SOURCE
-): Promise<RetrievalTrainingDataset> {
-	const rows = await RetrievalTrainingRepository.readDatasetRows(feedbackSource);
+export async function buildRetrievalTrainingDataset(): Promise<RetrievalTrainingDataset> {
+	const feedbackSource = HUMAN_EXPERT_FEEDBACK_SOURCE;
+	const rows = await RetrievalTrainingRepository.readDatasetRows();
 	const impressionIds = [
 		...new Set(
 			rows.flatMap((row) => {

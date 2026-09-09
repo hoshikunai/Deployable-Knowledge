@@ -8,6 +8,34 @@ import { appState, profiles } from '$lib/server/database/schema';
 import { toolRegistry } from '$lib/server/tools';
 
 const APP_STATE_ID = 'app';
+export const DEFAULT_EXPERIMENTAL_RETRIEVAL_TRAINING_ENABLED = false;
+
+export async function getExperimentalRetrievalTrainingEnabled(): Promise<boolean> {
+	const state = await db.select().from(appState).where(eq(appState.id, APP_STATE_ID)).get();
+	return (
+		state?.experimentalRetrievalTrainingEnabled ?? DEFAULT_EXPERIMENTAL_RETRIEVAL_TRAINING_ENABLED
+	);
+}
+
+export async function setExperimentalRetrievalTrainingEnabled(enabled: boolean): Promise<boolean> {
+	await db.transaction(async (tx) => {
+		await tx
+			.insert(appState)
+			.values({
+				id: APP_STATE_ID,
+				experimentalRetrievalTrainingEnabled: enabled,
+				activeRetrievalModelId: enabled ? undefined : null
+			})
+			.onConflictDoUpdate({
+				target: appState.id,
+				set: {
+					experimentalRetrievalTrainingEnabled: enabled,
+					...(enabled ? {} : { activeRetrievalModelId: null })
+				}
+			});
+	});
+	return enabled;
+}
 
 export async function ensureActiveProfileId(): Promise<string> {
 	const state = await db.select().from(appState).where(eq(appState.id, APP_STATE_ID)).get();

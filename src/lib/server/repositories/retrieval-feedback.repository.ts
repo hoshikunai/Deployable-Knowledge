@@ -1,10 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
-import {
-	AI_PROXY_FEEDBACK_SOURCE,
-	HUMAN_EXPERT_FEEDBACK_SOURCE,
-	type RetrievalFeedbackSource
-} from '$lib/constants';
+import { HUMAN_EXPERT_FEEDBACK_SOURCE, type RetrievalFeedbackSource } from '$lib/constants';
 import { db } from '$lib/server/database/database';
 import {
 	retrievalFeedback,
@@ -19,11 +15,6 @@ interface SetRetrievalFeedbackInput {
 	impressionResultId: string;
 	query: string;
 	rating: ChunkRatingValue;
-}
-
-interface SetAiProxyRetrievalFeedbackInput extends SetRetrievalFeedbackInput {
-	confidence: number;
-	rationale: string;
 }
 
 interface PersistRetrievalFeedbackInput extends SetRetrievalFeedbackInput {
@@ -63,15 +54,6 @@ export class RetrievalFeedbackRepository {
 			feedbackSource: HUMAN_EXPERT_FEEDBACK_SOURCE,
 			confidence: null,
 			rationale: null
-		});
-	}
-
-	static setAiProxy(input: SetAiProxyRetrievalFeedbackInput) {
-		return this.set({
-			...input,
-			feedbackSource: AI_PROXY_FEEDBACK_SOURCE,
-			confidence: input.confidence,
-			rationale: input.rationale
 		});
 	}
 
@@ -143,10 +125,6 @@ export class RetrievalFeedbackRepository {
 
 	static clearHuman(chunkId: string, query: string): Promise<void> {
 		return this.clear(chunkId, query, HUMAN_EXPERT_FEEDBACK_SOURCE);
-	}
-
-	static clearAiProxy(chunkId: string, query: string): Promise<void> {
-		return this.clear(chunkId, query, AI_PROXY_FEEDBACK_SOURCE);
 	}
 
 	private static async clear(

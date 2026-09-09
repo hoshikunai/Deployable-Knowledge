@@ -8,6 +8,10 @@ import type {
 	ApiRetrievalModelActivationRequest,
 	ApiRetrievalModelActivationResponse
 } from '$lib/types';
+import {
+	requireExperimentalRetrievalTraining,
+	RetrievalTrainingDisabledError
+} from '$lib/server/retrieval/experimental-retrieval-training';
 
 function isRequestObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -20,6 +24,13 @@ export const GET: RequestHandler = async () => {
 };
 
 export const PUT: RequestHandler = async ({ request }) => {
+	try {
+		await requireExperimentalRetrievalTraining();
+	} catch (error) {
+		if (error instanceof RetrievalTrainingDisabledError)
+			return json({ error: error.message }, { status: 403 });
+		throw error;
+	}
 	let value: unknown;
 
 	try {
@@ -52,6 +63,13 @@ export const PUT: RequestHandler = async ({ request }) => {
 };
 
 export const DELETE: RequestHandler = async () => {
+	try {
+		await requireExperimentalRetrievalTraining();
+	} catch (error) {
+		if (error instanceof RetrievalTrainingDisabledError)
+			return json({ error: error.message }, { status: 403 });
+		throw error;
+	}
 	await deactivateRetrievalModel();
 
 	return json({

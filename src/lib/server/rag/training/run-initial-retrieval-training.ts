@@ -1,6 +1,5 @@
 import { HUMAN_EXPERT_FEEDBACK_SOURCE } from '$lib/constants';
 import { RetrievalModelsRepository } from '$lib/server/repositories';
-import type { RetrievalFeedbackSource } from '$lib/types';
 import { buildRetrievalTrainingDataset } from './build-retrieval-training-dataset';
 import { buildRetrievalPreferencePairs } from './build-retrieval-preference-pairs';
 import {
@@ -40,7 +39,7 @@ import {
 export interface InitialRetrievalTrainingResult {
 	runId: string;
 	modelId: string;
-	feedbackSource: RetrievalFeedbackSource;
+	feedbackSource: typeof HUMAN_EXPERT_FEEDBACK_SOURCE;
 	featureVersion: typeof RETRIEVAL_FEATURE_VERSION;
 	embeddingModel: string;
 	rerankerModel: string;
@@ -57,10 +56,9 @@ export interface InitialRetrievalTrainingResult {
 	regularization: number;
 }
 
-export async function runInitialRetrievalTraining(
-	feedbackSource: RetrievalFeedbackSource = HUMAN_EXPERT_FEEDBACK_SOURCE
-): Promise<InitialRetrievalTrainingResult> {
-	const dataset = await buildRetrievalTrainingDataset(feedbackSource);
+export async function runInitialRetrievalTraining(): Promise<InitialRetrievalTrainingResult> {
+	const feedbackSource = HUMAN_EXPERT_FEEDBACK_SOURCE;
+	const dataset = await buildRetrievalTrainingDataset();
 	const cohort: RetrievalTrainingCohort = selectRetrievalTrainingCohort(dataset.examples);
 	const preparedExamples = buildRetrievalTrainingFeatures(cohort.examples);
 	const finalScaler = fitRetrievalFeatureScaler(preparedExamples);
