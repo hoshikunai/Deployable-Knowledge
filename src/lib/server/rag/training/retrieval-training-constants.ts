@@ -1,7 +1,7 @@
 export const RETRIEVAL_FEATURE_VERSION = 2 as const;
 
 export const RETRIEVAL_TRAINING_ALGORITHM = 'pairwise-logistic-v1' as const;
-export const RETRIEVAL_RANKING_STRATEGY = 'pairwise-logistic-rank-blend-v2' as const;
+export const RETRIEVAL_RANKING_STRATEGY = 'pairwise-logistic-rank-blend-v3' as const;
 export const LEARNED_RANKING_BLEND_WEIGHT = 0.35;
 export const RETRIEVAL_PAIR_WEIGHTING_STRATEGY = 'rating-gap-equal-impression' as const;
 export const CROSS_VALIDATION_FOLD_COUNT = 5;

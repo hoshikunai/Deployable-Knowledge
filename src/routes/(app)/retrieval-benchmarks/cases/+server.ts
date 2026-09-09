@@ -101,7 +101,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	} catch (error) {
 		console.error('[Retrieval Benchmark] Could not create benchmark case.', error);
 		return json(
-			{ error: 'Could not create the benchmark case. Verify that every chunk ID exists.' },
+			{
+				error:
+					'Could not create the benchmark case. Verify that documents and chunks exist and judged chunks match the document filters.'
+			},
 			{ status: 400 }
 		);
 	}

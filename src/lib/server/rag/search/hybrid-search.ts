@@ -204,7 +204,11 @@ export async function searchHybrid(
 export async function searchForRetrievalBenchmark(
 	options: SearchOptionsBase
 ): Promise<RetrievalBenchmarkSearchExecution> {
-	const search = await collectMethodResults(options);
+	const topK = Math.max(0, Math.floor(options.topK ?? 10));
+	const search = await collectMethodResults({
+		...options,
+		topK: feedbackCandidateLimit(topK)
+	});
 	const learnedHybrid = await rerankWithActiveRetrievalModel(
 		RetrievalMode.HYBRID,
 		search.hybridScored,
@@ -215,10 +219,10 @@ export async function searchForRetrievalBenchmark(
 		query: search.query,
 		activeModelId: learnedHybrid.modelId,
 		rankings: {
-			semantic: search.semanticScored,
-			bm25: search.bm25Scored,
-			hybridBaseline: search.hybridScored,
-			hybridLearned: learnedHybrid.matches
+			semantic: search.semanticScored.slice(0, topK),
+			bm25: search.bm25Scored.slice(0, topK),
+			hybridBaseline: search.hybridScored.slice(0, topK),
+			hybridLearned: learnedHybrid.matches.slice(0, topK)
 		}
 	};
 }

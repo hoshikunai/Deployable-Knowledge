@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { asc } from 'drizzle-orm';
+import { asc, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/database/database';
-import { retrievalBenchmarkCases, retrievalBenchmarkJudgments } from '$lib/server/database/schema';
+import {
+	documentChunks,
+	documents,
+	retrievalBenchmarkCases,
+	retrievalBenchmarkJudgments
+} from '$lib/server/database/schema';
 import type {
 	CreateRetrievalBenchmarkCaseInput,
 	RetrievalBenchmarkCase,
@@ -14,6 +19,35 @@ export class RetrievalBenchmarksRepository {
 		const createdAt = new Date().toISOString();
 
 		await db.transaction(async (transaction) => {
+			if (input.documentIds.length > 0) {
+				const selectedDocuments = await transaction
+					.select({ id: documents.id })
+					.from(documents)
+					.where(inArray(documents.id, input.documentIds));
+				if (selectedDocuments.length !== new Set(input.documentIds).size) {
+					throw new Error('A benchmark document filter references a missing document.');
+				}
+			}
+
+			const judgedChunks = await transaction
+				.select({ id: documentChunks.id, documentId: documentChunks.documentId })
+				.from(documentChunks)
+				.where(
+					inArray(
+						documentChunks.id,
+						input.judgments.map(({ chunkId }) => chunkId)
+					)
+				);
+			if (
+				judgedChunks.length !== input.judgments.length ||
+				(input.documentIds.length > 0 &&
+					judgedChunks.some((chunk) => !input.documentIds.includes(chunk.documentId)))
+			) {
+				throw new Error(
+					'Benchmark judgments must reference existing chunks within the document filters.'
+				);
+			}
+
 			await transaction.insert(retrievalBenchmarkCases).values({
 				id,
 				name: input.name,

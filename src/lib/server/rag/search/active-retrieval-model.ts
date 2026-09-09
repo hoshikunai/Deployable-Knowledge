@@ -108,8 +108,10 @@ async function requireCompatibleRetrievalModel(modelId: string): Promise<ActiveR
 		evaluation.pairwiseAccuracy > 1 ||
 		!Number.isInteger(evaluation.evaluatedPairs) ||
 		evaluation.evaluatedPairs < 1 ||
+		!Number.isFinite(evaluation.ndcgImprovement) ||
 		evaluation.ndcgImprovement === null ||
 		evaluation.ndcgImprovement < MINIMUM_ACTIVATION_NDCG_IMPROVEMENT ||
+		!Number.isInteger(evaluation.evaluatedRankingGroups) ||
 		evaluation.evaluatedRankingGroups < MINIMUM_ACTIVATION_RANKING_GROUPS
 	) {
 		throw new Error(
@@ -132,6 +134,7 @@ async function requireCompatibleRetrievalModel(modelId: string): Promise<ActiveR
 			evaluation.tiedRankingGroups !==
 			evaluation.evaluatedRankingGroups ||
 		nonTieWinRate < MINIMUM_ACTIVATION_NON_TIE_WIN_RATE ||
+		!Number.isFinite(evaluation.worstRankingGroupNdcgDelta) ||
 		evaluation.worstRankingGroupNdcgDelta === null ||
 		evaluation.worstRankingGroupNdcgDelta < -MAXIMUM_ACTIVATION_GROUP_NDCG_REGRESSION
 	) {

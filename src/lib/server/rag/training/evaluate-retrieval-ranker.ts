@@ -1,3 +1,4 @@
+import { RetrievalMode } from '$lib/enums';
 import { blendLearnedRanking } from '$lib/server/rag/search/blend-learned-ranking';
 import { buildRetrievalPreferencePairs } from './build-retrieval-preference-pairs';
 import type { PreparedRetrievalTrainingExample } from './build-retrieval-training-features';
@@ -83,6 +84,9 @@ export function evaluateRetrievalRanker(
 	const groups = new Map<string, ScoredRetrievalTrainingExample[]>();
 
 	for (const scoredExample of scoredExamples) {
+		// Activation gates must measure the mode where the model is actually deployed.
+		if (scoredExample.example.retrievalMode !== RetrievalMode.HYBRID) continue;
+
 		const groupKey = buildRankingGroupKey(scoredExample.example);
 		const group = groups.get(groupKey) ?? [];
 		group.push(scoredExample);

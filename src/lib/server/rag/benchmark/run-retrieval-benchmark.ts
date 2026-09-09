@@ -122,6 +122,9 @@ export async function runFixedRetrievalBenchmark(topK: number): Promise<Retrieva
 			documentIds: benchmarkCase.documentIds.length > 0 ? benchmarkCase.documentIds : undefined
 		});
 
+		if (cases.length > 0 && activeModelId !== execution.activeModelId) {
+			throw new Error('The learned model changed during the benchmark. Run the benchmark again.');
+		}
 		activeModelId = execution.activeModelId;
 
 		cases.push({
