@@ -4,3 +4,7 @@ build/
 release/
 drizzle/
 .claude/
+benchmarks/beir/.venv/
+benchmarks/beir/__pycache__/
+benchmarks/beir/datasets/
+benchmarks/beir/runs/

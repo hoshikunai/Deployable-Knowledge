@@ -6,8 +6,9 @@ from urllib import error, parse, request
 
 
 class DeployableKnowledgeClient:
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, search_timeout: float = 180) -> None:
         self.base_url = base_url.rstrip("/")
+        self.search_timeout = search_timeout
 
     def ingest_document(self, title: str, text: str) -> dict[str, Any]:
         payload = json.dumps(
@@ -27,7 +28,7 @@ class DeployableKnowledgeClient:
         completed_result: dict[str, Any] | None = None
 
         try:
-            with request.urlopen(http_request, timeout=1800) as response:
+            with request.urlopen(http_request, timeout=self.search_timeout) as response:
                 # The endpoint emits one JSON object per line.
                 for raw_line in response:
                     line = raw_line.decode("utf-8").strip()

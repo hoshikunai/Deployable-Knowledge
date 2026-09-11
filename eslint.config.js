@@ -40,6 +40,13 @@ export default ts.config(
 		}
 	},
 	{
-		ignores: ['dist/**', 'build/**', '.svelte-kit/**']
+		ignores: [
+			'dist/**',
+			'build/**',
+			'.svelte-kit/**',
+			'benchmarks/beir/.venv/**',
+			'benchmarks/beir/datasets/**',
+			'benchmarks/beir/runs/**'
+		]
 	}
 );
