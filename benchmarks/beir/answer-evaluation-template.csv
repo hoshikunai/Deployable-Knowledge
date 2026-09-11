@@ -1,0 +1,3 @@
+case_id,category,question,reference_answer,required_facts,source_document_ids,system_answer,correctness_0_2,faithfulness_0_2,completeness_0_2,citation_accuracy_0_2,abstention_0_2,evaluator_notes
+example-001,factual,"What policy applies to the example request?","The example policy requires review.","requires review",example-document-id,,,,,,
+example-002,unanswerable,"What fact is not covered by the documents?","The documents do not provide this information.","must abstain",,,,,,,
