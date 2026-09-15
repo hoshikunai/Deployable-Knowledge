@@ -1,0 +1,2 @@
+warning: no attention implementation was specified. Pass --attn-implementation (for example, sdpa or flash_attention_2) or --flash-attn2 when appropriate. Benchmark inference can be long, and the model's officially recommended attention implementation can be substantially faster.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.

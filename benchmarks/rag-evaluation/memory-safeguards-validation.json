@@ -1,0 +1,34 @@
+{
+	"status": "passed",
+	"oomEvidence": {
+		"wslMemoryLimitGiB": 13,
+		"swapExhaustedGiB": 8,
+		"largestProcessRssGiB": 7.61,
+		"otherProcessRssGiB": [2.8, 0.735]
+	},
+	"configuration": {
+		"exclusiveLease": "fcntl",
+		"ownedRssWarningGiB": 6,
+		"ownedRssStopGiB": 7,
+		"globalMemAvailableWarningGiB": 3,
+		"globalMemAvailableStopGiB": 2,
+		"globalSwapFreeWarningGiB": 2,
+		"globalSwapFreeStopGiB": 1,
+		"preflightMemAvailableGiB": 4,
+		"preflightSwapFreeGiB": 2
+	},
+	"validation": {
+		"beirHarnessTests": 31,
+		"safeguardAndHakariTests": 28,
+		"pythonCompilation": "passed",
+		"lint": "passed",
+		"typescriptCheck": "passed with 0 errors and 0 warnings",
+		"productionBuild": "passed",
+		"gitDiffCheck": "passed",
+		"realBenchmarkStarted": false
+	},
+	"gates": {
+		"passed": true,
+		"reason": null
+	}
+}

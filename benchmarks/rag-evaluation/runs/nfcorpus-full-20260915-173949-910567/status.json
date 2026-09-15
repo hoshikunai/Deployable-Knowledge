@@ -1,0 +1,5 @@
+{
+  "status": "interrupted",
+  "reason": "BEIR subprocess ended before completion; resume from preserved run checkpoints",
+  "configFingerprint": "c0518831228885917343cfd10ec0d0767736ecb915cdce832753da39c9a155e6"
+}

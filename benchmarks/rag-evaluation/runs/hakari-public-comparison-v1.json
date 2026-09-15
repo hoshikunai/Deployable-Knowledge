@@ -1,0 +1,89 @@
+{
+  "sourceDuckdb": "benchmarks/rag-evaluation/runs/hakari-public-comparison-v1/source/duckdb/hakari_bench.duckdb",
+  "datasetRevision": "d3962aa8efe48ed79044c5e155b848982667b4ba",
+  "filters": {
+    "modelType": "reranker",
+    "candidateRanking": "reranking_hybrid",
+    "scoreTarget": "reranking"
+  },
+  "tasks": [
+    {
+      "task": "arguana",
+      "localNdcgAt10": 0.38429200220112464,
+      "publicSystemCount": 1,
+      "rank": 2,
+      "tieRank": 2,
+      "percentile": 0.0,
+      "publicMedian": 0.38758658105407645,
+      "publicBest": 0.38758658105407645,
+      "neighbors": [
+        {
+          "model": "cl-nagoya/ruri-v3-reranker-310m",
+          "score": 0.38758658105407645
+        }
+      ],
+      "rawArtifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanoarguana/results/local-ts/hakari-bench__NanoBEIR-en/arguana.json"
+    },
+    {
+      "task": "scifact",
+      "localNdcgAt10": 0.7344957473837523,
+      "publicSystemCount": 1,
+      "rank": 2,
+      "tieRank": 2,
+      "percentile": 0.0,
+      "publicMedian": 0.8045898539943386,
+      "publicBest": 0.8045898539943386,
+      "neighbors": [
+        {
+          "model": "cl-nagoya/ruri-v3-reranker-310m",
+          "score": 0.8045898539943386
+        }
+      ],
+      "rawArtifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanoscifact-v4/results/local-ts/hakari-bench__NanoBEIR-en/scifact.json"
+    },
+    {
+      "task": "nfcorpus",
+      "localNdcgAt10": 0.3612864222835317,
+      "publicSystemCount": 12,
+      "rank": 5,
+      "tieRank": 5,
+      "percentile": 66.66666666666667,
+      "publicMedian": 0.35337203231934144,
+      "publicBest": 0.4240938635046263,
+      "neighbors": [
+        {
+          "model": "cross-encoder/ettin-reranker-150m-v1",
+          "score": 0.35840907521572873
+        },
+        {
+          "model": "cl-nagoya/ruri-v3-reranker-310m",
+          "score": 0.355221715070093
+        },
+        {
+          "model": "cross-encoder/ettin-reranker-17m-v1",
+          "score": 0.3515223495685899
+        }
+      ],
+      "rawArtifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanonc-20260915/results/local-ts/hakari-bench__NanoBEIR-en/nfcorpus.json"
+    },
+    {
+      "task": "fiqa2018",
+      "localNdcgAt10": 0.5079491193603145,
+      "publicSystemCount": 1,
+      "rank": 2,
+      "tieRank": 2,
+      "percentile": 0.0,
+      "publicMedian": 0.5814425646544703,
+      "publicBest": 0.5814425646544703,
+      "neighbors": [
+        {
+          "model": "cl-nagoya/ruri-v3-reranker-310m",
+          "score": 0.5814425646544703
+        }
+      ],
+      "rawArtifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanofiqa-20260915/results/local-ts/hakari-bench__NanoBEIR-en/fiqa2018.json"
+    }
+  ],
+  "macroLocalNdcgAt10": 0.4970058228071808,
+  "macroPublicMedian": 0.5317477580055567
+}

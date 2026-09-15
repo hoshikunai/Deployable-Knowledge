@@ -1,0 +1,30 @@
+{
+	"createdAt": "2026-09-15T16:45:09.174730+00:00",
+	"datasets": ["nfcorpus", "fiqa", "arguana", "scidocs", "trec-covid", "hotpotqa"],
+	"existingSciFact": {
+		"artifacts": {
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/artifact-hashes-v3.json": "6262af61c348a6c545e54c64be09c981739119c4c434c632578badb0cb2acfbb",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/document-depth-amendment-v2.json": "5727fe7aa603d00841fa6f0853874cc06c626e07514d9036cc60729da3f4cca0",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/execution-config.json": "d4e4526cead5b2dd42e2773dbccbadbf222364f38fec06cd6e1bef6747f316d6",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/final-audit-v3.json": "c0374c72cfd08abb4718a45e923781ec31917763ae9f8f386ae9811f75adf5eb",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/protocol.json": "395f321e17a2ef6a5c3638478a1979d560a4dbd028e5b6e619f9707f7ccd9e15",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/public-result-v3.json": "50c8b7f480dc4e3e823faf9179e911b4e5b3ad1866f5149bf377fd7a32235acf",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/runner-validation.json": "044c0e25b76635af53a0d56456f26feaefbcfacc7a7802b35eba1b8a62b4a7c4",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/runtime-preparation-v2.json": "59433fb132f525ada1b3a4e4ad4d45f55a0fd6b44fd6155f20785013876ca27e",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/runtime-preparation.json": "3bed6a8a1b46e0a8ce55771d17607a4373b3c2347ba5c3e785030b9e406fd53e",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/step4-retrieval-v2.json": "010a89abc2ab369225cf1b9bb6d6d3fceefaf084ab65430366993bc6c48a4c93",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/step4-retrieval-v3.json": "1fedb96cb8850284389f4f0414acc64facabe4b3f429f0a1d1b1bffd7e084e2f",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/step5-validation-v3.json": "1fb5a52716f2af8a346c0ba4a9ec0a06f19e14358f36f514fd7007e5f9e6b671",
+			"benchmarks/beir/runs/public-comparable/scifact-full-test-v1/step6-validation-v3.json": "ceb41ed4bb131042c9f874d0782a8be4d704977337afaabfb05e86d0f5bb6276"
+		},
+		"root": "benchmarks/beir/runs/public-comparable/scifact-full-test-v1"
+	},
+	"git": {
+		"dirty": true,
+		"revision": "f181a24eac9ce3212a9408689922efb0fbd3a63c"
+	},
+	"notes": [
+		"Existing artifacts are referenced, never overwritten.",
+		"Full-corpus execution requires a validated isolated runtime."
+	]
+}

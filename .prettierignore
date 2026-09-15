@@ -8,3 +8,9 @@ benchmarks/beir/.venv/
 benchmarks/beir/__pycache__/
 benchmarks/beir/datasets/
 benchmarks/beir/runs/
+benchmarks/rag-evaluation/.venv/
+benchmarks/rag-evaluation/.venv-py312/
+benchmarks/rag-evaluation/__pycache__/
+benchmarks/rag-evaluation/runs/
+benchmarks/rag-evaluation/execution-status.json
+benchmarks/rag-evaluation/full-beir-plan.json

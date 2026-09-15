@@ -46,7 +46,10 @@ export default ts.config(
 			'.svelte-kit/**',
 			'benchmarks/beir/.venv/**',
 			'benchmarks/beir/datasets/**',
-			'benchmarks/beir/runs/**'
+			'benchmarks/beir/runs/**',
+			'benchmarks/rag-evaluation/.venv/**',
+			'benchmarks/rag-evaluation/.venv-py312/**',
+			'benchmarks/rag-evaluation/runs/**'
 		]
 	}
 );

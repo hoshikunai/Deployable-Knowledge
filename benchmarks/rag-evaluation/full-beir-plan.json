@@ -1,0 +1,15 @@
+{
+  "status": "deferred-not-run",
+  "split": "test",
+  "queryCounts": "all",
+  "searchDepth": 10,
+  "timeoutSecondsPerQuery": 180,
+  "ingestionTimeoutSeconds": 1800,
+  "maxCorpusRuntimeMinutes": 45,
+  "datasets": ["nfcorpus", "fiqa", "arguana", "scidocs", "trec-covid", "hotpotqa"],
+  "commands": {
+    "dryRun": "python benchmarks/rag-evaluation/full_beir_plan.py --dry-run",
+    "execute": "python benchmarks/rag-evaluation/full_beir_plan.py --execute"
+  },
+  "safety": ["fresh versioned runtime per dataset", "no sampling", "resume checkpoints", "never overwrite prior results"]
+}

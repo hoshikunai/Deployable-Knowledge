@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import socket
+import signal
 from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -23,6 +24,10 @@ RUNTIME_ROOT = REPOSITORY_ROOT / ".cache" / "beir"
 SERVER_ENTRYPOINT = REPOSITORY_ROOT / "build" / "index.js"
 MIGRATIONS_ROOT = REPOSITORY_ROOT / "drizzle"
 SHARED_MODEL_CACHE = REPOSITORY_ROOT / ".cache" / "transformersjs"
+sys.path.insert(0, str(REPOSITORY_ROOT))
+from benchmarks.benchmark_lease import (terminate_group, MemoryWatchdog, memory_preflight,
+    BenchmarkLease, TimedOutError, MemoryPausedError)
+from benchmarks.benchmark_lease import start_identity, atomic_json
 
 
 def port_is_available(port: int) -> bool:
@@ -115,8 +120,8 @@ def ensure_build_exists() -> None:
         )
 
 
-def prepare_runtime(dataset: str, share_model_cache: bool) -> Path:
-    runtime = RUNTIME_ROOT / f"runtime-{dataset}-001"
+def prepare_runtime(dataset: str, share_model_cache: bool, runtime_id: str | None = None) -> Path:
+    runtime = RUNTIME_ROOT / (runtime_id or f"runtime-{dataset}-001")
     marker_path = runtime / "beir-dataset.json"
     database_path = runtime / "app.db"
 
@@ -197,27 +202,35 @@ def start_server(
         env=environment,
         stdout=log_file,
         stderr=subprocess.STDOUT,
+        start_new_session=True,
     )
+    marker = runtime / 'benchmark-owner.json'
+    atomic_json(marker, {'pid':process.pid,'startIdentity':start_identity(process.pid),'pgid':process.pid,'command':'node '+str(SERVER_ENTRYPOINT),'runtimePath':str(runtime.resolve()),'port':port,'heartbeatAt':time.time()})
+    process._benchmark_marker = marker
     deadline = time.monotonic() + startup_timeout
 
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            log_file.flush()
-            raise RuntimeError(
-                f"The server exited with status {process.returncode}.\n"
-                f"{tail(log_path)}"
-            )
-        if heartbeat(base_url):
-            return process, log_file, log_path
-        time.sleep(0.5)
+    try:
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                log_file.flush()
+                raise RuntimeError(
+                    f"The server exited with status {process.returncode}.\n"
+                    f"{tail(log_path)}"
+                )
+            if heartbeat(base_url):
+                return process, log_file, log_path
+            time.sleep(0.5)
 
-    process.terminate()
-    process.wait(timeout=15)
-    log_file.flush()
-    raise RuntimeError(
-        f"The server did not become ready within {startup_timeout}s.\n"
-        f"{tail(log_path)}"
-    )
+        raise RuntimeError(
+            f"The server did not become ready within {startup_timeout}s.\n"
+            f"{tail(log_path)}"
+        )
+    except BaseException:
+        terminate_group(process.pid)
+        process.wait(timeout=15)
+        marker.unlink(missing_ok=True)
+        log_file.close()
+        raise
 
 
 def stop_server(
@@ -225,12 +238,14 @@ def stop_server(
     log_file: BinaryIO,
 ) -> None:
     if process.poll() is None:
-        process.terminate()
+        terminate_group(process.pid)
         try:
             process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=15)
+    marker = getattr(process, '_benchmark_marker', None)
+    if marker and marker.exists(): marker.unlink()
     log_file.close()
 
 
@@ -238,11 +253,19 @@ def run_dataset(
     dataset: str,
     arguments: argparse.Namespace,
     suite_id: str,
+    lease_owner: BenchmarkLease | None = None,
 ) -> dict[str, Any]:
+    if lease_owner is None:
+        memory_preflight()
+        with BenchmarkLease(runName=suite_id, dataset=dataset, port=arguments.port) as owner:
+            return run_dataset(dataset, arguments, suite_id, owner)
+    if lease_owner.fd is None or lease_owner.metadata.get('pid') != os.getpid():
+        raise RuntimeError('invalid lease owner')
     download_dataset(dataset, DATASETS_ROOT)
     runtime = prepare_runtime(
         dataset,
         share_model_cache=not arguments.no_shared_model_cache,
+        runtime_id=getattr(arguments, "runtime_id", None),
     )
     port = select_available_port(arguments.port)
     base_url = f"http://127.0.0.1:{port}"
@@ -252,12 +275,12 @@ def run_dataset(
         port,
         arguments.startup_timeout,
     )
-    run_name = f"{suite_id}-{arguments.split}"
+    run_name = getattr(arguments, "run_name", None) or f"{suite_id}-{arguments.split}"
     run_directory = RUNS_ROOT / f"{dataset}-{run_name}"
+    child: subprocess.Popen[bytes] | None = None
 
     try:
-        subprocess.run(
-            [
+        command = [
                 sys.executable,
                 str(HARNESS_ROOT / "run.py"),
                 "--dataset",
@@ -274,11 +297,43 @@ def run_dataset(
                 str(arguments.sample_seed),
                 "--run-name",
                 run_name,
-            ],
-            cwd=REPOSITORY_ROOT,
-            check=True,
-        )
+            ]
+        if getattr(arguments, "resume", False):
+            command.append("--resume")
+        child = subprocess.Popen(command, cwd=REPOSITORY_ROOT, start_new_session=True)
+        watchdog = MemoryWatchdog([process.pid, child.pid], ceiling=getattr(arguments, "memory_ceiling", 7*1024**3), warning=getattr(arguments, "memory_warning", 6*1024**3), resume_command=f"python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume --dataset {dataset} --run-name {run_name}", status_path=run_directory/'status.json', samples_path=run_directory/'memory-samples.jsonl')
+        deadline = time.monotonic() + getattr(arguments, "timeout_seconds", 10**9)
+        while child.poll() is None:
+            if watchdog.poll() == "memory-paused":
+                terminate_group(child.pid)
+                child.wait(timeout=15)
+                raise MemoryPausedError("memory-paused", peak_owned_rss=watchdog.peak,
+                    last_sample=watchdog.last, resume_command=watchdog.resume_command)
+            if time.monotonic() >= deadline:
+                terminate_group(child.pid)
+                child.wait(timeout=15)
+                raise TimedOutError("benchmark timed out", peak_owned_rss=watchdog.peak,
+                    last_sample=watchdog.last, resume_command=watchdog.resume_command)
+            time.sleep(min(watchdog.interval, .5))
+        try:
+            child.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            os.killpg(child.pid, signal.SIGTERM)
+            try:
+                child.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait(timeout=15)
+            raise
+        if child.returncode:
+            raise subprocess.CalledProcessError(child.returncode, command)
     finally:
+        if child is not None and child.poll() is None:
+            terminate_group(child.pid)
+            try:
+                child.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                child.kill(); child.wait(timeout=15)
         stop_server(process, log_file)
 
     return {
@@ -320,28 +375,42 @@ def main() -> None:
     suite_directory = RUNS_ROOT / "suites" / suite_id
     suite_directory.mkdir(parents=True, exist_ok=False)
     results: list[dict[str, Any]] = []
-
-    for dataset in datasets:
-        print(f"\n=== {dataset} ===")
-        result = run_dataset(dataset, arguments, suite_id)
-        results.append(result)
-
-    summary = {
-        "suiteId": suite_id,
-        "split": arguments.split,
-        "queryCounts": arguments.query_counts,
-        "sampleSeed": arguments.sample_seed,
-        "searchDepth": arguments.search_depth,
-        "results": results,
+    previous_handlers = {
+        signum: signal.getsignal(signum)
+        for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
     }
-    summary_path = suite_directory / "summary.json"
-    summary_path.write_text(
-        json.dumps(summary, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
 
-    print_summary(results)
-    print(f"\nSuite summary written to {summary_path}")
+    def interrupted(signum: int, _frame: object) -> None:
+        raise KeyboardInterrupt(f"benchmark suite interrupted by signal {signum}")
+
+    for signum in previous_handlers:
+        signal.signal(signum, interrupted)
+
+    try:
+        for dataset in datasets:
+            print(f"\n=== {dataset} ===")
+            result = run_dataset(dataset, arguments, suite_id)
+            results.append(result)
+
+        summary = {
+            "suiteId": suite_id,
+            "split": arguments.split,
+            "queryCounts": arguments.query_counts,
+            "sampleSeed": arguments.sample_seed,
+            "searchDepth": arguments.search_depth,
+            "results": results,
+        }
+        summary_path = suite_directory / "summary.json"
+        summary_path.write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        print_summary(results)
+        print(f"\nSuite summary written to {summary_path}")
+    finally:
+        for signum, handler in previous_handlers.items():
+            signal.signal(signum, handler)
 
 
 if __name__ == "__main__":
