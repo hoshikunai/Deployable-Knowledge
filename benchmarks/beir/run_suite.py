@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+import socket
 from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -22,6 +23,24 @@ RUNTIME_ROOT = REPOSITORY_ROOT / ".cache" / "beir"
 SERVER_ENTRYPOINT = REPOSITORY_ROOT / "build" / "index.js"
 MIGRATIONS_ROOT = REPOSITORY_ROOT / "drizzle"
 SHARED_MODEL_CACHE = REPOSITORY_ROOT / ".cache" / "transformersjs"
+
+
+def port_is_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
+
+
+def select_available_port(preferred: int) -> int:
+    if port_is_available(preferred):
+        return preferred
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -225,11 +244,12 @@ def run_dataset(
         dataset,
         share_model_cache=not arguments.no_shared_model_cache,
     )
-    base_url = f"http://127.0.0.1:{arguments.port}"
+    port = select_available_port(arguments.port)
+    base_url = f"http://127.0.0.1:{port}"
     process, log_file, log_path = start_server(
         runtime,
         base_url,
-        arguments.port,
+        port,
         arguments.startup_timeout,
     )
     run_name = f"{suite_id}-{arguments.split}"
@@ -266,6 +286,7 @@ def run_dataset(
         "runtime": str(runtime.relative_to(REPOSITORY_ROOT)),
         "serverLog": str(log_path.relative_to(REPOSITORY_ROOT)),
         "runDirectory": str(run_directory.relative_to(REPOSITORY_ROOT)),
+        "port": port,
         "metricsByQueryCount": json.loads(
             (run_directory / "metrics-by-query-count.json").read_text(
                 encoding="utf-8"
