@@ -1,0 +1,18 @@
+id: local-ts
+source:
+  type: huggingface
+  name: local-ts
+method: reranker
+parameters: {}
+embedding:
+  truncate_dims: null
+runtime:
+  dtype: bf16
+  trust_remote_code: false
+  backend_library: custom
+target:
+  datasets:
+  - NanoBEIR-en
+  splits:
+  - NanoArguAna
+  evaluation_scope: standard

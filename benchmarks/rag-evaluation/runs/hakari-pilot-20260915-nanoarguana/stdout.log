@@ -1,0 +1,6 @@
+{
+  "primary_metric": "ndcg@10",
+  "primary_metric_mean": 0.38429200220112464,
+  "evaluated_count": 1,
+  "cache_hit_count": 0
+}

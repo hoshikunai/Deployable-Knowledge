@@ -1,0 +1,52 @@
+{
+  "version": "v2",
+  "package": "hakari-bench 0.1.0",
+  "commit": "e2feac3614a738b17dae5cdb6066d152e4fe3f1c",
+  "python": "3.12.13",
+  "model": "local-ts -> Xenova/ms-marco-MiniLM-L-6-v2",
+  "candidateRanking": "reranking_hybrid",
+  "datasets": [
+    {
+      "artifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanoarguana/results/local-ts/hakari-bench__NanoBEIR-en/arguana.json",
+      "dataset": "NanoArguAna",
+      "task": "arguana",
+      "ndcg@10": 0.38429200220112464,
+      "acc@100": 1.0,
+      "seconds": 275.7251667090022,
+      "queryCoverage": null,
+      "datasetRevision": "d3962aa8efe48ed79044c5e155b848982667b4ba"
+    },
+    {
+      "artifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanofiqa-20260915/results/local-ts/hakari-bench__NanoBEIR-en/fiqa2018.json",
+      "dataset": "NanoFiQA2018",
+      "task": "fiqa2018",
+      "ndcg@10": 0.5079491193603145,
+      "acc@100": 0.98,
+      "seconds": 227.11038352900505,
+      "queryCoverage": null,
+      "datasetRevision": "d3962aa8efe48ed79044c5e155b848982667b4ba"
+    },
+    {
+      "artifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanonc-20260915/results/local-ts/hakari-bench__NanoBEIR-en/nfcorpus.json",
+      "dataset": "NanoNFCorpus",
+      "task": "nfcorpus",
+      "ndcg@10": 0.3612864222835317,
+      "acc@100": 1.0,
+      "seconds": 243.9916866700005,
+      "queryCoverage": null,
+      "datasetRevision": "d3962aa8efe48ed79044c5e155b848982667b4ba"
+    },
+    {
+      "artifact": "benchmarks/rag-evaluation/runs/hakari-pilot-20260915-nanoscifact-v4/results/local-ts/hakari-bench__NanoBEIR-en/scifact.json",
+      "dataset": "NanoSciFact",
+      "task": "scifact",
+      "ndcg@10": 0.7344957473837523,
+      "acc@100": 1.0,
+      "seconds": 250.42746803200134,
+      "queryCoverage": null,
+      "datasetRevision": "d3962aa8efe48ed79044c5e155b848982667b4ba"
+    }
+  ],
+  "macroNdcgAt10": 0.4970058228071808,
+  "comparability": "HAKARI NanoBEIR reranker results; not directly comparable to full BEIR or application full-corpus metrics."
+}

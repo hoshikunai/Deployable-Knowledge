@@ -1,0 +1,10 @@
+{
+  "status": "interrupted",
+  "configFingerprint": "8de4a920160fa3e5dc9e8b3f2c7bbd747418f6d1d68f38ad8cc5a3d413c12fa4",
+  "reason": "interrupted by signal 2",
+  "peakOwnedRss": null,
+  "lastSample": null,
+  "childIdentities": [],
+  "checkpointCount": 0,
+  "resumeCommand": "python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume --dataset nfcorpus --run-name nfcorpus-full-20260915-174940-224808"
+}

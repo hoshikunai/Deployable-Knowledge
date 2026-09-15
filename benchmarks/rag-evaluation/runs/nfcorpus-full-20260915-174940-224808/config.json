@@ -1,0 +1,7 @@
+{
+  "dataset": "nfcorpus",
+  "split": "test",
+  "searchDepth": 10,
+  "timeoutMinutes": 45,
+  "runName": "nfcorpus-full-20260915-174940-224808"
+}
