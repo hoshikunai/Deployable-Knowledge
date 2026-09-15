@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlparse
 from typing import Any
 from urllib import error, parse, request
 
 
 class DeployableKnowledgeClient:
-    def __init__(self, base_url: str, search_timeout: float = 180) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        search_timeout: float = 180,
+        ingestion_timeout: float = 1800,
+    ) -> None:
+        parsed = urlparse(base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("base URL must be an absolute HTTP(S) URL")
+        if "[" in base_url or "](" in base_url:
+            raise ValueError("base URL must not be Markdown-formatted")
         self.base_url = base_url.rstrip("/")
         self.search_timeout = search_timeout
+        self.ingestion_timeout = ingestion_timeout
 
     def ingest_document(self, title: str, text: str) -> dict[str, Any]:
         payload = json.dumps(
@@ -28,7 +40,7 @@ class DeployableKnowledgeClient:
         completed_result: dict[str, Any] | None = None
 
         try:
-            with request.urlopen(http_request, timeout=self.search_timeout) as response:
+            with request.urlopen(http_request, timeout=self.ingestion_timeout) as response:
                 # The endpoint emits one JSON object per line.
                 for raw_line in response:
                     line = raw_line.decode("utf-8").strip()
@@ -70,7 +82,7 @@ class DeployableKnowledgeClient:
         )
 
         try:
-            with request.urlopen(http_request, timeout=1800) as response:
+            with request.urlopen(http_request, timeout=self.search_timeout) as response:
                 return json.load(response)
         except error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
