@@ -1,13 +1,15 @@
-/*This transcription service runs on the Hugging Face Transformers library using the
-Xenova Whisper Tiny English model. While it handles English audio transcription well, it may not perform 
-as accurately on complex/chaotic audio scenarios. Looking into using larger models*/
+/*
+ * Whisper produces the transcript text. Wav2Vec2 forced alignment later
+ * refines the word timestamps without changing that text.
+ */
 
 import { env, pipeline, type AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
 import { resolve } from 'node:path';
+import { sampleIndexToMs, type AudioChunk } from './audio-types';
 
 export const TRANSCRIPTION_MODEL = 'Xenova/whisper-tiny.en';
 
-const TRANSFORMERS_CACHE_DIR = resolve(process.cwd(), '.cache', 'transformersjs');
+export const TRANSFORMERS_CACHE_DIR = resolve(process.cwd(), '.cache', 'transformersjs');
 
 env.allowRemoteModels = true;
 env.cacheDir = TRANSFORMERS_CACHE_DIR;
@@ -15,19 +17,26 @@ env.localModelPath = TRANSFORMERS_CACHE_DIR;
 
 let transcriptionPipeline: Promise<AutomaticSpeechRecognitionPipeline> | undefined;
 
-export type TranscriptSegment = {
+export interface TranscriptSegment {
 	startMs: number;
 	endMs: number;
 	text: string;
 	speakerId?: number;
-};
+}
 
-export type TranscriptionResult = {
+export interface TranscribedAudioChunk {
+	audio: AudioChunk;
 	text: string;
 	segments: TranscriptSegment[];
-};
+}
 
-export async function transcribeAudio(audioData: Float32Array): Promise<TranscriptionResult> {
+export interface TranscriptionResult {
+	text: string;
+	segments: TranscriptSegment[];
+	chunks: TranscribedAudioChunk[];
+}
+
+async function getTranscriber(): Promise<AutomaticSpeechRecognitionPipeline> {
 	transcriptionPipeline ??= pipeline('automatic-speech-recognition', TRANSCRIPTION_MODEL, {
 		cache_dir: TRANSFORMERS_CACHE_DIR
 	}).catch((error) => {
@@ -35,30 +44,123 @@ export async function transcribeAudio(audioData: Float32Array): Promise<Transcri
 		throw error;
 	});
 
-	const transcriber = await transcriptionPipeline;
+	return transcriptionPipeline;
+}
 
-	// Timestamps let the pipeline stitch the 30 second windows of long audio back together
-	const result = await transcriber(audioData, {
-		chunk_length_s: 30,
-		return_timestamps: 'word',
-		stride_length_s: 5
-	});
+async function transcribeChunk(
+	transcriber: AutomaticSpeechRecognitionPipeline,
+	audio: AudioChunk,
+	longForm: boolean
+): Promise<TranscribedAudioChunk> {
+	let result;
+
+	if (longForm) {
+		result = await transcriber(audio.samples, {
+			chunk_length_s: 30,
+			return_timestamps: 'word',
+			stride_length_s: 5
+		});
+	} else {
+		result = await transcriber(audio.samples, {
+			return_timestamps: 'word'
+		});
+	}
+
+	const sourceStartMs = sampleIndexToMs(audio.startSample);
+	const sourceEndMs = sampleIndexToMs(audio.endSample);
 
 	const segments = (result.chunks ?? []).flatMap<TranscriptSegment>((segment) => {
 		const text = segment.text?.trim() ?? '';
 		const [start, end] = segment.timestamp ?? [];
+
 		if (!text || typeof start !== 'number') return [];
 
 		const endSeconds = typeof end === 'number' ? Math.max(end, start) : start;
 
+		const startMs = Math.min(
+			sourceEndMs,
+			Math.max(sourceStartMs, sourceStartMs + Math.round(start * 1000))
+		);
+
+		const endMs = Math.min(
+			sourceEndMs,
+			Math.max(startMs, sourceStartMs + Math.round(endSeconds * 1000))
+		);
+
 		return [
 			{
-				startMs: Math.max(0, Math.round(start * 1000)),
-				endMs: Math.max(0, Math.round(endSeconds * 1000)),
+				startMs,
+				endMs,
 				text
 			}
 		];
 	});
 
-	return { text: result.text.trim(), segments };
+	let text = result.text.trim();
+	if (segments.length > 0) {
+		text = segments.map((segment) => segment.text).join(' ');
+	}
+
+	return {
+		audio,
+		text,
+		segments
+	};
+}
+
+function combineChunkResults(chunks: TranscribedAudioChunk[]): TranscriptionResult {
+	return {
+		text: chunks
+			.map((chunk) => chunk.text)
+			.filter(Boolean)
+			.join(' ')
+			.trim(),
+		segments: chunks.flatMap((chunk) => chunk.segments),
+		chunks
+	};
+}
+
+/**
+ * Preserves the original whole-recording path for the later baseline
+ * comparison.
+ */
+export async function transcribeAudio(audioData: Float32Array): Promise<TranscriptionResult> {
+	const transcriber = await getTranscriber();
+
+	const audio: AudioChunk = {
+		startSample: 0,
+		endSample: audioData.length,
+		samples: audioData
+	};
+
+	const result = await transcribeChunk(transcriber, audio, true);
+
+	return combineChunkResults([result]);
+}
+
+/**
+ * Transcribes VAD-generated chunks. These chunks are already shorter than
+ * Whisper's 30-second input limit, so internal long-form chunking is disabled.
+ */
+export async function transcribeAudioChunks(
+	audioChunks: AudioChunk[]
+): Promise<TranscriptionResult> {
+	if (audioChunks.length === 0) {
+		return {
+			text: '',
+			segments: [],
+			chunks: []
+		};
+	}
+
+	const transcriber = await getTranscriber();
+	const results: TranscribedAudioChunk[] = [];
+
+	for (const audioChunk of audioChunks) {
+		if (audioChunk.samples.length === 0) continue;
+
+		results.push(await transcribeChunk(transcriber, audioChunk, false));
+	}
+
+	return combineChunkResults(results);
 }
