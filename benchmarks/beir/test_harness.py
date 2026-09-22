@@ -12,6 +12,7 @@ import run as harness_run
 from dataset_catalog import dataset_url, validate_dataset_name
 from beir.datasets.data_loader import GenericDataLoader
 from run import (
+    build_query_result,
     canonicalize_qrels,
     canonicalize_rankings,
     atomic_write_json,
@@ -28,7 +29,28 @@ from run import (
     validate_public_results,
 )
 from app_client import DeployableKnowledgeClient
-from run_suite import select_available_port
+from run_suite import select_available_port, validate_existing_runtime_schema
+
+
+class DocumentDepthTests(unittest.TestCase):
+    def test_build_query_result_retains_first_100_unique_documents(self) -> None:
+        hits = [
+            {"chunkId": f"c{index}", "documentId": f"app{index}", "chunkIndex": 0}
+            for index in range(120)
+        ]
+        response = {method: hits for method in harness_run.METHODS}
+        mapping = {f"app{index}": f"doc{index}" for index in range(120)}
+        rankings, _raw = build_query_result("q", "query", response, mapping, 100)
+        for ranking in rankings.values():
+            self.assertEqual(len(ranking), 100)
+            self.assertEqual(list(ranking)[-1], "doc99")
+
+    def test_100_document_evaluation_includes_recall_at_100(self) -> None:
+        rankings = {"q": {f"d{index}": float(100 - index) for index in range(100)}}
+        metrics = harness_run.evaluate_method(
+            {"q": {"d99": 1}}, rankings, [1, 3, 5, 10, 100],
+        )
+        self.assertEqual(metrics["recall"]["Recall@100"], 1.0)
 
 
 class QuerySelectionTests(unittest.TestCase):
@@ -191,6 +213,75 @@ class DatasetCatalogTests(unittest.TestCase):
             validate_dataset_name("../nfcorpus")
 
 
+class ExistingRuntimeSchemaTests(unittest.TestCase):
+    def test_watchdog_artifacts_are_separate_from_fresh_run_directory(self) -> None:
+        from run_suite import MemoryWatchdog
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); run=root/'arguana-run'; supervisor=root/'.supervisor-arguana-run'
+            watchdog=MemoryWatchdog([999999], interval=0, status_path=supervisor/'status.json', samples_path=supervisor/'memory-samples.jsonl')
+            watchdog.poll()
+            self.assertFalse(run.exists())
+            self.assertTrue(supervisor.exists())
+            self.assertEqual(supervisor, root/'.supervisor-arguana-run')
+    def test_rejects_marker_mismatch(self) -> None:
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory); (runtime / "beir-dataset.json").write_text('{"dataset":"fiqa"}')
+            with sqlite3.connect(runtime / "app.db") as db:
+                for table in ("__drizzle_migrations", "app_state", "documents", "document_chunks"):
+                    db.execute(f"CREATE TABLE {table} (id TEXT)")
+                db.execute("INSERT INTO __drizzle_migrations VALUES ('x')")
+            with self.assertRaisesRegex(RuntimeError, "marker mismatch"):
+                validate_existing_runtime_schema(runtime, dataset="arguana")
+
+    def test_rejects_missing_migration(self) -> None:
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory); (runtime / "beir-dataset.json").write_text('{"dataset":"arguana"}')
+            with sqlite3.connect(runtime / "app.db") as db:
+                for table in ("__drizzle_migrations", "app_state", "documents", "document_chunks"):
+                    db.execute(f"CREATE TABLE {table} (id TEXT)")
+            with self.assertRaisesRegex(RuntimeError, "no applied migration"):
+                validate_existing_runtime_schema(runtime, dataset="arguana")
+
+    def test_rejects_document_id_mapping_mismatch(self) -> None:
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            runtime=Path(directory); (runtime/"beir-dataset.json").write_text('{"dataset":"arguana"}')
+            with sqlite3.connect(runtime/"app.db") as db:
+                for table in ("__drizzle_migrations","app_state","document_chunks"): db.execute(f"CREATE TABLE {table} (id TEXT)")
+                db.execute("CREATE TABLE documents (id TEXT)"); db.execute("INSERT INTO __drizzle_migrations VALUES ('x')"); db.execute("INSERT INTO documents VALUES ('actual')")
+            mapping=runtime/"mapping.json"; mapping.write_text(json.dumps({"applicationToBeir":{"expected":"document"}}))
+            with self.assertRaisesRegex(RuntimeError,"document IDs"):
+                validate_existing_runtime_schema(runtime,dataset="arguana",mapping=mapping)
+    def test_accepts_migrated_existing_runtime_without_writing(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            database_path = runtime / "app.db"
+            with sqlite3.connect(database_path) as database:
+                for table in (
+                    "__drizzle_migrations", "app_state", "documents", "document_chunks"
+                ):
+                    database.execute(f"CREATE TABLE {table} (id TEXT)")
+                database.execute("INSERT INTO __drizzle_migrations VALUES ('applied')")
+
+            before = database_path.stat().st_mtime_ns
+            validate_existing_runtime_schema(runtime)
+            self.assertEqual(database_path.stat().st_mtime_ns, before)
+
+    def test_rejects_incomplete_runtime(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            with sqlite3.connect(runtime / "app.db") as database:
+                database.execute("CREATE TABLE app_state (id TEXT)")
+            with self.assertRaisesRegex(RuntimeError, "missing required tables"):
+                validate_existing_runtime_schema(runtime)
+
+
 class FakeClient:
     def __init__(
         self,
@@ -264,6 +355,51 @@ class RunnerExecutionTests(unittest.TestCase):
         self.assertEqual(len(client.ingest_calls), 1)
         self.assertEqual(client.search_calls, [])
 
+    def test_main_reuses_existing_mapping_without_ingestion(self) -> None:
+        corpus = {"document": {"title": "Test document", "text": "one two three"}}
+        queries = {"q1": "query one"}; qrels = {"q1": {"document": 1}}
+        client = FakeClient()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "mapping.json"
+            source.write_text(json.dumps({"beirToApplication": {"document": "app-document"},
+                "applicationToBeir": {"app-document": "document"},
+                "applicationToBeirAliases": {}, "missingCorpusQrelDocumentIds": [],
+                "skippedBeirDocuments": {}}))
+            args = {**vars(self.arguments(resume=False, run_name="reuse")),
+                    "prepare_only": True, "reuse_existing_runtime": True,
+                    "reuse_document_mapping": source, "runtime_fingerprint": "fixture"}
+            with (patch.object(harness_run, "RUNS_ROOT", root / "runs"),
+                  patch.object(harness_run, "DATASETS_ROOT", root / "datasets"),
+                  patch.object(harness_run, "download_dataset", return_value=root / "datasets/scifact"),
+                  patch.object(harness_run, "GenericDataLoader", return_value=MagicMock(load=MagicMock(return_value=(corpus, queries, qrels)))),
+                  patch.object(harness_run, "DeployableKnowledgeClient", return_value=client),
+                  patch.object(harness_run, "parse_arguments", return_value=Namespace(**args))):
+                harness_run.main()
+            config = json.loads((root / "runs/scifact-reuse/run-config.json").read_text())
+            self.assertEqual(client.ingest_calls, []); self.assertEqual(client.search_calls, [])
+            self.assertTrue((root / "runs/scifact-reuse/document-id-mapping.json").is_file())
+            for key in ("reuseExistingRuntime", "mappingSha256", "runtimeFingerprint", "corpusFingerprint"):
+                self.assertIn(key, config)
+
+    def test_reuse_resume_rejects_changed_mapping_before_client(self) -> None:
+        corpus = {"document": {"title": "Test", "text": "one two three"}}
+        q = {"q1": "query"}; qr = {"q1": {"document": 1}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "mapping.json"
+            mapping = {"beirToApplication":{"document":"app-document"},"applicationToBeir":{"app-document":"document"},"applicationToBeirAliases":{},"missingCorpusQrelDocumentIds":[],"skippedBeirDocuments":{}}
+            source.write_text(json.dumps(mapping)); client = FakeClient()
+            base = {**vars(self.arguments(resume=False, run_name="reuse")),"prepare_only":True,"reuse_existing_runtime":True,"reuse_document_mapping":source,"runtime_fingerprint":"fixture"}
+            common = [patch.object(harness_run,"RUNS_ROOT",root/"runs"),patch.object(harness_run,"DATASETS_ROOT",root/"datasets"),patch.object(harness_run,"download_dataset",return_value=root/"datasets/scifact"),patch.object(harness_run,"GenericDataLoader",return_value=MagicMock(load=MagicMock(return_value=(corpus,q,qr))))]
+            with patch.object(harness_run,"parse_arguments",return_value=Namespace(**base)), patch.object(harness_run,"DeployableKnowledgeClient",return_value=client):
+                for x in common: x.start()
+                try: harness_run.main()
+                finally:
+                    for x in common: x.stop()
+            mapping["applicationToBeir"] = {"changed":"document"}; source.write_text(json.dumps(mapping))
+            bad = {**base,"resume":True,"prepare_only":False}
+            with patch.object(harness_run,"parse_arguments",return_value=Namespace(**bad)), patch.object(harness_run,"DeployableKnowledgeClient",side_effect=AssertionError("client constructed")):
+                with self.assertRaises(RuntimeError): harness_run.main()
+
     def test_main_resumes_interrupted_search_without_reingestion(self) -> None:
         corpus = {
             "document": {
@@ -271,13 +407,15 @@ class RunnerExecutionTests(unittest.TestCase):
                 "text": "one two three four five six",
             }
         }
-        queries = {"q1": "query one", "q2": "query two", "q3": "query three"}
+        queries = {"q1": "query one", "q2": "query two"}
         qrels = {query_id: {"document": 1} for query_id in queries}
-        first_client = FakeClient(interrupt_on="query three")
+        first_client = FakeClient(interrupt_on="query two")
         resumed_client = FakeClient()
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            source = root / "mapping.json"
+            source.write_text(json.dumps({"beirToApplication":{"document":"app-document"},"applicationToBeir":{"app-document":"document"},"applicationToBeirAliases":{},"missingCorpusQrelDocumentIds":[],"skippedBeirDocuments":{}}))
             run_root = root / "runs"
             dataset_root = root / "datasets"
             loader = MagicMock()
@@ -305,8 +443,8 @@ class RunnerExecutionTests(unittest.TestCase):
                     harness_run,
                     "parse_arguments",
                     side_effect=[
-                        self.arguments(resume=False, run_name="resume-test"),
-                        self.arguments(resume=True, run_name="resume-test"),
+                        Namespace(**{**vars(self.arguments(resume=False, run_name="resume-test")),"reuse_existing_runtime":True,"reuse_document_mapping":source,"runtime_fingerprint":"fixture"}),
+                        Namespace(**{**vars(self.arguments(resume=True, run_name="resume-test")),"reuse_existing_runtime":True,"reuse_document_mapping":source,"runtime_fingerprint":"fixture"}),
                     ],
                 ),
                 patch.object(
@@ -323,18 +461,18 @@ class RunnerExecutionTests(unittest.TestCase):
                     run_directory / "query-checkpoints.jsonl",
                     list(queries),
                 )
-                self.assertEqual(list(partial), ["q1", "q2"])
+                self.assertEqual(list(partial), ["q1"])
                 self.assertFalse((run_directory / "metrics.json").exists())
 
                 harness_run.main()
 
-            self.assertEqual(len(first_client.ingest_calls), 1)
+            self.assertEqual(first_client.ingest_calls, [])
             self.assertEqual(resumed_client.ingest_calls, [])
             self.assertEqual(
                 first_client.search_calls,
-                ["query one", "query two", "query three"],
+                ["query one", "query two"],
             )
-            self.assertEqual(resumed_client.search_calls, ["query three"])
+            self.assertEqual(resumed_client.search_calls, ["query two"])
 
             run_directory = run_root / "scifact-resume-test"
             status = json.loads(
@@ -346,6 +484,18 @@ class RunnerExecutionTests(unittest.TestCase):
             self.assertEqual(status["status"], "complete")
             self.assertEqual(list(rankings["hybrid"]), list(queries))
             self.assertTrue((run_directory / "metrics.json").is_file())
+
+    def test_legacy_main_resumes_interrupted_search_without_reingestion(self) -> None:
+        corpus={"document":{"title":"Test document","text":"one two three four five six"}}
+        queries={"q1":"query one","q2":"query two","q3":"query three"}; qrels={q:{"document":1} for q in queries}
+        first=FakeClient(interrupt_on="query three"); resumed=FakeClient()
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); loader=MagicMock(); loader.load.return_value=(corpus,queries,qrels)
+            with patch.object(harness_run,"RUNS_ROOT",root/"runs"), patch.object(harness_run,"DATASETS_ROOT",root/"datasets"), patch.object(harness_run,"download_dataset",return_value=root/"datasets/scifact"), patch.object(harness_run,"GenericDataLoader",return_value=loader), patch.object(harness_run,"DeployableKnowledgeClient",side_effect=[first,resumed]), patch.object(harness_run,"parse_arguments",side_effect=[self.arguments(resume=False,run_name="legacy"),self.arguments(resume=True,run_name="legacy")]), patch.object(harness_run,"evaluate_method",return_value={"validated":True}):
+                with self.assertRaises(KeyboardInterrupt): harness_run.main()
+                harness_run.main()
+            self.assertEqual(len(first.ingest_calls),1); self.assertEqual(resumed.ingest_calls,[])
+            self.assertEqual(json.loads((root/"runs/scifact-legacy/run-status.json").read_text())["status"],"complete")
 
     def test_main_does_not_emit_metrics_for_unresolved_failures(self) -> None:
         corpus = {

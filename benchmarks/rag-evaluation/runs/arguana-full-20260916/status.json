@@ -1,0 +1,10 @@
+{
+  "status": "failed",
+  "configFingerprint": "44e53c770fc4faf94fa62e3d73de171c424b31d0695b9a06870c9fdf134d3074",
+  "reason": "Command '['/home/cpach/Projects/Deployable-Knowledge/benchmarks/beir/.venv/bin/python', '/home/cpach/Projects/Deployable-Knowledge/benchmarks/beir/run.py', '--dataset', 'arguana', '--split', 'test', '--base-url', 'http://127.0.0.1:4179', '--search-depth', '10', '--query-counts', 'all', '--sample-seed', '42', '--run-name', 'arguana-full-20260916', '--reuse-existing-runtime', '--reuse-document-mapping', 'benchmarks/beir/runs/arguana-suite-20260910-153730-040144-test/document-id-mapping.json', '--runtime-fingerprint', 'daca8abd375907de70fce2ea6a4c8a24e052fcbbf8ea8d371850280c54e17196', '--resume']' returned non-zero exit status 1.",
+  "peakOwnedRss": null,
+  "lastSample": null,
+  "childIdentities": [],
+  "checkpointCount": 0,
+  "resumeCommand": "python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume --dataset arguana --run-name arguana-full-20260916 --reuse-existing-runtime --reuse-document-mapping benchmarks/beir/runs/arguana-suite-20260910-153730-040144-test/document-id-mapping.json"
+}

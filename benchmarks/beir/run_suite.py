@@ -8,6 +8,8 @@ import sys
 import time
 import socket
 import signal
+import sqlite3
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -174,17 +176,67 @@ def tail(path: Path, line_count: int = 30) -> str:
     )
 
 
+def validate_existing_runtime_schema(runtime: Path, dataset: str | None = None,
+                                     mapping: Path | None = None) -> dict[str, Any]:
+    marker = runtime / "beir-dataset.json"
+    if dataset is not None:
+        if not marker.is_file() or json.loads(marker.read_text()).get("dataset") != dataset:
+            raise RuntimeError("Existing runtime dataset marker mismatch")
+    database_path = runtime / "app.db"
+    with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as database:
+        existing_tables = {
+            row[0]
+            for row in database.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        required_tables = {
+            "__drizzle_migrations",
+            "app_state",
+            "documents",
+            "document_chunks",
+        }
+        if not required_tables.issubset(existing_tables):
+            raise RuntimeError(
+                "Existing benchmark database is missing required tables: "
+                f"{sorted(required_tables - existing_tables)}"
+            )
+        migration_count = database.execute(
+            "SELECT COUNT(*) FROM __drizzle_migrations"
+        ).fetchone()[0]
+        if migration_count < 1:
+            raise RuntimeError("Existing benchmark database has no applied migration")
+        columns = {row[1] for row in database.execute("PRAGMA table_info(__drizzle_migrations)")}
+        migration_column = "hash" if "hash" in columns else None
+        migrations = database.execute(f"SELECT {migration_column} FROM __drizzle_migrations ORDER BY id").fetchall() if migration_column else database.execute("SELECT * FROM __drizzle_migrations ORDER BY id").fetchall()
+        migration_hash = hashlib.sha256(json.dumps(migrations).encode()).hexdigest()
+        if mapping is not None:
+            value = json.loads(mapping.read_text())
+            expected = set(value.get("applicationToBeir", {}))
+            actual = {row[0] for row in database.execute("SELECT id FROM documents")}
+            if actual != expected:
+                raise RuntimeError("Existing runtime document IDs do not match mapping")
+    ids_hash = hashlib.sha256(json.dumps(sorted(actual)).encode()).hexdigest() if mapping is not None else None
+    return {"dataset": dataset, "migrationHash": migration_hash, "documentCount": len(actual) if mapping is not None else None, "documentIdsHash": ids_hash}
+
+
 def start_server(
     runtime: Path,
     base_url: str,
     port: int,
     startup_timeout: int,
+    reuse_existing_schema: bool = False,
+    dataset: str | None = None,
+    mapping: Path | None = None,
 ) -> tuple[subprocess.Popen[bytes], BinaryIO, Path]:
     if heartbeat(base_url):
         raise RuntimeError(
             f"A server is already responding at {base_url}. Stop it before "
             "running the isolated suite."
         )
+
+    if reuse_existing_schema:
+        validate_existing_runtime_schema(runtime, dataset=dataset, mapping=mapping)
 
     log_path = runtime / "server.log"
     log_file = log_path.open("ab")
@@ -196,6 +248,8 @@ def start_server(
         "BODY_SIZE_LIMIT": "Infinity",
         "DK_MIGRATIONS_DIR": str(MIGRATIONS_ROOT),
     }
+    if reuse_existing_schema:
+        environment.pop("DK_MIGRATIONS_DIR", None)
     process = subprocess.Popen(
         ["node", str(SERVER_ENTRYPOINT)],
         cwd=runtime,
@@ -267,6 +321,11 @@ def run_dataset(
         share_model_cache=not arguments.no_shared_model_cache,
         runtime_id=getattr(arguments, "runtime_id", None),
     )
+    runtime_identity = validate_existing_runtime_schema(
+        runtime, dataset=dataset,
+        mapping=getattr(arguments, "reuse_document_mapping", None)
+        if getattr(arguments, "reuse_existing_runtime", False) else None,
+    ) if getattr(arguments, "reuse_existing_runtime", False) else None
     port = select_available_port(arguments.port)
     base_url = f"http://127.0.0.1:{port}"
     process, log_file, log_path = start_server(
@@ -274,6 +333,10 @@ def run_dataset(
         base_url,
         port,
         arguments.startup_timeout,
+        reuse_existing_schema=getattr(arguments, "reuse_existing_schema", False),
+        dataset=dataset,
+        mapping=getattr(arguments, "reuse_document_mapping", None)
+        if getattr(arguments, "reuse_existing_runtime", False) else None,
     )
     run_name = getattr(arguments, "run_name", None) or f"{suite_id}-{arguments.split}"
     run_directory = RUNS_ROOT / f"{dataset}-{run_name}"
@@ -298,10 +361,21 @@ def run_dataset(
                 "--run-name",
                 run_name,
             ]
+        if getattr(arguments, "reuse_existing_runtime", False):
+            command += ["--reuse-existing-runtime", "--reuse-document-mapping",
+                        str(arguments.reuse_document_mapping), "--runtime-fingerprint",
+                        hashlib.sha256(json.dumps(runtime_identity, sort_keys=True).encode()).hexdigest()]
         if getattr(arguments, "resume", False):
             command.append("--resume")
         child = subprocess.Popen(command, cwd=REPOSITORY_ROOT, start_new_session=True)
-        watchdog = MemoryWatchdog([process.pid, child.pid], ceiling=getattr(arguments, "memory_ceiling", 7*1024**3), warning=getattr(arguments, "memory_warning", 6*1024**3), resume_command=f"python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume --dataset {dataset} --run-name {run_name}", status_path=run_directory/'status.json', samples_path=run_directory/'memory-samples.jsonl')
+        resume_command = (f"python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume "
+                          f"--dataset {dataset} --run-name {run_name} "
+                          f"--search-depth {arguments.search_depth} "
+                          f"--timeout-minutes {getattr(arguments, 'timeout_seconds', 2700) // 60}")
+        if getattr(arguments, "reuse_existing_runtime", False):
+            resume_command += f" --reuse-existing-runtime --reuse-document-mapping {arguments.reuse_document_mapping}"
+        supervisor_directory = RUNS_ROOT / f".supervisor-{dataset}-{run_name}"
+        watchdog = MemoryWatchdog([process.pid, child.pid], ceiling=getattr(arguments, "memory_ceiling", 7*1024**3), warning=getattr(arguments, "memory_warning", 6*1024**3), resume_command=resume_command, status_path=supervisor_directory/'status.json', samples_path=supervisor_directory/'memory-samples.jsonl')
         deadline = time.monotonic() + getattr(arguments, "timeout_seconds", 10**9)
         while child.poll() is None:
             if watchdog.poll() == "memory-paused":

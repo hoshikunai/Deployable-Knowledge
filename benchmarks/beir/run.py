@@ -217,8 +217,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--search-depth",
         type=int,
-        default=100,
-        help="Number of chunks requested before document-level collapsing.",
+        default=10,
+        help="Maximum unique documents retained per query and method.",
     )
     query_selection = parser.add_mutually_exclusive_group()
     query_selection.add_argument(
@@ -258,6 +258,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--initial-http-top-k", type=int, default=20)
     parser.add_argument("--maximum-http-top-k", type=int, default=160)
     parser.add_argument("--reuse-document-mapping", type=Path)
+    parser.add_argument("--reuse-existing-runtime", action="store_true",
+                        help="Use a validated existing runtime mapping without ingestion.")
+    parser.add_argument("--runtime-fingerprint")
     return parser.parse_args()
 
 
@@ -330,6 +333,10 @@ def query_manifest_fingerprint(query_ids: list[str], protocol: dict[str, Any]) -
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+def corpus_fingerprint(corpus: dict[str, dict[str, str]]) -> str:
+    payload = "".join(json.dumps({"id": k, "title": v.get("title", ""), "text": v.get("text", "")}, sort_keys=True, ensure_ascii=False, separators=(",", ":")) + "\n" for k, v in sorted(corpus.items()))
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def validate_name(value: str, pattern: re.Pattern[str], label: str) -> str:
@@ -553,6 +560,7 @@ def canonicalize_rankings(
 def evaluate_method(
     qrels: dict[str, dict[str, int]],
     results: dict[str, dict[str, float]],
+    k_values: list[int] = K_VALUES,
 ) -> dict[str, Any]:
     # BEIR may remove identical query/document IDs during evaluation, so give
     # each evaluator its own copy.
@@ -560,14 +568,14 @@ def evaluate_method(
         EvaluateRetrieval.evaluate(
             qrels,
             copy.deepcopy(results),
-            K_VALUES,
+            k_values,
         )
     )
 
     mrr = EvaluateRetrieval.evaluate_custom(
         qrels,
         copy.deepcopy(results),
-        K_VALUES,
+        k_values,
         metric="mrr",
     )
 
@@ -719,6 +727,7 @@ def build_query_result(
     query_text: str,
     response: dict[str, Any],
     application_to_beir: dict[str, str],
+    document_depth: int = 10,
 ) -> tuple[dict[str, dict[str, float]], dict[str, Any]]:
     rankings: dict[str, dict[str, float]] = {}
     raw_record: dict[str, Any] = {
@@ -741,7 +750,7 @@ def build_query_result(
         rankings[method] = collapse_chunks_to_documents(
             hits=hits,
             application_to_beir=application_to_beir,
-            target_count=max(K_VALUES),
+            target_count=document_depth,
         )
     return rankings, raw_record
 
@@ -800,6 +809,7 @@ def run_query_searches(
     require_complete: bool = False,
     initial_http_top_k: int = 20,
     maximum_http_top_k: int = 160,
+    document_depth: int = 10,
 ) -> tuple[
     dict[str, dict[str, dict[str, float]]],
     list[dict[str, Any]],
@@ -847,7 +857,8 @@ def run_query_searches(
                 else:
                     response = client.search(query=query_text, top_k=http_top_k)
                     rankings, raw_record = build_query_result(
-                        query_id, query_text, response, application_to_beir
+                        query_id, query_text, response, application_to_beir,
+                        document_depth=document_depth,
                     )
                 if require_complete and any(
                     len(rankings[method]) != max(K_VALUES) for method in METHODS
@@ -943,7 +954,8 @@ def main() -> None:
         validate_name(arguments.run_name, RUN_NAME_PATTERN, "run name")
     if arguments.resume and not arguments.run_name:
         raise ValueError("--resume requires --run-name")
-    if arguments.resume and getattr(arguments, "reuse_document_mapping", None):
+    if (arguments.resume and getattr(arguments, "reuse_document_mapping", None)
+            and not getattr(arguments, "reuse_existing_runtime", False)):
         raise ValueError("--reuse-document-mapping cannot be combined with --resume")
     if arguments.chunk_overfetch_factor < 1:
         raise ValueError("--chunk-overfetch-factor must be at least 1")
@@ -952,6 +964,9 @@ def main() -> None:
         raise ValueError(
             f"--search-depth must be at least {max(K_VALUES)}"
         )
+    if arguments.search_depth > 100:
+        raise ValueError("--search-depth cannot exceed 100 unique documents")
+    k_values = K_VALUES + ([arguments.search_depth] if arguments.search_depth > max(K_VALUES) else [])
 
     DATASETS_ROOT.mkdir(parents=True, exist_ok=True)
     RUNS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -998,6 +1013,10 @@ def main() -> None:
     http_top_k = (
         arguments.search_depth * arguments.chunk_overfetch_factor
     )
+    if public_protocol is None and http_top_k > 200:
+        raise ValueError(
+            "Requested chunk depth exceeds the search endpoint's 200-chunk limit"
+        )
     immutable_protocol = {
         "schema": "beir-run-v2",
         "dataset": dataset_name,
@@ -1014,12 +1033,25 @@ def main() -> None:
         "httpTopK": http_top_k,
         "chunkOverfetchFactor": arguments.chunk_overfetch_factor,
         "methods": list(METHODS),
-        "kValues": K_VALUES,
+        "kValues": k_values,
         "titleProtocol": "title-plus-text",
         "duplicateCanonicalization": "application-id-mapping-v1",
         "corpusCount": len(corpus),
         "persistentRuntimeRequiredForResume": True,
     }
+    reuse_mode = bool(getattr(arguments, "reuse_existing_runtime", False))
+    reuse_source = getattr(arguments, "reuse_document_mapping", None)
+    if reuse_mode:
+        if not getattr(arguments, "runtime_fingerprint", None):
+            raise RuntimeError("Existing-runtime reuse requires a runtime fingerprint")
+        if reuse_source is None or not reuse_source.is_file():
+            raise RuntimeError("Existing-runtime reuse requires a mapping file")
+        immutable_protocol["reuseExistingRuntime"] = True
+        immutable_protocol["mappingSource"] = str(reuse_source.resolve())
+        immutable_protocol["mappingSha256"] = hashlib.sha256(reuse_source.read_bytes()).hexdigest()
+        immutable_protocol["runtimeFingerprint"] = arguments.runtime_fingerprint
+    if reuse_mode:
+        immutable_protocol["corpusFingerprint"] = corpus_fingerprint(corpus)
     immutable_protocol["queryManifestFingerprint"] = query_manifest_fingerprint(
         selected_query_ids, immutable_protocol
     )
@@ -1087,6 +1119,10 @@ def main() -> None:
         for document_id in judgments
     }
     missing_corpus_document_ids = judged_document_ids - set(corpus)
+    client = None
+    if not reuse_mode and not arguments.resume:
+        client = DeployableKnowledgeClient(arguments.base_url, search_timeout=arguments.search_timeout, ingestion_timeout=arguments.ingestion_timeout)
+        client.heartbeat()
     if missing_corpus_document_ids:
         print(
             "Warning: qrels reference "
@@ -1094,13 +1130,6 @@ def main() -> None:
             "the corpus; those relevance judgments remain in the "
             "evaluation and cannot be retrieved."
         )
-
-    client = DeployableKnowledgeClient(
-        arguments.base_url,
-        search_timeout=arguments.search_timeout,
-        ingestion_timeout=arguments.ingestion_timeout,
-    )
-    client.heartbeat()
 
     if arguments.resume:
         (
@@ -1114,6 +1143,19 @@ def main() -> None:
             raise RuntimeError(
                 "Saved mapping does not match missing corpus qrel IDs"
             )
+        if reuse_mode and saved_protocol.get("mappingSha256") != immutable_protocol.get("mappingSha256"):
+            raise RuntimeError("Resume reuse mapping does not match saved configuration")
+    elif reuse_mode:
+        mapping_source = reuse_source
+        if mapping_source is None or not mapping_source.is_file():
+            raise RuntimeError("Existing-runtime reuse requires a mapping file")
+        (
+            beir_to_application, application_to_beir,
+            application_to_beir_aliases, saved_missing_ids, skipped_documents,
+        ) = load_document_mapping(mapping_source, corpus)
+        if saved_missing_ids != missing_corpus_document_ids:
+            raise RuntimeError("Reused mapping does not match missing corpus qrel IDs")
+        atomic_write_json(mapping_path, load_json_object(mapping_source, "document mapping"))
     elif getattr(arguments, "reuse_document_mapping", None):
         mapping_source = arguments.reuse_document_mapping
         if (not mapping_source.is_file()
@@ -1143,6 +1185,14 @@ def main() -> None:
             missing_corpus_document_ids,
             mapping_path,
         )
+
+    if client is None:
+        client = DeployableKnowledgeClient(
+        arguments.base_url,
+        search_timeout=arguments.search_timeout,
+        ingestion_timeout=arguments.ingestion_timeout,
+        )
+        client.heartbeat()
 
     if public_protocol is not None:
         mapping_value = load_json_object(mapping_path, "document ID mapping")
@@ -1182,6 +1232,7 @@ def main() -> None:
         require_complete=public_protocol is not None,
         initial_http_top_k=getattr(arguments, "initial_http_top_k", http_top_k),
         maximum_http_top_k=getattr(arguments, "maximum_http_top_k", http_top_k),
+        document_depth=arguments.search_depth,
     )
     failures_path = run_directory / "failures.json"
     atomic_write_json(failures_path, failures)
@@ -1227,6 +1278,7 @@ def main() -> None:
             method: evaluate_method(
                 qrels=checkpoint_qrels,
                 results=checkpoint_results[method],
+                k_values=k_values,
             )
             for method in METHODS
         }
@@ -1270,6 +1322,18 @@ def main() -> None:
         run_directory / "run-summary.json",
         {
             "queryCount": len(selected_queries),
+            "documentDepth": arguments.search_depth,
+            "rankingCoverage": {
+                method: {
+                    "minDocuments": min(len(ranking) for ranking in results[method].values()),
+                    "meanDocuments": sum(len(ranking) for ranking in results[method].values()) / len(selected_queries),
+                    "queriesAtDepth": sum(
+                        len(ranking) == arguments.search_depth
+                        for ranking in results[method].values()
+                    ),
+                }
+                for method in METHODS
+            },
             "indexedDocumentCount": len(application_to_beir),
             "duplicateDocumentCount": (
                 len(corpus)

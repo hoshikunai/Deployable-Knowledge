@@ -1,0 +1,10 @@
+{
+  "status": "interrupted",
+  "configFingerprint": "fe845413bae970ec7c137e504d46c194e26c8e217f541952b4b0eea661edba64",
+  "reason": "interrupted by signal 2",
+  "peakOwnedRss": null,
+  "lastSample": null,
+  "childIdentities": [],
+  "checkpointCount": 225,
+  "resumeCommand": "python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume --dataset scifact --run-name scifact-full-20260916-190833-504744 --search-depth 100 --timeout-minutes 45 --reuse-existing-runtime --reuse-document-mapping benchmarks/beir/runs/scifact-scifact-full-test-v2/document-id-mapping.json"
+}

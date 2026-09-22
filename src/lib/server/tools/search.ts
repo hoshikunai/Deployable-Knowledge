@@ -102,7 +102,7 @@ export const searchTool: AgentTool<SearchToolData> = {
 		const mode: SearchMode = SEARCH_MODES.has(requestedType as SearchMode)
 			? (requestedType as SearchMode)
 			: (context.retrievalMode ?? DEFAULT_ASSISTANT_CONFIG.retrievalMode);
-		const maxTopK = clampInteger(context.maxSearchTopK, 1, 100, 20);
+		const maxTopK = clampInteger(context.maxSearchTopK, 1, 200, 20);
 		const topK = clampInteger(
 			args.top_k ?? context.ragTopK,
 			1,
