@@ -1,0 +1,21 @@
+{
+  "status": "memory-paused",
+  "configFingerprint": "28b37533feb0d99e6121e477d08203e29b223f28ff553db6353e10d5abf0d941",
+  "reason": "memory-paused",
+  "peakOwnedRss": 4159909888,
+  "lastSample": {
+    "timestamp": 1789672325.186802,
+    "rssBytes": 4027047936,
+    "pids": [
+      72049,
+      72083,
+      72101
+    ],
+    "peakRssBytes": 4159909888,
+    "memAvailable": 2141982720,
+    "swapFree": 8568422400
+  },
+  "childIdentities": [],
+  "checkpointCount": 662,
+  "resumeCommand": "python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume --dataset arguana --run-name arguana-full-20260917-123958-361270 --search-depth 100 --timeout-minutes 45 --reuse-existing-runtime --reuse-document-mapping benchmarks/beir/runs/arguana-suite-20260910-153730-040144-test/document-id-mapping.json"
+}

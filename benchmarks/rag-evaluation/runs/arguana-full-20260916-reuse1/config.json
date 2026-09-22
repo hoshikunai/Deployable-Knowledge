@@ -1,0 +1,10 @@
+{
+  "dataset": "arguana",
+  "split": "test",
+  "searchDepth": 10,
+  "timeoutMinutes": 45,
+  "runName": "arguana-full-20260916-reuse1",
+  "reuseExistingRuntime": true,
+  "reuseDocumentMapping": "benchmarks/beir/runs/arguana-suite-20260910-153730-040144-test/document-id-mapping.json",
+  "mappingSha256": "29c9c9aa2b25a4a3cbecd77800aa8296f5666c7902e01c2acbf4af19e800db54"
+}

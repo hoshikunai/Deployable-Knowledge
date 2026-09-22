@@ -1,0 +1,10 @@
+{
+  "dataset": "scifact",
+  "split": "test",
+  "searchDepth": 100,
+  "timeoutMinutes": 45,
+  "runName": "scifact-full-20260916-190833-504744",
+  "reuseExistingRuntime": true,
+  "reuseDocumentMapping": "benchmarks/beir/runs/scifact-scifact-full-test-v2/document-id-mapping.json",
+  "mappingSha256": "2f151186adc7433b2ce415c01d45965f59a5e6bbfe55f9478bf701b284d41905"
+}

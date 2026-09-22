@@ -74,6 +74,63 @@ standard `corpus.jsonl`, `queries.jsonl`, and `qrels/<split>.tsv` layout.
 
 ## Run the automated test pipeline
 
+### One-command prepared-runtime benchmark
+
+For the three corpora already indexed on this machine, use the guarded runner
+from the repository root. It builds the application once, validates that each
+saved document mapping matches its isolated runtime, and executes one dataset
+at a time. It never ingests or downloads documents.
+
+```bash
+# Inspect the planned command without building or searching.
+benchmarks/beir/.venv/bin/python benchmarks/beir/run_prepared_benchmarks.py --dry-run
+
+# Run the full ArguAna test split (the default dataset).
+benchmarks/beir/.venv/bin/python benchmarks/beir/run_prepared_benchmarks.py
+
+# Or run all three prepared corpora sequentially.
+benchmarks/beir/.venv/bin/python benchmarks/beir/run_prepared_benchmarks.py \
+  scifact nfcorpus arguana
+
+# Evaluate rankings through 100 unique documents, including Recall@100.
+benchmarks/beir/.venv/bin/python benchmarks/beir/run_prepared_benchmarks.py \
+  scifact nfcorpus --document-depth 100
+```
+
+`--document-depth` defaults to 10 and accepts 10–100. It changes the result
+cutoff, not the number of test queries. At depth 100 the harness asks the
+application for 200 chunks, collapses them to at most 100 unique documents per
+method, and records the number actually available in `run-summary.json` under
+`rankingCoverage`. Some queries can return fewer than 100 distinct documents;
+their Recall@100 is calculated from the available ranking. This remains a
+chunk-first application protocol, not Anserini's flat-document indexing
+protocol. Deeper searches require much more cross-encoder work and may need
+more bounded sessions. Use `--dry-run --document-depth 100` to check the
+command first. Resume with the same `--document-depth` value.
+
+Each session is capped at 45 minutes. A session that times out after saving new
+query checkpoints is resumed automatically, up to eight sessions by default.
+Memory pauses, failed searches, a missing mapping, and timeouts with no new
+checkpoints stop the script for inspection. Increase the limit with
+`--max-sessions N`; use `--skip-build` only when `build/index.js` is current.
+
+To continue a run stopped after the session limit, use the run name printed in
+the output and keep the same timeout and mapping arguments:
+
+```bash
+benchmarks/beir/.venv/bin/python benchmarks/beir/run_prepared_benchmarks.py \
+  arguana --resume --run-name RUN_NAME
+```
+
+This command uses saved local mappings; a fresh clone does not contain them.
+Supply another validated mapping with `--mapping DATASET=PATH`. The runner
+refuses to resume a failure that occurred before BEIR created its run config;
+start a new run instead. Results are local BEIR retrieval evaluations, not
+automatically equivalent to a published leaderboard's indexing or top-K
+protocol. No answer generation or reranker-only evaluation is included.
+
+### General suite runner
+
 Build the SvelteKit adapter-node server first:
 
 ```bash

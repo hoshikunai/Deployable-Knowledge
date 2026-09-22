@@ -1,0 +1,10 @@
+{
+  "dataset": "nfcorpus",
+  "split": "test",
+  "searchDepth": 10,
+  "timeoutMinutes": 45,
+  "runName": "nfcorpus-full-20260916-154919-811133",
+  "reuseExistingRuntime": true,
+  "reuseDocumentMapping": "benchmarks/beir/runs/nfcorpus-nfcorpus-full-20260915-174940-224808/document-id-mapping.json",
+  "mappingSha256": "6786452443a6ab72b03b7e9b4b4ca32512cc90a8fa8aaa6c6bc031728e5deacb"
+}

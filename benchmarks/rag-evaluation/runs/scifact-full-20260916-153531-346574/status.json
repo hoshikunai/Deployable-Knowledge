@@ -1,0 +1,10 @@
+{
+  "status": "completed",
+  "configFingerprint": "995d14b1c6cd796e9de6f4db48705c160feb26f2ac6d022025c22f9f550a6c20",
+  "elapsedSeconds": 821.8941458879999,
+  "reason": null,
+  "peakOwnedRss": null,
+  "lastSample": null,
+  "childIdentities": [],
+  "checkpointCount": 300
+}
