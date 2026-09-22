@@ -120,10 +120,9 @@
 		const text = draft.trim();
 		draft = '';
 		settingsStore.lastQuery = text;
-		let conversation = chatStore.current;
 		try {
 			if (!chatStore.session) await createSession();
-			conversation = chatStore.current;
+			const conversation = chatStore.current;
 			await scrollToBottom();
 			const config = settingsStore.config;
 			const requestBase = {
@@ -158,8 +157,6 @@
 			await sessionsStore.refresh();
 		} catch (error) {
 			toast.error(`Chat failed: ${error instanceof Error ? error.message : String(error)}`);
-		} finally {
-			if (chatStore.current === conversation) await scrollToBottom();
 		}
 	}
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { stickToBottom } from '$lib/actions';
 	import * as Empty from '$lib/components/ui/empty';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import type { AgentTraceItem, SessionMessage } from '$lib/types';
@@ -36,7 +37,7 @@
 	bind:viewportRef={ref}
 	aria-live="polite"
 >
-	<div class="flex min-h-full flex-col gap-2 p-2">
+	<div class="flex min-h-full flex-col gap-2 p-2" use:stickToBottom={{ root: ref }}>
 		{#each messages as message (message.id)}
 			<ChatMessage {message} {onSaveChunk} onSendToNotebook={() => onSendToNotebook(message)} />
 		{:else}
