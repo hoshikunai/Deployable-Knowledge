@@ -65,7 +65,7 @@ async function collectMethodResults(options: SearchOptionsBase): Promise<{
 
 	for (const candidate of rankedCandidates) {
 		const match = byChunkId.get(candidate.chunkId);
-		if (match) hybridScored.push({ ...match, score: candidate.relevance });
+		if (match) hybridScored.push({ ...match, score: candidate.score });
 		if (hybridScored.length === topK) break;
 	}
 
