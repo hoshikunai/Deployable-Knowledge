@@ -77,14 +77,11 @@ async function loadAsset(asset: HeadAsset): Promise<Uint8Array> {
 	}
 
 	const url =
-		`https://huggingface.co/${MODEL_ID}/resolve/` +
-		`${MODEL_REVISION}/${asset.remotePath}`;
+		`https://huggingface.co/${MODEL_ID}/resolve/` + `${MODEL_REVISION}/${asset.remotePath}`;
 	const response = await fetch(url);
 
 	if (!response.ok) {
-		throw new Error(
-			`Failed to download ${asset.remotePath}: HTTP ${response.status}`
-		);
+		throw new Error(`Failed to download ${asset.remotePath}: HTTP ${response.status}`);
 	}
 
 	const bytes = new Uint8Array(await response.arrayBuffer());
@@ -99,20 +96,12 @@ async function loadAsset(asset: HeadAsset): Promise<Uint8Array> {
 	return bytes;
 }
 
-function readFloatTensor(
-	bytes: Uint8Array,
-	name: string,
-	expectedShape: number[]
-): Float32Array {
+function readFloatTensor(bytes: Uint8Array, name: string, expectedShape: number[]): Float32Array {
 	if (bytes.byteLength < 8) {
 		throw new Error('Invalid SafeTensors file');
 	}
 
-	const fileView = new DataView(
-		bytes.buffer,
-		bytes.byteOffset,
-		bytes.byteLength
-	);
+	const fileView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	const headerLength = Number(fileView.getBigUint64(0, true));
 	const dataStart = 8 + headerLength;
 
@@ -120,13 +109,8 @@ function readFloatTensor(
 		throw new Error('Invalid SafeTensors header');
 	}
 
-	const headerText = new TextDecoder().decode(
-		bytes.subarray(8, dataStart)
-	);
-	const header = JSON.parse(headerText) as Record<
-		string,
-		SafeTensorDescriptor
-	>;
+	const headerText = new TextDecoder().decode(bytes.subarray(8, dataStart));
+	const header = JSON.parse(headerText) as Record<string, SafeTensorDescriptor>;
 	const descriptor = header[name];
 
 	if (!descriptor || descriptor.dtype !== 'F32') {
@@ -135,18 +119,13 @@ function readFloatTensor(
 
 	if (
 		descriptor.shape.length !== expectedShape.length ||
-		descriptor.shape.some(
-			(dimension, index) => dimension !== expectedShape[index]
-		)
+		descriptor.shape.some((dimension, index) => dimension !== expectedShape[index])
 	) {
 		throw new Error(`Unexpected shape for tensor ${name}`);
 	}
 
 	const [start, end] = descriptor.data_offsets;
-	const elementCount = expectedShape.reduce(
-		(total, dimension) => total * dimension,
-		1
-	);
+	const elementCount = expectedShape.reduce((total, dimension) => total * dimension, 1);
 
 	if (end - start !== elementCount * Float32Array.BYTES_PER_ELEMENT) {
 		throw new Error(`Unexpected byte length for tensor ${name}`);
@@ -158,18 +137,11 @@ function readFloatTensor(
 		throw new Error(`Invalid offsets for tensor ${name}`);
 	}
 
-	const tensorView = new DataView(
-		bytes.buffer,
-		bytes.byteOffset + tensorStart,
-		end - start
-	);
+	const tensorView = new DataView(bytes.buffer, bytes.byteOffset + tensorStart, end - start);
 	const values = new Float32Array(elementCount);
 
 	for (let index = 0; index < elementCount; index += 1) {
-		values[index] = tensorView.getFloat32(
-			index * Float32Array.BYTES_PER_ELEMENT,
-			true
-		);
+		values[index] = tensorView.getFloat32(index * Float32Array.BYTES_PER_ELEMENT, true);
 	}
 
 	return values;
@@ -183,31 +155,11 @@ export function loadEttinHeadWeights(): Promise<EttinHeadWeights> {
 			loadAsset(HEAD_ASSETS.output)
 		])
 			.then(([dense, layerNorm, output]) => ({
-				denseWeight: readFloatTensor(
-					dense,
-					'linear.weight',
-					[HIDDEN_SIZE, HIDDEN_SIZE]
-				),
-				layerNormWeight: readFloatTensor(
-					layerNorm,
-					'norm.weight',
-					[HIDDEN_SIZE]
-				),
-				layerNormBias: readFloatTensor(
-					layerNorm,
-					'norm.bias',
-					[HIDDEN_SIZE]
-				),
-				outputWeight: readFloatTensor(
-					output,
-					'linear.weight',
-					[1, HIDDEN_SIZE]
-				),
-				outputBias: readFloatTensor(
-					output,
-					'linear.bias',
-					[1]
-				)[0]
+				denseWeight: readFloatTensor(dense, 'linear.weight', [HIDDEN_SIZE, HIDDEN_SIZE]),
+				layerNormWeight: readFloatTensor(layerNorm, 'norm.weight', [HIDDEN_SIZE]),
+				layerNormBias: readFloatTensor(layerNorm, 'norm.bias', [HIDDEN_SIZE]),
+				outputWeight: readFloatTensor(output, 'linear.weight', [1, HIDDEN_SIZE]),
+				outputBias: readFloatTensor(output, 'linear.bias', [1])[0]
 			}))
 			.catch((error) => {
 				headWeightsPromise = undefined;
@@ -223,13 +175,9 @@ function erf(value: number): number {
 	const absolute = Math.abs(value);
 	const scale = 1 / (1 + 0.3275911 * absolute);
 	const polynomial =
-		(((((1.061405429 * scale - 1.453152027) * scale +
-			1.421413741) *
-			scale -
-			0.284496736) *
-			scale +
+		((((1.061405429 * scale - 1.453152027) * scale + 1.421413741) * scale - 0.284496736) * scale +
 			0.254829592) *
-			scale);
+		scale;
 
 	return sign * (1 - polynomial * Math.exp(-absolute * absolute));
 }
@@ -243,18 +191,12 @@ export function scoreEttinHiddenStates(
 	dimensions: number[],
 	weights: EttinHeadWeights
 ): number[] {
-	if (
-		dimensions.length !== 3 ||
-		dimensions[2] !== HIDDEN_SIZE
-	) {
-		throw new Error(
-			`Unexpected Ettin output dimensions: ${dimensions.join('x')}`
-		);
+	if (dimensions.length !== 3 || dimensions[2] !== HIDDEN_SIZE) {
+		throw new Error(`Unexpected Ettin output dimensions: ${dimensions.join('x')}`);
 	}
 
 	const [batchSize, sequenceLength] = dimensions;
-	const expectedLength =
-		batchSize * sequenceLength * HIDDEN_SIZE;
+	const expectedLength = batchSize * sequenceLength * HIDDEN_SIZE;
 
 	if (hiddenStates.length !== expectedLength) {
 		throw new Error('Ettin output length does not match its dimensions');
@@ -263,8 +205,7 @@ export function scoreEttinHiddenStates(
 	const scores: number[] = [];
 
 	for (let batch = 0; batch < batchSize; batch += 1) {
-		const clsOffset =
-			batch * sequenceLength * HIDDEN_SIZE;
+		const clsOffset = batch * sequenceLength * HIDDEN_SIZE;
 		const dense = new Float32Array(HIDDEN_SIZE);
 
 		for (let output = 0; output < HIDDEN_SIZE; output += 1) {
@@ -272,9 +213,7 @@ export function scoreEttinHiddenStates(
 			let value = 0;
 
 			for (let input = 0; input < HIDDEN_SIZE; input += 1) {
-				value +=
-					hiddenStates[clsOffset + input] *
-					weights.denseWeight[weightOffset + input];
+				value += hiddenStates[clsOffset + input] * weights.denseWeight[weightOffset + input];
 			}
 
 			dense[output] = gelu(value);
@@ -296,15 +235,12 @@ export function scoreEttinHiddenStates(
 		}
 
 		variance /= HIDDEN_SIZE;
-		const denominator = Math.sqrt(
-			variance + LAYER_NORM_EPSILON
-		);
+		const denominator = Math.sqrt(variance + LAYER_NORM_EPSILON);
 		let score = weights.outputBias;
 
 		for (let index = 0; index < HIDDEN_SIZE; index += 1) {
 			const normalized =
-				((dense[index] - mean) / denominator) *
-					weights.layerNormWeight[index] +
+				((dense[index] - mean) / denominator) * weights.layerNormWeight[index] +
 				weights.layerNormBias[index];
 
 			score += normalized * weights.outputWeight[index];
