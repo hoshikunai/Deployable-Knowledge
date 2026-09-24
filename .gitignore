@@ -12,6 +12,8 @@ node_modules
 *.env.*
 .envrc
 .direnv/
+.venv/
+.venv-*/
 __pycache__/
 *.pyc
 
@@ -30,6 +32,12 @@ app.db-*
 /models/
 /documents/
 .cache/
+*.gguf
+*.onnx
+*.safetensors
 
-# BEIR results
-/benchmarks/rag-evaluation/runs
+# benchmark environments, downloaded corpora, and generated results
+/benchmarks/beir/datasets/
+/benchmarks/beir/runs/
+/benchmarks/rag-evaluation/runs/
+*.duckdb
