@@ -33,8 +33,8 @@ files:
   - '!components.json'
   - '!shell.nix'
   - '!electron/build/**'
-  # onnxruntime-node is a direct dependency only to pin the execution provider that
-  # @huggingface/transformers loads; nothing in src/ imports it. It ships every
+  # onnxruntime-node pins the execution provider that @huggingface/transformers loads
+  # and runs speaker diarization (src/lib/server/transcription/community-1). It ships every
   # platform's binaries in a single package, which
   # is ~450 MB of payload the Windows x64 build will never load. Revisit this
   # when another platform target is added.
