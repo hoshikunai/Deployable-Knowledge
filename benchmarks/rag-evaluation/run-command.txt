@@ -1,0 +1,39 @@
+benchmarks/beir/.venv/bin/python - <<'PY'
+import argparse
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path("benchmarks/beir").resolve()))
+
+import run_suite
+from run_prepared_benchmarks import PREPARED_MAPPINGS
+
+dataset = "nfcorpus"
+run_name = (
+    "rrf-nfcorpus-full-100-40-20"
+    + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+)
+
+args = argparse.Namespace(
+    split="test",
+    query_counts="all",
+    sample_seed=42,
+    search_depth=10,
+    port=4179,
+    startup_timeout=120,
+    no_shared_model_cache=False,
+    run_name=run_name,
+    resume=False,
+    reuse_existing_schema=True,
+    reuse_existing_runtime=True,
+    reuse_document_mapping=Path(PREPARED_MAPPINGS[dataset]).resolve(),
+    runtime_id=f"runtime-{dataset}-001",
+    timeout_seconds=30 * 60,
+)
+
+result = run_suite.run_dataset(dataset, args, run_name)
+
+print(f"Run directory: {result['runDirectory']}")
+print(f"Metrics: {result['runDirectory']}/metrics.json")
+PY

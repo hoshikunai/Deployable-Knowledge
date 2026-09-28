@@ -63,6 +63,12 @@ async function getEmbeddingPipeline(onProgress?: ProgressCallback) {
 	return embeddingPipeline;
 }
 
+// Counts tokens the way the embedding model sees them, without special tokens
+export async function getEmbeddingTokenCounter(): Promise<(text: string) => number> {
+	const { tokenizer } = await getEmbeddingPipeline();
+	return (text) => tokenizer.encode(text, { add_special_tokens: false }).length;
+}
+
 export async function embedTexts(
 	texts: string[],
 	type: EmbeddingType,

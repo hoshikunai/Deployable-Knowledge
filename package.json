@@ -12,6 +12,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"build:electron": "node scripts/build-electron.mjs",
+		"bench": "benchmarks/beir/.venv/bin/python benchmarks/bench-gui/bench.py",
 		"electron": "electron .",
 		"electron:pack": "npm run build:electron && npx electron-builder --dir",
 		"electron:win": "npm run build:electron && npx electron-builder --win --publish never",

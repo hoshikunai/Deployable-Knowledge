@@ -9,7 +9,7 @@ import { sigmoidScore, type CrossEncoder } from './cross-encoder';
 
 const MODEL_ID = 'Xenova/ms-marco-MiniLM-L-6-v2';
 const MODEL_CACHE_DIR = resolve(process.cwd(), '.cache', 'transformersjs');
-const MAX_LENGTH = 512;
+const MAX_SUPPORTED_TOKENS = 512;
 const BATCH_SIZE = 32;
 
 type Tokenizer = Awaited<ReturnType<typeof AutoTokenizer.from_pretrained>>;
@@ -26,10 +26,15 @@ type MsMarcoRuntime = {
 export class MsMarco implements CrossEncoder {
 	readonly id = 'ms-marco-minilm-l6-v2';
 	readonly name = 'MS Marco MiniLM L6';
+	readonly maxSupportedTokens = MAX_SUPPORTED_TOKENS;
 
 	private runtimePromise: Promise<MsMarcoRuntime> | undefined;
 
-	async predict(query: string, passages: readonly string[]): Promise<readonly number[]> {
+	async predict(
+		query: string,
+		passages: readonly string[],
+		maxTokens: number
+	): Promise<readonly number[]> {
 		if (passages.length === 0) {
 			return [];
 		}
@@ -40,7 +45,7 @@ export class MsMarco implements CrossEncoder {
 		for (let offset = 0; offset < passages.length; offset += BATCH_SIZE) {
 			const batch = passages.slice(offset, offset + BATCH_SIZE);
 
-			rawScores.push(...(await this.scoreBatch(query, batch, runtime)));
+			rawScores.push(...(await this.scoreBatch(query, batch, runtime, maxTokens)));
 		}
 
 		return rawScores.map((score, index) => {
@@ -93,14 +98,15 @@ export class MsMarco implements CrossEncoder {
 	private async scoreBatch(
 		query: string,
 		passages: readonly string[],
-		runtime: MsMarcoRuntime
+		runtime: MsMarcoRuntime,
+		maxTokens: number
 	): Promise<number[]> {
 		const queries = new Array(passages.length).fill(query);
 		const inputs = await runtime.tokenizer(queries, {
 			text_pair: [...passages],
 			padding: true,
 			truncation: true,
-			max_length: MAX_LENGTH
+			max_length: maxTokens
 		});
 		let logits: Tensor | undefined;
 

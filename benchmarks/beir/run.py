@@ -58,6 +58,18 @@ def validate_resume_configuration(
             )
 
 
+def verify_server_pipeline(
+    client: DeployableKnowledgeClient, requested: dict[str, Any], probe_query: str
+) -> None:
+    served = client.search(query=probe_query, top_k=1).get("pipeline")
+    if served != requested:
+        raise RuntimeError(
+            "Server hybrid pipeline does not match the requested pipeline "
+            f"(served={served!r}, requested={requested!r}). "
+            "Rebuild with 'npm run build:electron' if the server predates pipeline support."
+        )
+
+
 def record_query_checkpoint(
     path: Path,
     query_id: str,
@@ -261,6 +273,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--reuse-existing-runtime", action="store_true",
                         help="Use a validated existing runtime mapping without ingestion.")
     parser.add_argument("--runtime-fingerprint")
+    parser.add_argument(
+        "--pipeline-json",
+        help="Hybrid pipeline the server was started with; recorded and verified.",
+    )
+    parser.add_argument(
+        "--corpus-json",
+        help="Prepared corpus variant (runtime and chunking) searched by this run; recorded.",
+    )
     return parser.parse_args()
 
 
@@ -744,6 +764,7 @@ def build_query_result(
                 "chunkId": hit["chunkId"],
                 "documentId": hit["documentId"],
                 "chunkIndex": hit["chunkIndex"],
+                "score": hit.get("score"),
             }
             for hit in hits
         ]
@@ -1052,6 +1073,12 @@ def main() -> None:
         immutable_protocol["runtimeFingerprint"] = arguments.runtime_fingerprint
     if reuse_mode:
         immutable_protocol["corpusFingerprint"] = corpus_fingerprint(corpus)
+    requested_pipeline = None
+    if getattr(arguments, "pipeline_json", None):
+        requested_pipeline = json.loads(arguments.pipeline_json)
+        immutable_protocol["hybridPipeline"] = requested_pipeline
+    if getattr(arguments, "corpus_json", None):
+        immutable_protocol["corpus"] = json.loads(arguments.corpus_json)
     immutable_protocol["queryManifestFingerprint"] = query_manifest_fingerprint(
         selected_query_ids, immutable_protocol
     )
@@ -1222,6 +1249,8 @@ def main() -> None:
         query_id: canonical_qrels[query_id]
         for query_id, _query in selected_queries
     }
+    if requested_pipeline is not None:
+        verify_server_pipeline(client, requested_pipeline, selected_queries[0][1])
     results, raw_rankings, failures = run_query_searches(
         client,
         selected_queries,

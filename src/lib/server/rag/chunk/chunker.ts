@@ -5,10 +5,10 @@ import {
 	type ExtractedChunk,
 	type ParsedChunk
 } from './parse-shared';
-import { RAG_CHUNK_CHARACTER_LIMIT } from '$lib/constants';
+import { chunkingConfig } from './chunking-config';
+import { getEmbeddingTokenCounter } from '../embedding-model';
 
 const MIN_WORDS = 5;
-const OVERLAP_SENTENCES = 1;
 
 // Offsets point into the cleaned page text, not the original PDF bytes
 type SentenceSpan = {
@@ -17,7 +17,23 @@ type SentenceSpan = {
 	end: number;
 };
 
-function splitRangeByLength(text: string, start: number, end: number): SentenceSpan[] {
+// How chunks are sized: by characters (the default) or by embedding-model tokens
+export type ChunkBudget = {
+	// Splits a range that cannot fit in one chunk into bounded spans
+	splitRange(text: string, start: number, end: number): SentenceSpan[];
+	fits(span: SentenceSpan): boolean;
+	// Exclusive end index of the chunk that starts at spans[cursor]
+	chunkEnd(spans: SentenceSpan[], cursor: number): number;
+	// Where the next chunk starts, carrying back the configured overlap
+	nextStart(spans: SentenceSpan[], cursor: number, end: number): number;
+};
+
+function splitRangeByLength(
+	text: string,
+	start: number,
+	end: number,
+	limit: number
+): SentenceSpan[] {
 	const spans: SentenceSpan[] = [];
 	let cursor = start;
 
@@ -28,7 +44,7 @@ function splitRangeByLength(text: string, start: number, end: number): SentenceS
 
 		if (cursor >= end) break;
 
-		let splitAt = Math.min(cursor + RAG_CHUNK_CHARACTER_LIMIT, end);
+		let splitAt = Math.min(cursor + limit, end);
 
 		if (splitAt < end) {
 			const window = text.slice(cursor, splitAt + 1);
@@ -56,13 +72,142 @@ function splitRangeByLength(text: string, start: number, end: number): SentenceS
 	return spans;
 }
 
-function splitOversizedSpans(text: string, spans: SentenceSpan[]): SentenceSpan[] {
+export function characterBudget(maxCharacters: number, overlapSentences: number): ChunkBudget {
+	return {
+		splitRange: (text, start, end) => splitRangeByLength(text, start, end, maxCharacters),
+		fits: (span) => span.end - span.start <= maxCharacters,
+		chunkEnd(spans, cursor) {
+			let end = cursor + 1;
+
+			while (end < spans.length) {
+				const candidateLength = spans[end].end - spans[cursor].start;
+
+				if (candidateLength > maxCharacters) {
+					break;
+				}
+
+				end += 1;
+			}
+
+			return end;
+		},
+		// Keep a small overlap so answers split across chunk boundaries retain context
+		nextStart: (_spans, cursor, end) => Math.max(end - overlapSentences, cursor + 1)
+	};
+}
+
+function splitRangeByTokens(
+	text: string,
+	start: number,
+	end: number,
+	maxTokens: number,
+	countTokens: (text: string) => number
+): SentenceSpan[] {
+	const spans: SentenceSpan[] = [];
+	let spanStart = -1;
+	let spanEnd = start;
+	let total = 0;
+
+	const push = () => {
+		const value = normalizeWhitespace(text.slice(spanStart, spanEnd));
+		if (value) spans.push({ text: value, start: spanStart, end: spanEnd });
+	};
+
+	// Split at word boundaries; a single word longer than the budget stays whole
+	for (const word of text.slice(start, end).matchAll(/\S+/g)) {
+		const wordStart = start + (word.index ?? 0);
+		const tokens = countTokens(word[0]);
+
+		if (spanStart >= 0 && total + tokens > maxTokens) {
+			push();
+			spanStart = -1;
+			total = 0;
+		}
+
+		if (spanStart < 0) spanStart = wordStart;
+		spanEnd = wordStart + word[0].length;
+		total += tokens;
+	}
+
+	if (spanStart >= 0) push();
+	return spans;
+}
+
+export function tokenBudget(
+	maxTokens: number,
+	overlapTokens: number,
+	countTokens: (text: string) => number
+): ChunkBudget {
+	const counts = new WeakMap<SentenceSpan, number>();
+	const tokensOf = (span: SentenceSpan) => {
+		let count = counts.get(span);
+		if (count === undefined) {
+			count = countTokens(span.text);
+			counts.set(span, count);
+		}
+		return count;
+	};
+
+	return {
+		splitRange: (text, start, end) => splitRangeByTokens(text, start, end, maxTokens, countTokens),
+		fits: (span) => tokensOf(span) <= maxTokens,
+		chunkEnd(spans, cursor) {
+			let total = tokensOf(spans[cursor]);
+			let end = cursor + 1;
+
+			while (end < spans.length && total + tokensOf(spans[end]) <= maxTokens) {
+				total += tokensOf(spans[end]);
+				end += 1;
+			}
+
+			return end;
+		},
+		nextStart(spans, cursor, end) {
+			if (overlapTokens === 0 || end >= spans.length) return end;
+
+			// Carry back whole sentences: always the last one, then more while they fit the overlap,
+			// but never so many that the next sentence no longer fits beside them.
+			const room = maxTokens - tokensOf(spans[end]);
+			let start = end;
+			let carried = 0;
+
+			while (start - 1 > cursor) {
+				const tokens = tokensOf(spans[start - 1]);
+				const withinOverlap = start === end || carried + tokens <= overlapTokens;
+				if (!withinOverlap || carried + tokens > room) break;
+				carried += tokens;
+				start -= 1;
+			}
+
+			return start;
+		}
+	};
+}
+
+// Token budgets count with the embedding model's tokenizer, so they load it first
+export async function loadChunkBudget(): Promise<ChunkBudget> {
+	if (chunkingConfig.unit === 'characters') {
+		return characterBudget(chunkingConfig.maxCharacters, chunkingConfig.overlapSentences);
+	}
+
+	return tokenBudget(
+		chunkingConfig.maxTokens,
+		chunkingConfig.overlapTokens,
+		await getEmbeddingTokenCounter()
+	);
+}
+
+function splitOversizedSpans(
+	text: string,
+	spans: SentenceSpan[],
+	budget: ChunkBudget
+): SentenceSpan[] {
 	return spans.flatMap((span) => {
-		if (span.end - span.start <= RAG_CHUNK_CHARACTER_LIMIT) {
+		if (budget.fits(span)) {
 			return span;
 		}
 
-		return splitRangeByLength(text, span.start, span.end);
+		return budget.splitRange(text, span.start, span.end);
 	});
 }
 
@@ -172,9 +317,10 @@ function getChunkContent(content: string, startChar: number, endChar: number): s
 function chunkSentenceSpans(
 	page: ExtractedChunk,
 	content: string,
-	spans: SentenceSpan[]
+	spans: SentenceSpan[],
+	budget: ChunkBudget
 ): ParsedChunk[] {
-	const boundedSpans = splitOversizedSpans(content, spans);
+	const boundedSpans = splitOversizedSpans(content, spans, budget);
 	if (boundedSpans.length === 0) return [];
 
 	const chunks: ParsedChunk[] = [];
@@ -182,18 +328,7 @@ function chunkSentenceSpans(
 	let cursor = 0;
 
 	while (cursor < boundedSpans.length) {
-		let end = cursor + 1;
-
-		while (end < boundedSpans.length) {
-			const candidateLength = boundedSpans[end].end - boundedSpans[cursor].start;
-
-			if (candidateLength > RAG_CHUNK_CHARACTER_LIMIT) {
-				break;
-			}
-
-			end += 1;
-		}
-
+		const end = budget.chunkEnd(boundedSpans, cursor);
 		const selected = boundedSpans.slice(cursor, end);
 		const startChar = selected[0].start;
 		const endChar = selected[selected.length - 1].end;
@@ -217,8 +352,7 @@ function chunkSentenceSpans(
 			break;
 		}
 
-		// Keep a small overlap so answers split across chunk boundaries retain context
-		cursor = Math.max(end - OVERLAP_SENTENCES, cursor + 1);
+		cursor = budget.nextStart(boundedSpans, cursor, end);
 	}
 
 	return chunks;
@@ -233,7 +367,7 @@ function preparePageContent(page: ExtractedChunk): string {
 	}
 }
 
-function chunkPage(page: ExtractedChunk): ParsedChunk[] {
+function chunkPage(page: ExtractedChunk, budget: ChunkBudget): ParsedChunk[] {
 	const content = preparePageContent(page);
 	if (!content) return [];
 
@@ -252,7 +386,7 @@ function chunkPage(page: ExtractedChunk): ParsedChunk[] {
 
 	if (page.chunkType === 'TABLE') {
 		// Tables may contain many rows, so keep enforcing the embedding size limit for them.
-		return splitRangeByLength(content, 0, content.length).map((span, chunkIndex) => {
+		return budget.splitRange(content, 0, content.length).map((span, chunkIndex) => {
 			const chunkContent = span.text;
 
 			return {
@@ -267,9 +401,9 @@ function chunkPage(page: ExtractedChunk): ParsedChunk[] {
 	}
 
 	const spans = splitSentencesWithOffsets(content);
-	return chunkSentenceSpans(page, content, spans);
+	return chunkSentenceSpans(page, content, spans, budget);
 }
 
-export function chunkPages(pages: ExtractedChunk[]): ParsedChunk[] {
-	return pages.flatMap(chunkPage);
+export function chunkPages(pages: ExtractedChunk[], budget: ChunkBudget): ParsedChunk[] {
+	return pages.flatMap((page) => chunkPage(page, budget));
 }

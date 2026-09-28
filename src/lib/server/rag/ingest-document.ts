@@ -2,7 +2,7 @@ import { basename } from 'node:path';
 import type { ApiDocumentIngestProgress, Document } from '$lib/types';
 import { diagnosticEvents } from '$lib/server/diagnostics/events';
 import { handlerForPath, handlerForType } from '$lib/server/documents/source-types';
-import { chunkPages } from '$lib/server/rag/chunk/chunker';
+import { chunkPages, loadChunkBudget } from '$lib/server/rag/chunk/chunker';
 import { assembleChunks } from '$lib/server/rag/chunk/assemble-chunks';
 import type { Source } from '$lib/server/rag/chunk/parse-shared';
 import { storeDocumentChunks } from './embedding';
@@ -50,7 +50,7 @@ export async function ingestDocument(
 		console.log(`[Ingest] Extracting ${source.type} document...`);
 		const extraction = await extract(source, (ratio, message) => report(ratio * 50, message));
 
-		const rawChunks = chunkPages(extraction.chunks);
+		const rawChunks = chunkPages(extraction.chunks, await loadChunkBudget());
 		const assembled = assembleChunks(extraction.chunks, rawChunks);
 		const chunks = handler.finalize?.(assembled, extraction) ?? assembled;
 

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>BEIR Bench</title>
+		<link rel="stylesheet" href="/static/app.css" />
+	</head>
+	<body>
+		<header class="topbar">
+			<h1>BEIR Bench</h1>
+			<div class="build" id="build-status" aria-live="polite">Checking build…</div>
+			<button type="button" class="button" id="rebuild" hidden>Rebuild app</button>
+			<button type="button" class="button icon" id="open-settings" aria-label="Settings">
+				<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+					<path
+						d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.5.1-1-.1-1 2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L15 3h-4l-.3 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11l-.1 1 .1 1-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1L11 21h4l.3-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.6"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</button>
+		</header>
+
+		<nav class="tabs" role="tablist">
+			<button type="button" role="tab" class="tab" data-tab="run" aria-selected="true">Run</button>
+			<button type="button" role="tab" class="tab" data-tab="runs" aria-selected="false">
+				Runs
+			</button>
+			<button type="button" role="tab" class="tab" data-tab="scores" aria-selected="false">
+				Scores
+			</button>
+		</nav>
+
+		<main>
+			<section class="panel-grid" id="tab-run" role="tabpanel">
+				<form class="panel" id="job-form">
+					<fieldset>
+						<legend id="corpora-legend">Corpora</legend>
+						<div id="corpora" class="choices">Loading…</div>
+					</fieldset>
+					<fieldset>
+						<legend>Hybrid pipeline</legend>
+						<div id="pipelines" class="choices"></div>
+						<p class="hint" id="depth-summary"></p>
+					</fieldset>
+					<fieldset>
+						<legend>Queries</legend>
+						<div class="choices">
+							<label class="choice"
+								><input type="radio" name="query-mode" value="all" checked /> All test
+								queries</label
+							>
+							<label class="choice">
+								<input type="radio" name="query-mode" value="sample" /> Sample
+								<input
+									type="number"
+									id="sample-size"
+									min="1"
+									value="100"
+									class="field narrow"
+									aria-label="Sample size"
+								/>
+								queries
+							</label>
+						</div>
+						<label class="stacked" id="seeds-row">
+							Seeds <span class="hint">comma-separated; one run per seed</span>
+							<input type="text" id="seeds" class="field" value="42" />
+						</label>
+					</fieldset>
+					<p class="error" id="job-error" role="alert"></p>
+					<button type="submit" class="button primary">Start</button>
+				</form>
+
+				<div class="stack">
+					<div class="panel">
+						<h2>Current job</h2>
+						<div id="current">Idle.</div>
+					</div>
+					<div class="panel">
+						<h2>Queue</h2>
+						<ul id="queue" class="plain-list"></ul>
+					</div>
+					<div class="panel grow">
+						<h2>Log</h2>
+						<pre id="log" class="log" aria-live="off"></pre>
+					</div>
+				</div>
+			</section>
+
+			<section class="panel" id="tab-runs" role="tabpanel" hidden>
+				<div class="toolbar">
+					<label
+						>Corpus
+						<select id="runs-filter" class="field">
+							<option value="">All</option>
+						</select></label
+					>
+					<button type="button" class="button" id="refresh-runs">Refresh</button>
+					<button type="button" class="button primary" id="score-selected" disabled>
+						Scores for selected
+					</button>
+				</div>
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th><span class="visually-hidden">Select</span></th>
+								<th>Run</th>
+								<th>Pipeline</th>
+								<th>Queries</th>
+								<th>Status</th>
+								<th class="numeric">Hybrid nDCG@10</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody id="runs-body"></tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="panel" id="tab-scores" role="tabpanel" hidden>
+				<div class="toolbar">
+					<span id="scores-title" class="hint"
+						>Pick runs on the Runs tab, then choose “Scores”. The first run is the comparison
+						baseline.</span
+					>
+					<button type="button" class="button" id="copy-markdown" disabled>Copy Markdown</button>
+					<button type="button" class="button primary" id="copy-json" disabled>Copy JSON</button>
+					<span id="copy-status" class="hint" aria-live="polite"></span>
+				</div>
+				<article id="scores" class="markdown"></article>
+			</section>
+		</main>
+
+		<dialog id="settings-dialog">
+			<form method="dialog" id="settings-form">
+				<h2>Settings</h2>
+				<p class="hint">Applied to jobs you start from now on.</p>
+				<div id="settings-fields"></div>
+				<p class="error" id="settings-error" role="alert"></p>
+				<div class="dialog-actions">
+					<button type="button" class="button" id="reset-settings">Defaults</button>
+					<button type="button" class="button" id="close-settings">Cancel</button>
+					<button type="submit" class="button primary">Save</button>
+				</div>
+			</form>
+		</dialog>
+
+		<dialog id="confirm-dialog">
+			<form method="dialog">
+				<h2 id="confirm-title">Confirm</h2>
+				<p id="confirm-message"></p>
+				<div class="dialog-actions">
+					<button type="submit" class="button" value="cancel">Cancel</button>
+					<button type="submit" class="button danger" value="confirm">Delete</button>
+				</div>
+			</form>
+		</dialog>
+
+		<script src="/static/app.js" defer></script>
+	</body>
+</html>

@@ -220,6 +220,28 @@ def validate_existing_runtime_schema(runtime: Path, dataset: str | None = None,
     return {"dataset": dataset, "migrationHash": migration_hash, "documentCount": len(actual) if mapping is not None else None, "documentIdsHash": ids_hash}
 
 
+def pipeline_environment(pipeline: dict[str, Any] | None) -> dict[str, str]:
+    if pipeline is None:
+        return {}
+    return {
+        "RAG_HYBRID_RERANKER": pipeline["reranker"] or "none",
+        "RAG_RETRIEVAL_MULTIPLIER": str(pipeline["retrievalMultiplier"]),
+        "RAG_RERANK_MULTIPLIER": str(pipeline["rerankMultiplier"]),
+        "RAG_RRF_K": str(pipeline["rrfRankConstant"]),
+        "RAG_RERANK_MAX_TOKENS": str(pipeline["rerankMaxTokens"]),
+    }
+
+
+def chunking_environment(chunking: dict[str, Any] | None) -> dict[str, str]:
+    """Ingestion-time chunk sizing; None keeps the app's default character chunking."""
+    if chunking is None:
+        return {}
+    return {
+        "RAG_CHUNK_MAX_TOKENS": str(chunking["maxTokens"]),
+        "RAG_CHUNK_OVERLAP_TOKENS": str(chunking["overlapTokens"]),
+    }
+
+
 def start_server(
     runtime: Path,
     base_url: str,
@@ -228,6 +250,8 @@ def start_server(
     reuse_existing_schema: bool = False,
     dataset: str | None = None,
     mapping: Path | None = None,
+    pipeline: dict[str, Any] | None = None,
+    chunking: dict[str, Any] | None = None,
 ) -> tuple[subprocess.Popen[bytes], BinaryIO, Path]:
     if heartbeat(base_url):
         raise RuntimeError(
@@ -247,6 +271,8 @@ def start_server(
         "ORIGIN": base_url,
         "BODY_SIZE_LIMIT": "Infinity",
         "DK_MIGRATIONS_DIR": str(MIGRATIONS_ROOT),
+        **pipeline_environment(pipeline),
+        **chunking_environment(chunking),
     }
     if reuse_existing_schema:
         environment.pop("DK_MIGRATIONS_DIR", None)
@@ -337,6 +363,8 @@ def run_dataset(
         dataset=dataset,
         mapping=getattr(arguments, "reuse_document_mapping", None)
         if getattr(arguments, "reuse_existing_runtime", False) else None,
+        pipeline=getattr(arguments, "pipeline", None),
+        chunking=getattr(arguments, "chunking", None),
     )
     run_name = getattr(arguments, "run_name", None) or f"{suite_id}-{arguments.split}"
     run_directory = RUNS_ROOT / f"{dataset}-{run_name}"
@@ -345,6 +373,7 @@ def run_dataset(
     try:
         command = [
                 sys.executable,
+                "-u",  # unbuffered, so progress reaches logs and the GUI as it happens
                 str(HARNESS_ROOT / "run.py"),
                 "--dataset",
                 dataset,
@@ -365,6 +394,12 @@ def run_dataset(
             command += ["--reuse-existing-runtime", "--reuse-document-mapping",
                         str(arguments.reuse_document_mapping), "--runtime-fingerprint",
                         hashlib.sha256(json.dumps(runtime_identity, sort_keys=True).encode()).hexdigest()]
+        if getattr(arguments, "pipeline", None) is not None:
+            command += ["--pipeline-json", json.dumps(arguments.pipeline)]
+        if getattr(arguments, "corpus", None) is not None:
+            command += ["--corpus-json", json.dumps(arguments.corpus)]
+        if getattr(arguments, "prepare_only", False):
+            command.append("--prepare-only")
         if getattr(arguments, "resume", False):
             command.append("--resume")
         child = subprocess.Popen(command, cwd=REPOSITORY_ROOT, start_new_session=True)
@@ -410,12 +445,17 @@ def run_dataset(
                 child.kill(); child.wait(timeout=15)
         stop_server(process, log_file)
 
-    return {
+    summary = {
         "dataset": dataset,
         "runtime": str(runtime.relative_to(REPOSITORY_ROOT)),
         "serverLog": str(log_path.relative_to(REPOSITORY_ROOT)),
         "runDirectory": str(run_directory.relative_to(REPOSITORY_ROOT)),
         "port": port,
+    }
+    if getattr(arguments, "prepare_only", False):
+        return summary
+    return {
+        **summary,
         "metricsByQueryCount": json.loads(
             (run_directory / "metrics-by-query-count.json").read_text(
                 encoding="utf-8"

@@ -1,31 +1,68 @@
-// Hybrid search gathers semantic and BM25 candidates, then fuses their rankings with RRF.
+// Hybrid search gathers semantic and BM25 candidates and fuses them with RRF.
+// When a reranker is configured, it reorders a bounded RRF shortlist.
 
 import { searchSemantic } from './semantic-search';
 import { searchBm25 } from './bm25-search';
-import { fuseSearchResultsRrf } from './rrf-fusion';
-import {
-	type ScoredSearchMatch,
-	type SearchMatchBase,
-	type SearchOptionsBase,
-	type SearchResult
-} from './search-shared';
+import { rerankCandidates } from './cross-rerank';
+import { requireCrossEncoder } from './cross-encoders/registry';
+import { hybridPipeline, type HybridPipelineConfig } from './hybrid-pipeline';
+import { fuseSearchResultsRrf, type RrfFusedMatch } from './rrf-fusion';
+import { type ScoredSearchMatch, type SearchOptionsBase, type SearchResult } from './search-shared';
 
 type SearchMethodResults = {
 	query: string;
-	semantic: SearchMatchBase[];
-	bm25: SearchMatchBase[];
-	hybrid: SearchMatchBase[];
+	semantic: ScoredSearchMatch[];
+	bm25: ScoredSearchMatch[];
+	hybrid: ScoredSearchMatch[];
+	pipeline: HybridPipelineConfig;
 };
 
-function withoutScore(match: ScoredSearchMatch): SearchMatchBase {
-	const { score: _score, ...chunk } = match;
-	return chunk;
+async function rerankShortlist(
+	query: string,
+	fusedCandidates: RrfFusedMatch[],
+	topK: number,
+	rerankerId: string
+): Promise<ScoredSearchMatch[]> {
+	const shortlist = fusedCandidates.slice(0, topK * hybridPipeline.rerankMultiplier);
+	const matchesByChunkId = new Map(shortlist.map(({ match }) => [match.chunkId, match]));
+	const crossEncoder = requireCrossEncoder(rerankerId);
+
+	const rerankedCandidates = await rerankCandidates(
+		query,
+		shortlist.map(({ match }) => ({
+			chunkId: match.chunkId,
+			content: match.content
+		})),
+		crossEncoder,
+		hybridPipeline.rerankMaxTokens
+	);
+
+	const reranked: ScoredSearchMatch[] = [];
+
+	for (const candidate of rerankedCandidates) {
+		const match = matchesByChunkId.get(candidate.chunkId);
+
+		if (!match) {
+			throw new Error(`${crossEncoder.name} returned an unknown chunk ID: ${candidate.chunkId}`);
+		}
+
+		reranked.push({
+			...match,
+			score: candidate.score
+		});
+
+		if (reranked.length === topK) {
+			break;
+		}
+	}
+
+	return reranked;
 }
 
 async function collectMethodResults(options: SearchOptionsBase): Promise<{
 	query: string;
-	semantic: SearchMatchBase[];
-	bm25: SearchMatchBase[];
+	semantic: ScoredSearchMatch[];
+	bm25: ScoredSearchMatch[];
 	hybridScored: ScoredSearchMatch[];
 }> {
 	const query = options.query.trim();
@@ -43,7 +80,7 @@ async function collectMethodResults(options: SearchOptionsBase): Promise<{
 	const sharedOptions = {
 		...options,
 		query,
-		topK: topK * 2
+		topK: topK * hybridPipeline.retrievalMultiplier
 	};
 
 	const [semanticSearch, bm25Search] = await Promise.all([
@@ -51,19 +88,18 @@ async function collectMethodResults(options: SearchOptionsBase): Promise<{
 		searchBm25(sharedOptions)
 	]);
 
-	const fusedCandidates = fuseSearchResultsRrf(semanticSearch.results, bm25Search.results);
+	const fusedCandidates = fuseSearchResultsRrf(semanticSearch.results, bm25Search.results, {
+		rankConstant: hybridPipeline.rrfRankConstant
+	});
 
-	const hybridScored: ScoredSearchMatch[] = fusedCandidates
-		.slice(0, topK)
-		.map(({ match, score }) => ({
-			...match,
-			score
-		}));
+	const hybridScored = hybridPipeline.reranker
+		? await rerankShortlist(query, fusedCandidates, topK, hybridPipeline.reranker)
+		: fusedCandidates.slice(0, topK).map(({ match, score }) => ({ ...match, score }));
 
 	return {
 		query,
-		semantic: semanticSearch.results.slice(0, topK).map(withoutScore),
-		bm25: bm25Search.results.slice(0, topK).map(withoutScore),
+		semantic: semanticSearch.results.slice(0, topK),
+		bm25: bm25Search.results.slice(0, topK),
 		hybridScored
 	};
 }
@@ -75,7 +111,8 @@ export async function searchAllMethods(options: SearchOptionsBase): Promise<Sear
 		query: search.query,
 		semantic: search.semantic,
 		bm25: search.bm25,
-		hybrid: search.hybridScored.map(withoutScore)
+		hybrid: search.hybridScored,
+		pipeline: hybridPipeline
 	};
 }
 
