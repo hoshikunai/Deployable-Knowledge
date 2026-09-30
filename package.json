@@ -41,6 +41,7 @@
 		"drizzle-kit": "^0.31.10",
 		"electron": "^43.3.0",
 		"electron-builder": "^26.15.3",
+		"esbuild": "^0.28.2",
 		"eslint": "10.8.0",
 		"eslint-config-prettier": "10.1.8",
 		"eslint-plugin-svelte": "3.19.0",
