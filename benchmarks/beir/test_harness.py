@@ -53,6 +53,16 @@ class DocumentDepthTests(unittest.TestCase):
         self.assertEqual(metrics["recall"]["Recall@100"], 1.0)
 
 
+    def test_mrr_ignores_the_query_document_like_other_metrics(self) -> None:
+        # ArguAna-style: the query's own document ranks first but is not a relevant answer.
+        rankings = {"q1": {"q1": 3.0, "d2": 2.0, "d3": 1.0}}
+        metrics = harness_run.evaluate_method({"q1": {"d2": 1}}, rankings, [1, 3])
+        self.assertEqual(metrics["mrr"]["MRR@1"], 1.0)
+        self.assertEqual(metrics["mrr"]["MRR@3"], 1.0)
+        self.assertEqual(metrics["mrr"]["MRR@3"], metrics["map"]["MAP@3"])
+        self.assertIn("q1", rankings["q1"])  # the caller's rankings are not modified
+
+
 class QuerySelectionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.queries = {

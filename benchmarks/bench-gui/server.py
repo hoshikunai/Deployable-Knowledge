@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 import paths
-from corpora import list_corpora
+from corpora import EMBEDDING_MODELS, list_corpora
 from jobs import (
     PIPELINES,
     RESUMABLE_STATES,
@@ -226,7 +226,8 @@ def index() -> FileResponse:
 def options() -> dict[str, Any]:
     settings = load_settings()
     return {
-        "corpora": list_corpora(settings.chunking()),
+        "corpora": list_corpora(settings.chunking(), settings.embeddingModel, settings.split),
+        "embeddingModels": [{"id": key, **value} for key, value in EMBEDDING_MODELS.items()],
         "pipelines": [{"key": key, **value} for key, value in PIPELINES.items()],
         "settings": asdict(settings),
         "defaults": asdict(Settings()),
@@ -280,14 +281,17 @@ def start_jobs(request: JobRequest) -> dict[str, Any]:
 
 
 @app.get("/api/corpora")
-def corpora_for(chunkMaxTokens: int = 0, chunkOverlapTokens: int = 0) -> list[dict[str, Any]]:
+def corpora_for(chunkMaxTokens: int = 0, chunkOverlapTokens: int = 0,
+                embeddingModel: str | None = None) -> list[dict[str, Any]]:
     """Corpus copy status for chunk values that may not be saved yet."""
     try:
-        settings = Settings.from_dict({"chunkMaxTokens": chunkMaxTokens,
-                                       "chunkOverlapTokens": chunkOverlapTokens})
+        settings = Settings.from_dict({
+            "chunkMaxTokens": chunkMaxTokens, "chunkOverlapTokens": chunkOverlapTokens,
+            "embeddingModel": embeddingModel or load_settings().embeddingModel,
+        })
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
-    return list_corpora(settings.chunking())
+    return list_corpora(settings.chunking(), settings.embeddingModel)
 
 
 class PrepareRequest(BaseModel):

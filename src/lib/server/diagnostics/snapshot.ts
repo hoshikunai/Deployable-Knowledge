@@ -11,7 +11,7 @@ import {
 	sessions,
 	syncedFolders
 } from '$lib/server/database/schema';
-import { isEmbeddingModelInstalled } from '$lib/server/rag/embedding-model';
+import { activeEmbeddingModel } from '$lib/server/rag/embedding-models/registry';
 
 const EMPTY_COUNTS: ApiDiagnosticsSnapshot['counts'] = {
 	activeDocuments: null,
@@ -81,7 +81,7 @@ export async function buildDiagnosticsSnapshot(): Promise<ApiDiagnosticsSnapshot
 
 	let embeddingModel: ApiDiagnosticsSnapshot['health']['embeddingModel'] = 'unavailable';
 	try {
-		embeddingModel = (await isEmbeddingModelInstalled()) ? 'installed' : 'missing';
+		embeddingModel = (await activeEmbeddingModel.isInstalled()) ? 'installed' : 'missing';
 	} catch {
 		// Leave it unavailable.
 	}

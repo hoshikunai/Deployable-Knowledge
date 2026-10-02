@@ -40,6 +40,15 @@ class RunNameTests(unittest.TestCase):
         name = jobs.make_run_name(make_spec("rrf", "all"), FIXED_TIME)
         self.assertEqual(name, "rrf-p100-o20-all-20260928-120000-123456")
 
+    def test_dedup_modes_are_named(self) -> None:
+        self.assertIn("-dx-", jobs.make_run_name(make_spec(dedupMode="exact"), FIXED_TIME))
+        self.assertIn("-dn-", jobs.make_run_name(make_spec(dedupMode="near"), FIXED_TIME))
+        name = jobs.make_run_name(make_spec(dedupMode="document-cap", maxChunksPerDocument=3),
+                                  FIXED_TIME)
+        self.assertIn("-dc3-", name)
+        with self.assertRaises(ValueError):
+            jobs.Settings.from_dict({"dedupMode": "fuzzy"})
+
     def test_non_default_rrf_constant_is_recorded(self) -> None:
         name = jobs.make_run_name(make_spec("rrf", "all", rrfRankConstant=20), FIXED_TIME)
         self.assertIn("-k20-", name)
@@ -53,6 +62,8 @@ class SettingsTests(unittest.TestCase):
             jobs.Settings.from_dict({"chunkMaxTokens": 128, "chunkOverlapTokens": 128})
         with self.assertRaises(ValueError):
             jobs.Settings.from_dict({"chunkMaxTokens": 8})
+        with self.assertRaises(ValueError):
+            jobs.Settings.from_dict({"embeddingModel": "unknown-model"})
         self.assertIsNone(jobs.Settings().chunking())
         self.assertEqual(jobs.Settings(chunkMaxTokens=256, chunkOverlapTokens=0).chunking(),
                          {"maxTokens": 256, "overlapTokens": 0})
@@ -81,7 +92,39 @@ class JobTests(unittest.TestCase):
         self.assertEqual(make_spec().pipeline_config(), {
             "reranker": "ettin-32m", "retrievalMultiplier": 5,
             "rerankMultiplier": 2, "rrfRankConstant": 60, "rerankMaxTokens": 512,
+            "dedup": "none", "maxChunksPerDocument": 2,
+            "rrfSemanticWeight": 1.0, "rrfBm25Weight": 1.0, "fusionLevel": "chunk",
+            "documentOrder": "none", "rerankTitle": True,
         })
+
+    def test_fusion_settings_are_named_and_validated(self) -> None:
+        spec = make_spec("rrf-ettin", "all")
+        spec.settings = jobs.Settings(rrfSemanticWeight=1.0, rrfBm25Weight=0.5,
+                                      fusionLevel="document", documentOrder="sum-top2",
+                                      rerankTitle="off", split="train")
+        name = jobs.make_run_name(spec, FIXED_TIME)
+        for tag in ("-w1x0.5-", "-fdoc-", "-os2-", "-nt-", "-train-"):
+            self.assertIn(tag, name)
+        self.assertFalse(spec.pipeline_config()["rerankTitle"])
+        self.assertTrue(jobs.Settings().rerankTitle == "on")
+        self.assertNotIn("-nt-", jobs.make_run_name(
+            jobs.JobSpec("scifact", "rrf", "all", 42, jobs.Settings(rerankTitle="off")), FIXED_TIME))
+        for bad in ({"rrfSemanticWeight": 0, "rrfBm25Weight": 0}, {"rrfBm25Weight": -1},
+                    {"fusionLevel": "sentence"}, {"split": "validation"}):
+            with self.assertRaises(ValueError):
+                jobs.Settings.from_dict(bad)
+
+    def test_split_must_exist_for_the_dataset(self) -> None:
+        with patch.object(corpora, "require_prepared"):
+            jobs.validate_job("scifact", "rrf", "all", jobs.Settings(split="train"))
+            with self.assertRaises(ValueError):
+                jobs.validate_job("arguana", "rrf", "all", jobs.Settings(split="train"))
+
+    def test_split_reaches_the_harness(self) -> None:
+        spec = make_spec("rrf")
+        spec.settings = jobs.Settings(split="dev")
+        with patch.object(corpora, "require_prepared", return_value=Path("/tmp/mapping.json")):
+            self.assertEqual(jobs.suite_arguments(spec, resume=False).split, "dev")
 
     def test_full_runs_ignore_extra_seeds(self) -> None:
         with patch.object(jobs, "validate_job"):
@@ -98,7 +141,44 @@ class JobTests(unittest.TestCase):
         self.assertEqual(namespace.pipeline["reranker"], "ettin-32m")
         self.assertEqual(namespace.memory_ceiling, 7 * jobs.GIGABYTE)
         self.assertEqual(namespace.runtime_id, "runtime-scifact-001")
-        self.assertEqual(namespace.corpus, {"runtimeId": "runtime-scifact-001", "chunking": None})
+        self.assertEqual(namespace.corpus, {"runtimeId": "runtime-scifact-001", "chunking": None,
+                                            "embeddingModel": "nomic-embed-text-v1.5"})
+        self.assertEqual(namespace.embedding_model, "nomic-embed-text-v1.5")
+
+    def test_embedding_model_selects_its_own_corpus_copy(self) -> None:
+        spec = make_spec("rrf")
+        spec.settings = jobs.Settings(embeddingModel="bekko-embedding-v1-a25m")
+        with patch.object(corpora, "require_prepared", return_value=Path("/tmp/mapping.json")):
+            namespace = jobs.suite_arguments(spec, resume=False)
+        self.assertEqual(namespace.runtime_id, "runtime-scifact-bekko-a25m")
+        self.assertEqual(namespace.embedding_model, "bekko-embedding-v1-a25m")
+        self.assertIn("-bekko-a25m-", jobs.make_run_name(spec, FIXED_TIME))
+        both = jobs.Settings(chunkMaxTokens=256, chunkOverlapTokens=32,
+                             embeddingModel="bekko-embedding-v1-a25m")
+        self.assertEqual(corpora.runtime_id("scifact", both.chunking(), both.embeddingModel),
+                         "runtime-scifact-t256o32-bekko-a25m")
+
+    def test_new_embedding_models_have_their_own_copies_and_limits(self) -> None:
+        tags = {model: corpora.variant_id(None, model) for model in corpora.EMBEDDING_MODELS}
+        self.assertEqual(tags["bge-base-en-v1.5"], "bge-base")
+        self.assertEqual(tags["bge-small-en-v1.5"], "bge-small")
+        self.assertEqual(tags["granite-embedding-97m-multilingual-r2"], "granite-97m")
+        self.assertEqual(tags["granite-embedding-english-r2"], "granite-en")
+        self.assertEqual(tags["jina-embeddings-v5-text-nano-retrieval"], "jina-v5-nano")
+        self.assertEqual(len(set(tags.values())), len(tags))
+        jobs.Settings(embeddingModel="bge-base-en-v1.5", chunkMaxTokens=512)
+        with self.assertRaises(ValueError):
+            jobs.Settings.from_dict({"embeddingModel": "bge-base-en-v1.5", "chunkMaxTokens": 1024})
+        jobs.Settings.from_dict({"embeddingModel": "granite-embedding-97m-multilingual-r2",
+                                 "chunkMaxTokens": 1024})
+
+    def test_prepare_allows_a_new_embedding_model_with_default_chunks(self) -> None:
+        settings = jobs.Settings(embeddingModel="bekko-embedding-v1-a25m")
+        with patch.object(corpora, "variant_status", return_value={"state": "missing"}):
+            [spec] = jobs.create_prepare_jobs(["scifact"], settings)
+        namespace = jobs.suite_arguments(spec, resume=False)
+        self.assertIsNone(namespace.chunking)
+        self.assertEqual(namespace.runtime_id, "runtime-scifact-bekko-a25m")
 
     def test_token_chunked_jobs_use_their_corpus_copy(self) -> None:
         spec = make_spec(chunkMaxTokens=256, chunkOverlapTokens=32)
@@ -118,9 +198,21 @@ class JobTests(unittest.TestCase):
         self.assertEqual(namespace.chunking, {"maxTokens": 256, "overlapTokens": 32})
         self.assertEqual(namespace.runtime_id, "runtime-nfcorpus-t256o32")
 
-    def test_prepare_needs_token_chunking(self) -> None:
-        with self.assertRaises(ValueError):
-            jobs.create_prepare_jobs(["nfcorpus"], jobs.Settings())
+    def test_prepare_skips_prepared_copies(self) -> None:
+        with patch.object(corpora, "variant_status", return_value={"state": "prepared"}):
+            with self.assertRaises(ValueError):
+                jobs.create_prepare_jobs(["nfcorpus"], jobs.Settings())
+
+    def test_existing_default_copy_is_never_rebuilt(self) -> None:
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(corpora.paths, "RUNTIME_ROOT", Path(root)), \
+                patch.object(corpora, "dataset_files_present", return_value=True):
+            runtime = corpora.start_preparing("fiqa", None)  # no default copy yet: allowed
+            self.assertEqual(runtime.name, "runtime-fiqa-001")
+            corpora.start_preparing("fiqa", None)  # an unfinished attempt can be retried
+            corpora.write_marker(runtime, {"dataset": "fiqa", "state": "prepared"})
+            with self.assertRaises(ValueError):
+                corpora.start_preparing("fiqa", None)
 
     def test_rerank_token_limit_follows_the_reranker(self) -> None:
         settings = jobs.Settings(rerankMaxTokens=1024)
@@ -175,6 +267,12 @@ class PipelineLabelTests(unittest.TestCase):
         self.assertIn("Unknown", describe_pipeline(None, 20))
         wide = {**config, "rerankMaxTokens": 1024}
         self.assertIn("reranker reads 1024 tokens", describe_pipeline(wide, 20))
+        tuned = {**config, "rrfBm25Weight": 0.5, "fusionLevel": "document",
+                 "documentOrder": "sum-top2", "rerankTitle": False}
+        label = describe_pipeline(tuned, 20)
+        for text in ("RRF weights semantic 1 : BM25 0.5", "document-level RRF",
+                     "ordered by document", "no title in reranker input"):
+            self.assertIn(text, label)
 
 
 class CliTests(unittest.TestCase):
@@ -213,6 +311,23 @@ class ScoreTests(unittest.TestCase):
     def test_sign_flip_p_value(self) -> None:
         self.assertEqual(scores.sign_flip_p_value(np.zeros(10)), 1.0)
         self.assertLess(scores.sign_flip_p_value(np.full(40, 0.2)), 0.001)
+
+    def test_recomputed_mrr_drops_the_query_document(self) -> None:
+        run = SimpleNamespace(
+            config={"kValues": [1, 10]}, query_ids=["q1", "q2"],
+            qrels={"q1": {"d2": 1}, "q2": {"d9": 1}},
+            rankings={"hybrid": {"q1": {"q1": 3.0, "d2": 2.0}, "q2": {"d5": 1.0}}},
+        )
+        # q1: own document skipped, answer at rank 1 -> 1.0; q2: no answer -> 0
+        self.assertEqual(scores.recompute_mrr(run, "hybrid"), {"MRR@1": 0.5, "MRR@10": 0.5})
+
+    def test_retriever_check_explains_expected_differences(self) -> None:
+        self.assertEqual(scores.retriever_check(True, True, []), ("yes", False))
+        self.assertEqual(scores.retriever_check(True, False, ["embedding model"]),
+                         ("semantic differs by design (embedding model)", False))
+        self.assertFalse(scores.retriever_check(False, False, ["chunk size"])[1])
+        self.assertTrue(scores.retriever_check(False, True, ["embedding model"])[1])
+        self.assertTrue(scores.retriever_check(True, False, [])[1])
 
     def test_markdown_table(self) -> None:
         self.assertEqual(scores.markdown_table(["A", "B"], [["1", "2"]]),

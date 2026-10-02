@@ -1,6 +1,5 @@
-import { resolve } from 'node:path';
 import { AutoModel, AutoTokenizer, type Tensor } from '@huggingface/transformers';
-import { INFERENCE_THREADS } from '../../embedding-model';
+import { INFERENCE_THREADS, MODEL_CACHE_DIR } from '../../inference';
 import { loadEttinHeadWeights, scoreEttinHiddenStates, type EttinHeadWeights } from './ettin-head';
 import { sigmoidScore, type CrossEncoder } from './cross-encoder';
 
@@ -9,7 +8,6 @@ const ETTIN_CROSS_ENCODER_ID = 'ettin-32m';
 const MODEL_ID = 'cross-encoder/ettin-reranker-32m-v1';
 const MODEL_REVISION = 'b33e5ceb5110773ea9cf5e00c9bedc83a8c2afdd';
 const MODEL_FILE_NAME = 'model_quint8_avx2';
-const MODEL_CACHE_DIR = resolve(process.cwd(), '.cache', 'transformersjs');
 const MAX_SUPPORTED_TOKENS = 7999;
 const BATCH_SIZE = 8;
 

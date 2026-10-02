@@ -32,6 +32,14 @@ DATASETS = (
         test_queries="300",
     ),
     DatasetInfo(
+        # Built locally by dedup_experiment/make_scifact_dup.py; not downloadable.
+        name="scifact-dup",
+        description="SciFact with duplicated relevant documents (dedup experiment)",
+        splits=("test",),
+        corpus_size="5.5K",
+        test_queries="300",
+    ),
+    DatasetInfo(
         name="nfcorpus",
         description="Biomedical and nutrition information retrieval",
         splits=("train", "dev", "test"),
@@ -74,6 +82,11 @@ def dataset_url(dataset: str) -> str:
 
 
 def download_dataset(dataset: str, datasets_root: Path) -> Path:
+    # Datasets already on disk (including locally built ones such as scifact-dup) are used
+    # as they are; BEIR's helper would otherwise try to download a missing archive.
+    local = datasets_root / dataset
+    if all((local / name).is_file() for name in ("corpus.jsonl", "queries.jsonl")):
+        return local
     datasets_root.mkdir(parents=True, exist_ok=True)
     downloaded_path = util.download_and_unzip(
         dataset_url(dataset),

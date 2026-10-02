@@ -3,6 +3,7 @@
     npm run bench                                   open the GUI
     npm run bench -- run scifact arguana --pipeline rrf-ettin --queries 100 --seeds 42,314
     npm run bench -- prepare nfcorpus --chunk-tokens 256 --overlap-tokens 32
+    npm run bench -- prepare scifact --embedding-model bekko-embedding-v1-a25m
     npm run bench -- resume <run-id>
     npm run bench -- list
     npm run bench -- scores <run-id> [<run-id> ...] [--markdown]
@@ -28,6 +29,7 @@ from jobs import (
     load_settings,
     save_job,
 )
+import corpora
 from runs import delete_run, list_runs
 from scores import build_scores
 
@@ -87,6 +89,15 @@ def settings_with_overrides(arguments: argparse.Namespace) -> Settings:
         "chunkMaxTokens": arguments.chunk_tokens,
         "chunkOverlapTokens": arguments.overlap_tokens,
         "rerankMaxTokens": getattr(arguments, "rerank_max_tokens", None),
+        "embeddingModel": arguments.embedding_model,
+        "dedupMode": getattr(arguments, "dedup", None),
+        "maxChunksPerDocument": getattr(arguments, "doc_cap", None),
+        "rrfSemanticWeight": getattr(arguments, "semantic_weight", None),
+        "rrfBm25Weight": getattr(arguments, "bm25_weight", None),
+        "fusionLevel": getattr(arguments, "fusion_level", None),
+        "documentOrder": getattr(arguments, "document_order", None),
+        "rerankTitle": getattr(arguments, "rerank_title", None),
+        "split": getattr(arguments, "split", None),
     }
     base = asdict(load_settings())
     base.update({key: value for key, value in overrides.items() if value is not None})
@@ -162,6 +173,7 @@ def command_run_one(arguments: argparse.Namespace) -> int:
 
 
 def add_chunk_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--embedding-model", choices=sorted(corpora.EMBEDDING_MODELS))
     parser.add_argument("--chunk-tokens", type=int,
                         help="Chunk size in tokens (0 = default 1,200 characters).")
     parser.add_argument("--overlap-tokens", type=int, help="Chunk overlap in tokens.")
@@ -189,6 +201,16 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     run.add_argument("--timeout-minutes", type=int)
     run.add_argument("--max-sessions", type=int)
     run.add_argument("--rerank-max-tokens", type=int)
+    run.add_argument("--dedup", choices=["none", "exact", "near", "document-cap"],
+                     help="Experimental: drop repeated RRF candidates before the shortlist.")
+    run.add_argument("--doc-cap", type=int, help="Chunks per document for --dedup document-cap.")
+    run.add_argument("--semantic-weight", type=float, help="RRF weight of semantic ranks.")
+    run.add_argument("--bm25-weight", type=float, help="RRF weight of BM25 ranks.")
+    run.add_argument("--fusion-level", choices=["chunk", "document"])
+    run.add_argument("--document-order", choices=["none", "sum-top2"])
+    run.add_argument("--rerank-title", choices=["off", "on"])
+    run.add_argument("--split", choices=["test", "train", "dev"],
+                     help="Query split; tune on train/dev, report on test.")
     add_chunk_options(run)
     run.set_defaults(handler=command_run)
 

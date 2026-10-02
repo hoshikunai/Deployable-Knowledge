@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import paths
-from corpora import describe_chunking, protected_run_folders
+from corpora import DEFAULT_EMBEDDING_MODEL, describe_variant, protected_run_folders
 from jobs import DEFAULT_RERANK_MAX_TOKENS, PIPELINES, job_path
 
 RUN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*-[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -55,13 +55,28 @@ def describe_pipeline(config: dict[str, Any] | None, http_top_k: int | None) -> 
     rerank_tokens = config.get("rerankMaxTokens", DEFAULT_RERANK_MAX_TOKENS)
     if config["reranker"] and rerank_tokens != DEFAULT_RERANK_MAX_TOKENS:
         suffix += f" · reranker reads {rerank_tokens} tokens"
+    weights = (config.get("rrfSemanticWeight", 1), config.get("rrfBm25Weight", 1))
+    if weights != (1, 1):
+        suffix += f" · RRF weights semantic {weights[0]:g} : BM25 {weights[1]:g}"
+    if config.get("fusionLevel") == "document":
+        suffix += " · document-level RRF"
+    if config.get("documentOrder") == "sum-top2":
+        suffix += " · ordered by document (top-2 sum)"
+    if config["reranker"] and not config.get("rerankTitle"):
+        suffix += " · no title in reranker input"
+    dedup = config.get("dedup", "none")
+    if dedup == "document-cap":
+        suffix += f" · max {config.get('maxChunksPerDocument', 2)} chunks per document"
+    elif dedup != "none":
+        suffix += f" · {dedup} dedup"
     return f"{label} · {'→'.join(depths)}{suffix}"
 
 
 def describe_corpus(config: dict[str, Any]) -> str:
-    """Runs before corpus recording all searched the default character-chunked copies."""
-    corpus = config.get("corpus")
-    return describe_chunking(corpus["chunking"] if corpus else None)
+    """Runs before corpus recording all searched the default copies."""
+    corpus = config.get("corpus") or {}
+    return describe_variant(corpus.get("chunking"),
+                            corpus.get("embeddingModel", DEFAULT_EMBEDDING_MODEL))
 
 
 def has_chunk_scores(directory: Path) -> bool:
@@ -98,6 +113,7 @@ def summarize_run(directory: Path) -> dict[str, Any]:
         "corpusLabel": describe_corpus(config),
         "queryCount": len(query_ids),
         "selection": config.get("selectionProtocol"),
+        "split": config.get("split", "test"),
         "sampleSeed": config.get("sampleSeed"),
         "status": status.get("status", "unknown"),
         "completed": len(status.get("completedQueryIds", [])),

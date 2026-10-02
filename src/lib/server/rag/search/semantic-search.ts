@@ -4,7 +4,7 @@ import type { SQL } from 'drizzle-orm';
 import { DEFAULT_ASSISTANT_CONFIG } from '$lib/constants';
 import { db } from '../../database/database';
 import { documentChunks, documents } from '../../database/schema';
-import { embedTexts } from '../embedding-model';
+import { activeEmbeddingModel } from '../embedding-models/registry';
 import { getVectorIndex } from './vector-index';
 import {
 	cleanFilterValues,
@@ -62,8 +62,13 @@ export async function searchSemantic(options: SearchOptionsBase): Promise<Semant
 	});
 	if (!hasSearchableChunks) return { query, results: [] };
 
-	const [queryEmbedding] = await embedTexts([query], 'search_query');
-	if (queryEmbedding.length !== index.dimensions) return { query, results: [] };
+	const [queryEmbedding] = await activeEmbeddingModel.embed([query], 'search_query');
+	if (queryEmbedding.length !== index.dimensions) {
+		throw new Error(
+			`Stored embeddings have ${index.dimensions} dimensions but ${activeEmbeddingModel.name} ` +
+				`produces ${queryEmbedding.length}. Re-embed the documents with the active model.`
+		);
+	}
 
 	const { matrix, dimensions } = index;
 	const top: TopCandidate[] = [];

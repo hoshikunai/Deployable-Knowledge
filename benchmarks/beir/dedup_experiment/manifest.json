@@ -1,0 +1,26 @@
+{
+  "scifact-dup": {
+    "A (baseline)": "scifact-dup-rrf-ettin-p100-s40-o20-all-20260929-150846-837677",
+    "B (exact)": "scifact-dup-rrf-ettin-p100-s40-o20-dx-all-20260929-151324-454307",
+    "C (near)": "scifact-dup-rrf-ettin-p100-s40-o20-dn-all-20260929-151754-105604",
+    "D (\u22642 per doc)": "scifact-dup-rrf-ettin-p100-s40-o20-dc2-all-20260929-152221-545921"
+  },
+  "scifact": {
+    "A (baseline)": "scifact-rrf-ettin-p100-s40-o20-all-20260929-153814-933096",
+    "B (exact)": "scifact-rrf-ettin-p100-s40-o20-dx-all-20260929-154244-341508",
+    "C (near)": "scifact-rrf-ettin-p100-s40-o20-dn-all-20260929-154706-483383",
+    "D (\u22642 per doc)": "scifact-rrf-ettin-p100-s40-o20-dc2-all-20260929-155122-042125"
+  },
+  "nfcorpus": {
+    "A (baseline)": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260929-155538-109110",
+    "B (exact)": "nfcorpus-rrf-ettin-p100-s40-o20-dx-all-20260929-155957-741308",
+    "C (near)": "nfcorpus-rrf-ettin-p100-s40-o20-dn-all-20260929-160415-888991",
+    "D (\u22642 per doc)": "nfcorpus-rrf-ettin-p100-s40-o20-dc2-all-20260929-160833-058725"
+  },
+  "arguana": {
+    "A (baseline)": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260929-161253-638675",
+    "B (exact)": "arguana-rrf-ettin-p100-s40-o20-dx-300q-seed42-20260929-162318-298602",
+    "C (near)": "arguana-rrf-ettin-p100-s40-o20-dn-300q-seed42-20260929-163344-590590",
+    "D (\u22642 per doc)": "arguana-rrf-ettin-p100-s40-o20-dc2-300q-seed42-20260929-164411-121437"
+  }
+}

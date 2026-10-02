@@ -1,11 +1,16 @@
-// Hybrid search gathers semantic and BM25 candidates and fuses them with RRF.
-// When a reranker is configured, it reorders a bounded RRF shortlist.
+// Hybrid search gathers semantic and BM25 candidates and fuses them with RRF (by chunk or by
+// document, with optional retriever weights). Optional (experimental) dedup trims repeats, a
+// configured reranker reorders a bounded RRF shortlist, and optional document ordering groups
+// the final results by document.
 
 import { searchSemantic } from './semantic-search';
 import { searchBm25 } from './bm25-search';
 import { rerankCandidates } from './cross-rerank';
 import { requireCrossEncoder } from './cross-encoders/registry';
 import { hybridPipeline, type HybridPipelineConfig } from './hybrid-pipeline';
+import { activeEmbeddingModel } from '../embedding-models/registry';
+import { dedupeCandidates } from './candidate-dedup';
+import { orderByDocument } from './document-scoring';
 import { fuseSearchResultsRrf, type RrfFusedMatch } from './rrf-fusion';
 import { type ScoredSearchMatch, type SearchOptionsBase, type SearchResult } from './search-shared';
 
@@ -15,15 +20,41 @@ type SearchMethodResults = {
 	bm25: ScoredSearchMatch[];
 	hybrid: ScoredSearchMatch[];
 	pipeline: HybridPipelineConfig;
+	// Reported so benchmarks can confirm which model embedded the query
+	embeddingModel: string;
 };
 
+function takeCandidates(fusedCandidates: RrfFusedMatch[], limit: number): RrfFusedMatch[] {
+	return dedupeCandidates(
+		fusedCandidates,
+		hybridPipeline.dedup,
+		limit,
+		hybridPipeline.maxChunksPerDocument
+	);
+}
+
+function rerankInput(match: ScoredSearchMatch): string {
+	const rawTitle = match.sourceTitle.trim();
+	const title = rawTitle
+		.replace(/\.[a-z][a-z0-9]{1,4}$/i, '')
+		.replace(/[_-]+/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	const hasWord = /\p{L}{4,}/u.test(title);
+	if (!hybridPipeline.rerankTitle || !hasWord || match.content.startsWith(rawTitle)) {
+		return match.content;
+	}
+	return `${title}\n\n${match.content}`;
+}
+
+// Returns the whole shortlist in reranked order; callers cut it to topK
 async function rerankShortlist(
 	query: string,
 	fusedCandidates: RrfFusedMatch[],
 	topK: number,
 	rerankerId: string
 ): Promise<ScoredSearchMatch[]> {
-	const shortlist = fusedCandidates.slice(0, topK * hybridPipeline.rerankMultiplier);
+	const shortlist = takeCandidates(fusedCandidates, topK * hybridPipeline.rerankMultiplier);
 	const matchesByChunkId = new Map(shortlist.map(({ match }) => [match.chunkId, match]));
 	const crossEncoder = requireCrossEncoder(rerankerId);
 
@@ -31,7 +62,7 @@ async function rerankShortlist(
 		query,
 		shortlist.map(({ match }) => ({
 			chunkId: match.chunkId,
-			content: match.content
+			content: rerankInput(match)
 		})),
 		crossEncoder,
 		hybridPipeline.rerankMaxTokens
@@ -50,10 +81,6 @@ async function rerankShortlist(
 			...match,
 			score: candidate.score
 		});
-
-		if (reranked.length === topK) {
-			break;
-		}
 	}
 
 	return reranked;
@@ -89,12 +116,20 @@ async function collectMethodResults(options: SearchOptionsBase): Promise<{
 	]);
 
 	const fusedCandidates = fuseSearchResultsRrf(semanticSearch.results, bm25Search.results, {
-		rankConstant: hybridPipeline.rrfRankConstant
+		rankConstant: hybridPipeline.rrfRankConstant,
+		semanticWeight: hybridPipeline.rrfSemanticWeight,
+		bm25Weight: hybridPipeline.rrfBm25Weight,
+		level: hybridPipeline.fusionLevel
 	});
 
-	const hybridScored = hybridPipeline.reranker
+	// Document ordering looks past the first topK chunks so it can see each document's
+	// other chunks; without it, only the first topK are needed.
+	const poolSize =
+		hybridPipeline.documentOrder === 'none' ? topK : topK * hybridPipeline.rerankMultiplier;
+	const ranked = hybridPipeline.reranker
 		? await rerankShortlist(query, fusedCandidates, topK, hybridPipeline.reranker)
-		: fusedCandidates.slice(0, topK).map(({ match, score }) => ({ ...match, score }));
+		: takeCandidates(fusedCandidates, poolSize).map(({ match, score }) => ({ ...match, score }));
+	const hybridScored = orderByDocument(ranked, hybridPipeline.documentOrder, topK);
 
 	return {
 		query,
@@ -112,7 +147,8 @@ export async function searchAllMethods(options: SearchOptionsBase): Promise<Sear
 		semantic: search.semantic,
 		bm25: search.bm25,
 		hybrid: search.hybridScored,
-		pipeline: hybridPipeline
+		pipeline: hybridPipeline,
+		embeddingModel: activeEmbeddingModel.id
 	};
 }
 

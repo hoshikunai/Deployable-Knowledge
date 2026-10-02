@@ -7,7 +7,7 @@ import type {
 } from '$lib/types';
 import { db } from '$lib/server/database/database';
 import { documentTags, documents } from '$lib/server/database/schema';
-import { embedTexts } from '$lib/server/rag/embedding-model';
+import { activeEmbeddingModel } from '$lib/server/rag/embedding-models/registry';
 import { getVectorIndex, type VectorIndex } from '$lib/server/rag/search/vector-index';
 
 // A tag's raw similarity says little on its own: the similarity of unrelated words to a
@@ -54,10 +54,12 @@ type AutotagProgress = (
 let backgroundVectors: Promise<Float32Array[]> | undefined;
 
 function getBackgroundVectors(): Promise<Float32Array[]> {
-	backgroundVectors ??= embedTexts(BACKGROUND_TOPICS, 'search_query').catch((error) => {
-		backgroundVectors = undefined;
-		throw error;
-	});
+	backgroundVectors ??= activeEmbeddingModel
+		.embed(BACKGROUND_TOPICS, 'search_query')
+		.catch((error) => {
+			backgroundVectors = undefined;
+			throw error;
+		});
 	return backgroundVectors;
 }
 
@@ -130,7 +132,7 @@ export async function autotagDocuments(
 		message: `Embedding ${tagNames.length} tag${tagNames.length === 1 ? '' : 's'}`
 	});
 	const [tagVectors, background] = await Promise.all([
-		embedTexts(
+		activeEmbeddingModel.embed(
 			tagNames.map((tag) => tag.replace(/[-_]+/g, ' ')),
 			'search_query'
 		),

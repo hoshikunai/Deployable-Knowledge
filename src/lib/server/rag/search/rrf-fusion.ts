@@ -6,6 +6,13 @@ const DEFAULT_BM25_WEIGHT = 1;
 
 type RrfSource = 'semantic' | 'bm25';
 
+// 'chunk' fuses chunk ranks. 'document' fuses document ranks (each document ranked by its
+// first chunk in each list), so retrievers agreeing on a document through different chunks
+// still reinforce each other; chunks then inherit their document's score.
+export type RrfFusionLevel = 'chunk' | 'document';
+
+export const RRF_FUSION_LEVELS: readonly RrfFusionLevel[] = ['chunk', 'document'];
+
 type FusionCandidate = {
 	match: ScoredSearchMatch;
 	semanticRank: number | undefined;
@@ -17,6 +24,7 @@ export type RrfFusionOptions = {
 	rankConstant?: number;
 	semanticWeight?: number;
 	bm25Weight?: number;
+	level?: RrfFusionLevel;
 };
 
 export type RrfFusedMatch = {
@@ -85,6 +93,29 @@ function addRankedResults(
 	}
 }
 
+function addDocumentRanks(
+	documentScores: Map<string, number>,
+	results: readonly ScoredSearchMatch[],
+	weight: number,
+	rankConstant: number
+): void {
+	if (weight === 0) return;
+
+	const seenDocumentIds = new Set<string>();
+	let rank = 0;
+
+	for (const { documentId } of results) {
+		if (seenDocumentIds.has(documentId)) continue;
+
+		seenDocumentIds.add(documentId);
+		rank += 1;
+		documentScores.set(
+			documentId,
+			(documentScores.get(documentId) ?? 0) + weight / (rankConstant + rank)
+		);
+	}
+}
+
 function bestRank(candidate: FusionCandidate): number {
 	return Math.min(candidate.semanticRank ?? Infinity, candidate.bm25Rank ?? Infinity);
 }
@@ -111,8 +142,20 @@ export function fuseSearchResultsRrf(
 
 	const maximumScore = (semanticWeight + bm25Weight) / (rankConstant + 1);
 
+	const documentScores = new Map<string, number>();
+	if (options.level === 'document') {
+		addDocumentRanks(documentScores, semanticResults, semanticWeight, rankConstant);
+		addDocumentRanks(documentScores, bm25Results, bm25Weight, rankConstant);
+	}
+	// Chunk-level fusion ranks by each chunk's own RRF score
+	const fusedScore = (candidate: FusionCandidate) =>
+		documentScores.get(candidate.match.documentId) ?? candidate.rrfScore;
+
 	return [...candidates.values()]
 		.sort((left, right) => {
+			const fusedDifference = fusedScore(right) - fusedScore(left);
+			if (fusedDifference !== 0) return fusedDifference;
+
 			const scoreDifference = right.rrfScore - left.rrfScore;
 			if (scoreDifference !== 0) return scoreDifference;
 
@@ -131,6 +174,6 @@ export function fuseSearchResultsRrf(
 			semanticRank: candidate.semanticRank,
 			bm25Rank: candidate.bm25Rank,
 			rrfScore: candidate.rrfScore,
-			score: Math.min(1, Math.max(0, candidate.rrfScore / maximumScore))
+			score: Math.min(1, Math.max(0, fusedScore(candidate) / maximumScore))
 		}));
 }

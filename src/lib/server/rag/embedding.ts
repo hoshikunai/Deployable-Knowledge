@@ -8,7 +8,7 @@ import {
 	type NewDocumentChunk
 } from '../database/schema';
 import type { ParsedChunk } from './chunk/parse-shared';
-import { embedTexts } from './embedding-model';
+import { activeEmbeddingModel } from './embedding-models/registry';
 import { invalidateVectorIndex } from './search/vector-index';
 
 const INSERT_BATCH_SIZE = 100; //Can adjust later
@@ -84,7 +84,7 @@ export async function storeDocumentChunks(
 		const slice = chunks.slice(offset, offset + EMBED_SLICE_SIZE);
 		let embeddings: Float32Array[] = [];
 		if (shouldEmbed) {
-			embeddings = await embedTexts(
+			embeddings = await activeEmbeddingModel.embed(
 				slice.map((chunk) => chunk.content),
 				'search_document',
 				(current) =>

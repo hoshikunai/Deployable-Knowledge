@@ -59,14 +59,24 @@ def validate_resume_configuration(
 
 
 def verify_server_pipeline(
-    client: DeployableKnowledgeClient, requested: dict[str, Any], probe_query: str
+    client: DeployableKnowledgeClient,
+    requested: dict[str, Any],
+    probe_query: str,
+    embedding_model: str | None = None,
 ) -> None:
-    served = client.search(query=probe_query, top_k=1).get("pipeline")
+    response = client.search(query=probe_query, top_k=1)
+    rebuild = "Rebuild with 'npm run build:electron' if the server predates this support."
+    served = response.get("pipeline")
     if served != requested:
         raise RuntimeError(
             "Server hybrid pipeline does not match the requested pipeline "
-            f"(served={served!r}, requested={requested!r}). "
-            "Rebuild with 'npm run build:electron' if the server predates pipeline support."
+            f"(served={served!r}, requested={requested!r}). {rebuild}"
+        )
+    served_model = response.get("embeddingModel")
+    if embedding_model is not None and served_model != embedding_model:
+        raise RuntimeError(
+            "Server embedding model does not match the corpus copy "
+            f"(served={served_model!r}, corpus={embedding_model!r}). {rebuild}"
         )
 
 
@@ -577,6 +587,16 @@ def canonicalize_rankings(
     return transformed
 
 
+def without_identical_ids(
+    results: dict[str, dict[str, float]],
+) -> dict[str, dict[str, float]]:
+    """Copy rankings without each query's own document, matching BEIR's evaluate()."""
+    return {
+        query_id: {doc_id: score for doc_id, score in ranking.items() if doc_id != query_id}
+        for query_id, ranking in results.items()
+    }
+
+
 def evaluate_method(
     qrels: dict[str, dict[str, int]],
     results: dict[str, dict[str, float]],
@@ -592,9 +612,11 @@ def evaluate_method(
         )
     )
 
+    # BEIR's custom MRR does not drop identical query/document IDs the way evaluate()
+    # does, so on ArguAna the query's own argument would count as a miss at rank 1.
     mrr = EvaluateRetrieval.evaluate_custom(
         qrels,
-        copy.deepcopy(results),
+        without_identical_ids(results),
         k_values,
         metric="mrr",
     )
@@ -1250,7 +1272,9 @@ def main() -> None:
         for query_id, _query in selected_queries
     }
     if requested_pipeline is not None:
-        verify_server_pipeline(client, requested_pipeline, selected_queries[0][1])
+        corpus = immutable_protocol.get("corpus") or {}
+        verify_server_pipeline(client, requested_pipeline, selected_queries[0][1],
+                               corpus.get("embeddingModel"))
     results, raw_rankings, failures = run_query_searches(
         client,
         selected_queries,

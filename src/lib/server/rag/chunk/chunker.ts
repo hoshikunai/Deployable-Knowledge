@@ -6,7 +6,7 @@ import {
 	type ParsedChunk
 } from './parse-shared';
 import { chunkingConfig } from './chunking-config';
-import { getEmbeddingTokenCounter } from '../embedding-model';
+import { activeEmbeddingModel } from '../embedding-models/registry';
 
 const MIN_WORDS = 5;
 
@@ -184,16 +184,23 @@ export function tokenBudget(
 	};
 }
 
-// Token budgets count with the embedding model's tokenizer, so they load it first
+// Token budgets count with the active embedding model's tokenizer, so they load it first
 export async function loadChunkBudget(): Promise<ChunkBudget> {
 	if (chunkingConfig.unit === 'characters') {
 		return characterBudget(chunkingConfig.maxCharacters, chunkingConfig.overlapSentences);
 	}
 
+	if (chunkingConfig.maxTokens > activeEmbeddingModel.maxTokens) {
+		throw new Error(
+			`RAG_CHUNK_MAX_TOKENS ${chunkingConfig.maxTokens} exceeds ${activeEmbeddingModel.name}'s ` +
+				`limit of ${activeEmbeddingModel.maxTokens} tokens.`
+		);
+	}
+
 	return tokenBudget(
 		chunkingConfig.maxTokens,
 		chunkingConfig.overlapTokens,
-		await getEmbeddingTokenCounter()
+		await activeEmbeddingModel.createTokenCounter()
 	);
 }
 

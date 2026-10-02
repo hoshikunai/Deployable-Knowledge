@@ -229,7 +229,19 @@ def pipeline_environment(pipeline: dict[str, Any] | None) -> dict[str, str]:
         "RAG_RERANK_MULTIPLIER": str(pipeline["rerankMultiplier"]),
         "RAG_RRF_K": str(pipeline["rrfRankConstant"]),
         "RAG_RERANK_MAX_TOKENS": str(pipeline["rerankMaxTokens"]),
+        "RAG_HYBRID_DEDUP": pipeline.get("dedup", "none"),
+        "RAG_HYBRID_DOC_CAP": str(pipeline.get("maxChunksPerDocument", 2)),
+        "RAG_RRF_SEMANTIC_WEIGHT": str(pipeline.get("rrfSemanticWeight", 1)),
+        "RAG_RRF_BM25_WEIGHT": str(pipeline.get("rrfBm25Weight", 1)),
+        "RAG_RRF_LEVEL": pipeline.get("fusionLevel", "chunk"),
+        "RAG_HYBRID_DOCUMENT_ORDER": pipeline.get("documentOrder", "none"),
+        "RAG_RERANK_TITLE": "true" if pipeline.get("rerankTitle") else "false",
     }
+
+
+def embedding_environment(embedding_model: str | None) -> dict[str, str]:
+    """The model that embeds chunks at ingestion and queries at search; None keeps the default."""
+    return {} if embedding_model is None else {"RAG_EMBEDDING_MODEL": embedding_model}
 
 
 def chunking_environment(chunking: dict[str, Any] | None) -> dict[str, str]:
@@ -252,6 +264,7 @@ def start_server(
     mapping: Path | None = None,
     pipeline: dict[str, Any] | None = None,
     chunking: dict[str, Any] | None = None,
+    embedding_model: str | None = None,
 ) -> tuple[subprocess.Popen[bytes], BinaryIO, Path]:
     if heartbeat(base_url):
         raise RuntimeError(
@@ -273,6 +286,7 @@ def start_server(
         "DK_MIGRATIONS_DIR": str(MIGRATIONS_ROOT),
         **pipeline_environment(pipeline),
         **chunking_environment(chunking),
+        **embedding_environment(embedding_model),
     }
     if reuse_existing_schema:
         environment.pop("DK_MIGRATIONS_DIR", None)
@@ -365,6 +379,7 @@ def run_dataset(
         if getattr(arguments, "reuse_existing_runtime", False) else None,
         pipeline=getattr(arguments, "pipeline", None),
         chunking=getattr(arguments, "chunking", None),
+        embedding_model=getattr(arguments, "embedding_model", None),
     )
     run_name = getattr(arguments, "run_name", None) or f"{suite_id}-{arguments.split}"
     run_directory = RUNS_ROOT / f"{dataset}-{run_name}"

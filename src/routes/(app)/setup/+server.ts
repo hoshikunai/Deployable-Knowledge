@@ -1,18 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { ApiEmbeddingModelInstallEvent } from '$lib/types';
-import {
-	EMBEDDING_DTYPE,
-	EMBEDDING_MODEL,
-	installEmbeddingModel,
-	isEmbeddingModelInstalled
-} from '$lib/server/rag/embedding-model';
+import { activeEmbeddingModel } from '$lib/server/rag/embedding-models/registry';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async () => {
 	return json({
-		installed: await isEmbeddingModelInstalled(),
-		model: EMBEDDING_MODEL,
-		dtype: EMBEDDING_DTYPE
+		installed: await activeEmbeddingModel.isInstalled(),
+		model: activeEmbeddingModel.repository,
+		dtype: activeEmbeddingModel.dtype
 	});
 };
 
@@ -33,7 +28,7 @@ export const POST: RequestHandler = async () => {
 			};
 
 			try {
-				await installEmbeddingModel((progress) => {
+				await activeEmbeddingModel.install((progress) => {
 					if (progress.status !== 'progress_total') return;
 
 					send({

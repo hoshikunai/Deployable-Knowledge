@@ -1,0 +1,26 @@
+{
+	"queries": [
+		"Do statins lower the risk of breast cancer recurrence?",
+		"How much vitamin D should older adults take?",
+		"Should governments ban private cars from city centres?",
+		"What causes inflation to rise quickly?",
+		"Effects of intermittent fasting on insulin sensitivity"
+	],
+	"passages": [
+		"In a cohort of 18,000 women with early-stage breast cancer, statin use after diagnosis was associated with a lower rate of recurrence over ten years.",
+		"Statins inhibit HMG-CoA reductase and are prescribed to lower LDL cholesterol in patients at risk of cardiovascular disease.",
+		"Mammography screening every two years reduced breast cancer mortality among women aged 50 to 69.",
+		"Guidelines recommend 800 to 1,000 IU of vitamin D daily for adults over 70 to reduce fracture risk.",
+		"Vitamin D is synthesised in the skin after exposure to ultraviolet B light and is also found in oily fish.",
+		"Calcium supplements taken without vitamin D showed little benefit for bone density in older women.",
+		"Banning cars from city centres cuts air pollution and makes streets safer for pedestrians and cyclists.",
+		"Car-free zones hurt small shops that depend on customers who drive in from the suburbs.",
+		"Public transport investment is a precondition for reducing car traffic in dense cities.",
+		"Inflation rises quickly when demand outpaces supply, for example after large fiscal stimulus or supply-chain shocks.",
+		"Central banks raise interest rates to cool demand and bring inflation back toward target.",
+		"Wage-price spirals occur when rising prices lead to higher wage demands, which push prices up further.",
+		"Intermittent fasting improved insulin sensitivity in overweight adults compared with daily calorie restriction.",
+		"Time-restricted eating aligns food intake with circadian rhythms and may lower fasting glucose.",
+		"Skipping breakfast was associated with higher body weight in several observational studies."
+	]
+}

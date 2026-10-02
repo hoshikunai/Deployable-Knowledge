@@ -39,12 +39,49 @@ Jobs search the copy that matches the saved chunk setting; runs record it in `ru
 marked "preparing"; preparing again rebuilds it from scratch. Each copy keeps its document
 mapping beside its database, so deleting runs can't break a corpus.
 
+## Embedding models
+
+The **Embedding model** dropdown on the Run tab picks which model's corpus copies jobs use:
+nomic-embed-text v1.5 (the app's default, 768-d), bekko-embedding v1 a25m (384-d), bge-base-en v1.5
+(768-d), bge-small-en v1.5 (384-d), granite-embedding 97m multilingual r2 (384-d), granite-embedding
+english r2 (768-d), or jina-embeddings v5 text nano retrieval (768-d; CC BY-NC 4.0, so for
+benchmarking only, not as the app's default). Each model
+needs its own copy of every corpus, because the stored vectors come from the model; corpora
+without one show a **Prepare** button. Copies are named by what differs from the default, e.g.
+`runtime-scifact-bekko-a25m` or `runtime-scifact-t256o32-bekko-a25m`. The app reads the model from
+`RAG_EMBEDDING_MODEL` at startup, and each run confirms the server's model matches its copy.
+With token chunking, tokens are counted with the selected model's tokenizer.
+
+To add a model:
+
+1. Create `src/lib/server/rag/embedding-models/<model>.ts`. Models the Transformers.js
+   feature-extraction pipeline can run are one `PipelineEmbeddingModel` config (repository, dtype,
+   dimensions, max tokens, pooling, query/document prefixes); others implement the
+   `EmbeddingModel` interface.
+2. List it in `embedding-models/registry.ts`.
+3. Add it to `EMBEDDING_MODELS` in `benchmarks/bench-gui/corpora.py` with a short tag for copy
+   names and its max tokens.
+4. Check its vectors against the official implementation, and add it to `REFERENCES` in
+   `benchmarks/embedding-parity/compare.py` first:
+
+   ```bash
+   RAG_EMBEDDING_MODEL=<id> node_modules/.bin/tsx benchmarks/embedding-parity/embed.mts app.json
+   benchmarks/beir/.venv/bin/python benchmarks/embedding-parity/compare.py app.json
+   ```
+
+   It passes when the vectors match (cosine ≥ 0.99 on average) and every test query ranks the
+   same top 5. Quantized (8-bit) weights often fail; full precision should match exactly.
+
+5. Rebuild (`npm run build:electron`), then prepare its corpus copies.
+
 ## Terminal commands
 
 ```bash
 npm run bench -- run scifact arguana --pipeline rrf-ettin --queries 100 --seeds 42,314
 npm run bench -- run nfcorpus --pipeline rrf-ettin --rerank-max-tokens 1024 --chunk-tokens 256 --overlap-tokens 32
 npm run bench -- prepare nfcorpus --chunk-tokens 256 --overlap-tokens 32
+npm run bench -- prepare scifact --embedding-model bekko-embedding-v1-a25m
+npm run bench -- run scifact --pipeline rrf --embedding-model bekko-embedding-v1-a25m
 npm run bench -- resume <run-id>
 npm run bench -- list
 npm run bench -- scores <run-id> [<run-id> ...] [--markdown]

@@ -14,3 +14,9 @@ benchmarks/rag-evaluation/__pycache__/
 benchmarks/rag-evaluation/runs/
 benchmarks/rag-evaluation/execution-status.json
 benchmarks/rag-evaluation/full-beir-plan.json
+benchmarks/beir/dedup_experiment/manifest.json
+benchmarks/beir/dedup_experiment/results.json
+benchmarks/beir/dedup_experiment/results.md
+benchmarks/beir/fusion_experiment/manifest.json
+benchmarks/beir/fusion_experiment/results.json
+benchmarks/beir/fusion_experiment/results.md

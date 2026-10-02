@@ -38,6 +38,14 @@
 			<section class="panel-grid" id="tab-run" role="tabpanel">
 				<form class="panel" id="job-form">
 					<fieldset>
+						<legend><label for="embedding-model">Embedding model</label></legend>
+						<select id="embedding-model" class="field wide"></select>
+						<p class="hint">
+							Semantic search, and so the hybrid pipeline, uses corpus copies embedded with this
+							model.
+						</p>
+					</fieldset>
+					<fieldset>
 						<legend id="corpora-legend">Corpora</legend>
 						<div id="corpora" class="choices">Loading…</div>
 					</fieldset>
@@ -69,6 +77,15 @@
 						<label class="stacked" id="seeds-row">
 							Seeds <span class="hint">comma-separated; one run per seed</span>
 							<input type="text" id="seeds" class="field" value="42" />
+						</label>
+						<label class="stacked">
+							Query split
+							<span class="hint">tune on train/dev, then report once on test</span>
+							<select id="split" class="field">
+								<option value="test">test</option>
+								<option value="train">train</option>
+								<option value="dev">dev</option>
+							</select>
 						</label>
 					</fieldset>
 					<p class="error" id="job-error" role="alert"></p>

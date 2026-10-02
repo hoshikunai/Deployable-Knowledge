@@ -165,8 +165,10 @@ legend {
 	background: var(--surface-2);
 }
 
-.choice.disabled {
-	opacity: 0.55;
+/* Unprepared corpora: dim the description but keep the Prepare button fully visible */
+.choice.disabled-choice > span,
+.choice.disabled-choice > small {
+	opacity: 0.6;
 }
 
 .choice small {
@@ -203,8 +205,19 @@ legend {
 	padding: 4px 8px;
 }
 
+.field:disabled {
+	background: var(--surface-2);
+	color: var(--muted);
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
 .field.narrow {
 	width: 80px;
+}
+
+.field.wide {
+	width: 100%;
 }
 
 .button {

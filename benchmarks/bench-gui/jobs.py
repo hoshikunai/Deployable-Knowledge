@@ -22,6 +22,12 @@ PIPELINES: dict[str, dict[str, Any]] = {
                     "maxTokens": 512},
 }
 DEFAULT_RERANK_MAX_TOKENS = 512
+# Experimental candidate dedup modes (src/lib/server/rag/search/candidate-dedup.ts)
+DEDUP_MODES = {"none": None, "exact": "dx", "near": "dn", "document-cap": "dc"}
+FUSION_LEVELS = ("chunk", "document")
+DOCUMENT_ORDERS = ("none", "sum-top2")
+SWITCHES = ("off", "on")
+SPLITS = ("test", "train", "dev")
 PREPARE_TIMEOUT_HOURS = 12
 
 # The harness requests documentDepth * CHUNK_OVERFETCH_FACTOR chunks per query.
@@ -46,6 +52,16 @@ class Settings:
     chunkMaxTokens: int = 0
     chunkOverlapTokens: int = 0
     rerankMaxTokens: int = DEFAULT_RERANK_MAX_TOKENS
+    embeddingModel: str = corpora.DEFAULT_EMBEDDING_MODEL
+    dedupMode: str = "none"
+    maxChunksPerDocument: int = 2
+    rrfSemanticWeight: float = 1.0
+    rrfBm25Weight: float = 1.0
+    fusionLevel: str = "chunk"
+    documentOrder: str = "none"
+    rerankTitle: str = "on"
+    # Query split to evaluate: tune on train/dev, report on test
+    split: str = "test"
 
     def chunking(self) -> dict[str, int] | None:
         if self.chunkMaxTokens == 0:
@@ -73,6 +89,25 @@ class Settings:
             raise ValueError("chunkOverlapTokens must be at least 0 and below chunkMaxTokens")
         if not 16 <= self.rerankMaxTokens <= 7999:
             raise ValueError("rerankMaxTokens must be between 16 and 7999")
+        if min(self.rrfSemanticWeight, self.rrfBm25Weight) < 0:
+            raise ValueError("RRF weights must not be negative")
+        if self.rrfSemanticWeight + self.rrfBm25Weight == 0:
+            raise ValueError("RRF weights cannot both be 0")
+        for name, allowed in (("fusionLevel", FUSION_LEVELS), ("documentOrder", DOCUMENT_ORDERS),
+                              ("rerankTitle", SWITCHES), ("split", SPLITS)):
+            if getattr(self, name) not in allowed:
+                raise ValueError(f"{name} must be one of {list(allowed)}")
+        if self.dedupMode not in DEDUP_MODES:
+            raise ValueError(f"dedupMode must be one of {sorted(DEDUP_MODES)}")
+        if self.maxChunksPerDocument < 1:
+            raise ValueError("maxChunksPerDocument must be at least 1")
+        if self.embeddingModel not in corpora.EMBEDDING_MODELS:
+            raise ValueError(f"Unknown embedding model {self.embeddingModel!r}; "
+                             f"choose from {sorted(corpora.EMBEDDING_MODELS)}")
+        model_limit = corpora.EMBEDDING_MODELS[self.embeddingModel]["maxTokens"]
+        if self.chunkMaxTokens > model_limit:
+            raise ValueError(f"{self.embeddingModel} reads at most {model_limit} tokens; "
+                             f"lower the chunk size")
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "Settings":
@@ -82,10 +117,10 @@ class Settings:
             raise ValueError(f"Unknown settings: {sorted(unknown)}")
         defaults = asdict(cls())
         merged = {**defaults, **value}
-        settings = cls(**{
-            name: (float(merged[name]) if name == "memoryCeilingGb" else int(merged[name]))
-            for name in known
-        })
+        casts = {"memoryCeilingGb": float, "rrfSemanticWeight": float, "rrfBm25Weight": float,
+                 "embeddingModel": str, "dedupMode": str, "fusionLevel": str,
+                 "documentOrder": str, "rerankTitle": str, "split": str}
+        settings = cls(**{name: casts.get(name, int)(merged[name]) for name in known})
         settings.validate()
         return settings
 
@@ -135,6 +170,10 @@ class JobSpec:
         return self.settings.chunking()
 
     @property
+    def embedding_model(self) -> str:
+        return self.settings.embeddingModel
+
+    @property
     def output_chunks(self) -> int:
         return self.settings.documentDepth * CHUNK_OVERFETCH_FACTOR
 
@@ -146,12 +185,20 @@ class JobSpec:
             "rerankMultiplier": self.settings.rerankMultiplier,
             "rrfRankConstant": self.settings.rrfRankConstant,
             "rerankMaxTokens": self.settings.rerankMaxTokens,
+            "dedup": self.settings.dedupMode,
+            "maxChunksPerDocument": self.settings.maxChunksPerDocument,
+            "rrfSemanticWeight": self.settings.rrfSemanticWeight,
+            "rrfBm25Weight": self.settings.rrfBm25Weight,
+            "fusionLevel": self.settings.fusionLevel,
+            "documentOrder": self.settings.documentOrder,
+            "rerankTitle": self.settings.rerankTitle == "on",
         }
 
     def corpus(self) -> dict[str, Any]:
         """Which prepared corpus copy the job searches; recorded in run-config.json."""
-        return {"runtimeId": corpora.runtime_id(self.dataset, self.chunking),
-                "chunking": self.chunking}
+        return {"runtimeId": corpora.runtime_id(self.dataset, self.chunking, self.embedding_model),
+                "chunking": self.chunking,
+                "embeddingModel": self.embedding_model}
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -176,7 +223,9 @@ def validate_job(dataset: str, pipeline: str, queries: str, settings: Settings) 
     if limit is not None and settings.rerankMaxTokens > limit:
         raise ValueError(f"{PIPELINES[pipeline]['label']} reads at most {limit} tokens; "
                          f"lower the reranker max tokens setting")
-    corpora.require_prepared(dataset, settings.chunking())
+    if not corpora.has_split(dataset, settings.split):
+        raise ValueError(f"{dataset} has no {settings.split} split")
+    corpora.require_prepared(dataset, settings.chunking(), settings.embeddingModel)
 
 
 def make_run_name(spec: JobSpec, now: datetime | None = None) -> str:
@@ -191,8 +240,24 @@ def make_run_name(spec: JobSpec, now: datetime | None = None) -> str:
     reranked = PIPELINES[spec.pipeline]["reranker"] is not None
     if reranked and spec.settings.rerankMaxTokens != DEFAULT_RERANK_MAX_TOKENS:
         parts.append(f"r{spec.settings.rerankMaxTokens}")
-    if spec.chunking is not None:
-        parts.append(corpora.variant_id(spec.chunking))
+    if (spec.settings.rrfSemanticWeight, spec.settings.rrfBm25Weight) != (1, 1):
+        parts.append(f"w{spec.settings.rrfSemanticWeight:g}x{spec.settings.rrfBm25Weight:g}")
+    if spec.settings.fusionLevel == "document":
+        parts.append("fdoc")
+    if spec.settings.documentOrder == "sum-top2":
+        parts.append("os2")
+    if reranked and spec.settings.rerankTitle == "off":
+        parts.append("nt")
+    dedup_tag = DEDUP_MODES[spec.settings.dedupMode]
+    if dedup_tag == "dc":
+        parts.append(f"dc{spec.settings.maxChunksPerDocument}")
+    elif dedup_tag:
+        parts.append(dedup_tag)
+    variant = corpora.variant_id(spec.chunking, spec.embedding_model)
+    if variant != corpora.DEFAULT_VARIANT:
+        parts.append(variant)
+    if spec.settings.split != "test":
+        parts.append(spec.settings.split)
     parts.append("all" if spec.queries == "all" else f"{spec.queries}q-seed{spec.seed}")
     stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%d-%H%M%S-%f")
     parts.append(stamp)
@@ -220,22 +285,22 @@ def create_jobs(datasets: list[str], pipeline: str, queries: str, seeds: list[in
 
 
 def create_prepare_jobs(datasets: list[str], settings: Settings) -> list[JobSpec]:
-    """One job per dataset that builds a corpus copy for the token chunk settings."""
+    """One job per dataset that builds a corpus copy for the chunk and embedding settings."""
     settings.validate()
     chunking = settings.chunking()
-    if chunking is None:
-        raise ValueError("Set a chunk size in tokens first; the default copies already exist")
+    variant = corpora.variant_id(chunking, settings.embeddingModel)
     if not datasets:
         raise ValueError("Select at least one corpus")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     jobs = []
     for dataset in datasets:
-        status = corpora.variant_status(dataset, chunking)
+        status = corpora.variant_status(dataset, chunking, settings.embeddingModel)
         if status["state"] == "prepared":
-            raise ValueError(f"{dataset} is already prepared with {corpora.describe_chunking(chunking)}")
+            described = corpora.describe_variant(chunking, settings.embeddingModel)
+            raise ValueError(f"{dataset} is already prepared with {described}")
         jobs.append(JobSpec(dataset=dataset, pipeline="rrf", queries="all", seed=0,
                             settings=settings, kind="prepare",
-                            runName=f"prepare-{corpora.variant_id(chunking)}-{stamp}"))
+                            runName=f"prepare-{variant}-{stamp}"))
     return jobs
 
 
@@ -286,13 +351,14 @@ def suite_arguments(spec: JobSpec, resume: bool) -> argparse.Namespace:
             startup_timeout=120, no_shared_model_cache=False, run_name=spec.runName,
             resume=False, reuse_existing_schema=False, reuse_existing_runtime=False,
             reuse_document_mapping=None,
-            runtime_id=corpora.runtime_id(spec.dataset, spec.chunking),
+            runtime_id=corpora.runtime_id(spec.dataset, spec.chunking, spec.embedding_model),
             timeout_seconds=PREPARE_TIMEOUT_HOURS * 3600, prepare_only=True,
-            chunking=spec.chunking, memory_ceiling=ceiling, memory_warning=int(ceiling * 0.85),
+            chunking=spec.chunking, embedding_model=spec.embedding_model,
+            memory_ceiling=ceiling, memory_warning=int(ceiling * 0.85),
         )
-    mapping = corpora.require_prepared(spec.dataset, spec.chunking)
+    mapping = corpora.require_prepared(spec.dataset, spec.chunking, spec.embedding_model)
     return argparse.Namespace(
-        split="test",
+        split=spec.settings.split,
         query_counts=spec.queries,
         sample_seed=spec.seed,
         search_depth=spec.settings.documentDepth,
@@ -304,10 +370,11 @@ def suite_arguments(spec: JobSpec, resume: bool) -> argparse.Namespace:
         reuse_existing_schema=True,
         reuse_existing_runtime=True,
         reuse_document_mapping=mapping.resolve(),
-        runtime_id=corpora.runtime_id(spec.dataset, spec.chunking),
+        runtime_id=corpora.runtime_id(spec.dataset, spec.chunking, spec.embedding_model),
         timeout_seconds=spec.settings.timeoutMinutes * 60,
         pipeline=spec.pipeline_config(),
         corpus=spec.corpus(),
+        embedding_model=spec.embedding_model,
         memory_ceiling=ceiling,
         memory_warning=int(ceiling * 0.85),
     )
@@ -426,19 +493,20 @@ def execute_prepare(spec: JobSpec, log: Log) -> str:
     import run_suite
 
     chunking = spec.chunking
-    assert chunking is not None
-    corpora.start_preparing(spec.dataset, chunking)
+    variant = corpora.describe_variant(chunking, spec.embedding_model)
+    runtime = corpora.runtime_id(spec.dataset, chunking, spec.embedding_model)
+    corpora.start_preparing(spec.dataset, chunking, spec.embedding_model)
     spec.state = "running"
     spec.message = ""
     spec.sessions += 1
     save_job(spec)
-    log(f"{spec.dataset}: preparing {corpora.describe_chunking(chunking)} "
-        f"({corpora.runtime_id(spec.dataset, chunking)}); this ingests the whole corpus")
+    log(f"{spec.dataset}: preparing {variant} ({runtime}); this ingests the whole corpus")
 
     run_suite.run_dataset(spec.dataset, suite_arguments(spec, resume=False), spec.runName)
 
     directory = run_directory(spec)
-    marker = corpora.finish_preparing(spec.dataset, chunking, directory / corpora.MAPPING_FILE)
+    marker = corpora.finish_preparing(spec.dataset, chunking, spec.embedding_model,
+                                      directory / corpora.MAPPING_FILE)
     # The ingestion run folder only carried the mapping, which now lives beside the database.
     shutil.rmtree(directory)
     supervisor = paths.RUNS_ROOT / f".supervisor-{spec.run_id}"

@@ -1,0 +1,678 @@
+{
+  "scifact-dup": {
+    "A (baseline)": {
+      "runId": "scifact-dup-rrf-ettin-p100-s40-o20-all-20260929-150846-837677",
+      "queries": 300,
+      "secondsPerQuery": 0.8337709749899962,
+      "byK": {
+        "5": {
+          "ndcg": 0.71476,
+          "recall": 0.76095,
+          "mrr": 0.70522,
+          "distinctRelevantRecall": 0.7841111111111111,
+          "documentDuplicateRate": 0.17400000000000002,
+          "chunkSameDocument": 0.166,
+          "chunkExactText": 0.05733333333333333,
+          "chunkNearDuplicate": 0.15,
+          "chunkDuplicateGroup": 0.3333333333333333
+        },
+        "10": {
+          "ndcg": 0.74342,
+          "recall": 0.83727,
+          "mrr": 0.71238,
+          "distinctRelevantRecall": 0.8555555555555555,
+          "documentDuplicateRate": 0.12266666666666667,
+          "chunkSameDocument": 0.189,
+          "chunkExactText": 0.043666666666666666,
+          "chunkNearDuplicate": 0.116,
+          "chunkDuplicateGroup": 0.299
+        }
+      }
+    },
+    "B (exact)": {
+      "runId": "scifact-dup-rrf-ettin-p100-s40-o20-dx-all-20260929-151324-454307",
+      "queries": 300,
+      "secondsPerQuery": 0.8267911540333323,
+      "byK": {
+        "5": {
+          "ndcg": 0.69535,
+          "recall": 0.73345,
+          "mrr": 0.70533,
+          "distinctRelevantRecall": 0.7857777777777778,
+          "documentDuplicateRate": 0.15,
+          "chunkSameDocument": 0.168,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.106,
+          "chunkDuplicateGroup": 0.30666666666666664
+        },
+        "10": {
+          "ndcg": 0.72581,
+          "recall": 0.81104,
+          "mrr": 0.7127,
+          "distinctRelevantRecall": 0.8563888888888889,
+          "documentDuplicateRate": 0.109,
+          "chunkSameDocument": 0.168,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.074,
+          "chunkDuplicateGroup": 0.265
+        }
+      },
+      "vsBaseline": {
+        "baseline": "scifact-dup-rrf-ettin-p100-s40-o20-all-20260929-150846-837677",
+        "candidate": "scifact-dup-rrf-ettin-p100-s40-o20-dx-all-20260929-151324-454307",
+        "queries": 300,
+        "baselineNdcg10": 0.7434202203408552,
+        "candidateNdcg10": 0.7258091445749854,
+        "delta": -0.017611075765869916,
+        "pValue": 0.0,
+        "wins": 15,
+        "ties": 241,
+        "losses": 44,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "C (near)": {
+      "runId": "scifact-dup-rrf-ettin-p100-s40-o20-dn-all-20260929-151754-105604",
+      "queries": 300,
+      "secondsPerQuery": 0.8212479824666601,
+      "byK": {
+        "5": {
+          "ndcg": 0.61449,
+          "recall": 0.6263,
+          "mrr": 0.71067,
+          "distinctRelevantRecall": 0.7997777777777778,
+          "documentDuplicateRate": 0.07,
+          "chunkSameDocument": 0.14933333333333335,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.21666666666666667
+        },
+        "10": {
+          "ndcg": 0.6386,
+          "recall": 0.69175,
+          "mrr": 0.71569,
+          "distinctRelevantRecall": 0.8538888888888889,
+          "documentDuplicateRate": 0.05433333333333334,
+          "chunkSameDocument": 0.15666666666666668,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.20433333333333334
+        }
+      },
+      "vsBaseline": {
+        "baseline": "scifact-dup-rrf-ettin-p100-s40-o20-all-20260929-150846-837677",
+        "candidate": "scifact-dup-rrf-ettin-p100-s40-o20-dn-all-20260929-151754-105604",
+        "queries": 300,
+        "baselineNdcg10": 0.7434202203408552,
+        "candidateNdcg10": 0.6385999252149712,
+        "delta": -0.10482029512588402,
+        "pValue": 0.0,
+        "wins": 14,
+        "ties": 169,
+        "losses": 117,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "D (\u22642 per doc)": {
+      "runId": "scifact-dup-rrf-ettin-p100-s40-o20-dc2-all-20260929-152221-545921",
+      "queries": 300,
+      "secondsPerQuery": 0.8470447614365427,
+      "byK": {
+        "5": {
+          "ndcg": 0.71681,
+          "recall": 0.76345,
+          "mrr": 0.70689,
+          "distinctRelevantRecall": 0.7866111111111111,
+          "documentDuplicateRate": 0.17600000000000002,
+          "chunkSameDocument": 0.14333333333333334,
+          "chunkExactText": 0.05733333333333333,
+          "chunkNearDuplicate": 0.152,
+          "chunkDuplicateGroup": 0.314
+        },
+        "10": {
+          "ndcg": 0.74516,
+          "recall": 0.8406,
+          "mrr": 0.71403,
+          "distinctRelevantRecall": 0.8588888888888889,
+          "documentDuplicateRate": 0.12433333333333334,
+          "chunkSameDocument": 0.15633333333333332,
+          "chunkExactText": 0.04,
+          "chunkNearDuplicate": 0.11033333333333334,
+          "chunkDuplicateGroup": 0.2703333333333333
+        }
+      },
+      "vsBaseline": {
+        "baseline": "scifact-dup-rrf-ettin-p100-s40-o20-all-20260929-150846-837677",
+        "candidate": "scifact-dup-rrf-ettin-p100-s40-o20-dc2-all-20260929-152221-545921",
+        "queries": 300,
+        "baselineNdcg10": 0.7434202203408552,
+        "candidateNdcg10": 0.7451637422472552,
+        "delta": 0.0017435219064000074,
+        "pValue": 0.4442,
+        "wins": 9,
+        "ties": 285,
+        "losses": 6,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    }
+  },
+  "scifact": {
+    "A (baseline)": {
+      "runId": "scifact-rrf-ettin-p100-s40-o20-all-20260929-153814-933096",
+      "queries": 300,
+      "secondsPerQuery": 0.8258208562734095,
+      "byK": {
+        "5": {
+          "ndcg": 0.71215,
+          "recall": 0.79056,
+          "mrr": 0.69267,
+          "distinctRelevantRecall": 0.7905555555555556,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.17466666666666666,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.17466666666666666
+        },
+        "10": {
+          "ndcg": 0.73252,
+          "recall": 0.85078,
+          "mrr": 0.69947,
+          "distinctRelevantRecall": 0.8507777777777777,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.17566666666666667,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0003333333333333333,
+          "chunkDuplicateGroup": 0.17566666666666667
+        }
+      }
+    },
+    "B (exact)": {
+      "runId": "scifact-rrf-ettin-p100-s40-o20-dx-all-20260929-154244-341508",
+      "queries": 300,
+      "secondsPerQuery": 0.7997963540533237,
+      "byK": {
+        "5": {
+          "ndcg": 0.71215,
+          "recall": 0.79056,
+          "mrr": 0.69267,
+          "distinctRelevantRecall": 0.7905555555555556,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.17466666666666666,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.17466666666666666
+        },
+        "10": {
+          "ndcg": 0.73252,
+          "recall": 0.85078,
+          "mrr": 0.69947,
+          "distinctRelevantRecall": 0.8507777777777777,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.17566666666666667,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0003333333333333333,
+          "chunkDuplicateGroup": 0.17566666666666667
+        }
+      },
+      "vsBaseline": {
+        "baseline": "scifact-rrf-ettin-p100-s40-o20-all-20260929-153814-933096",
+        "candidate": "scifact-rrf-ettin-p100-s40-o20-dx-all-20260929-154244-341508",
+        "queries": 300,
+        "baselineNdcg10": 0.7325196486663592,
+        "candidateNdcg10": 0.7325196486663592,
+        "delta": 0.0,
+        "pValue": 1.0,
+        "wins": 0,
+        "ties": 300,
+        "losses": 0,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "C (near)": {
+      "runId": "scifact-rrf-ettin-p100-s40-o20-dn-all-20260929-154706-483383",
+      "queries": 300,
+      "secondsPerQuery": 0.7890300664633287,
+      "byK": {
+        "5": {
+          "ndcg": 0.71215,
+          "recall": 0.79056,
+          "mrr": 0.69267,
+          "distinctRelevantRecall": 0.7905555555555556,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.17466666666666666,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.17466666666666666
+        },
+        "10": {
+          "ndcg": 0.73247,
+          "recall": 0.85078,
+          "mrr": 0.69947,
+          "distinctRelevantRecall": 0.8507777777777777,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.17566666666666667,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.17566666666666667
+        }
+      },
+      "vsBaseline": {
+        "baseline": "scifact-rrf-ettin-p100-s40-o20-all-20260929-153814-933096",
+        "candidate": "scifact-rrf-ettin-p100-s40-o20-dn-all-20260929-154706-483383",
+        "queries": 300,
+        "baselineNdcg10": 0.7325196486663592,
+        "candidateNdcg10": 0.7324728985355936,
+        "delta": -4.6750130765593386e-05,
+        "pValue": 1.0,
+        "wins": 0,
+        "ties": 299,
+        "losses": 1,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "D (\u22642 per doc)": {
+      "runId": "scifact-rrf-ettin-p100-s40-o20-dc2-all-20260929-155122-042125",
+      "queries": 300,
+      "secondsPerQuery": 0.7920421925999956,
+      "byK": {
+        "5": {
+          "ndcg": 0.71077,
+          "recall": 0.79306,
+          "mrr": 0.69028,
+          "distinctRelevantRecall": 0.7930555555555555,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.14266666666666666,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.14266666666666666
+        },
+        "10": {
+          "ndcg": 0.72941,
+          "recall": 0.84744,
+          "mrr": 0.69615,
+          "distinctRelevantRecall": 0.8474444444444444,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.14733333333333334,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.14733333333333334
+        }
+      },
+      "vsBaseline": {
+        "baseline": "scifact-rrf-ettin-p100-s40-o20-all-20260929-153814-933096",
+        "candidate": "scifact-rrf-ettin-p100-s40-o20-dc2-all-20260929-155122-042125",
+        "queries": 300,
+        "baselineNdcg10": 0.7325196486663592,
+        "candidateNdcg10": 0.7294135836438865,
+        "delta": -0.0031060650224726404,
+        "pValue": 0.19635,
+        "wins": 5,
+        "ties": 290,
+        "losses": 5,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    }
+  },
+  "nfcorpus": {
+    "A (baseline)": {
+      "runId": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260929-155538-109110",
+      "queries": 323,
+      "secondsPerQuery": 0.7433385166346999,
+      "byK": {
+        "5": {
+          "ndcg": 0.37712,
+          "recall": 0.13553,
+          "mrr": 0.54272,
+          "distinctRelevantRecall": 0.13553304231036567,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.11455108359133127,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0006191950464396285,
+          "chunkDuplicateGroup": 0.11455108359133127
+        },
+        "10": {
+          "ndcg": 0.34269,
+          "recall": 0.1649,
+          "mrr": 0.54888,
+          "distinctRelevantRecall": 0.16489919680420867,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.13529411764705881,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0006191950464396285,
+          "chunkDuplicateGroup": 0.13529411764705881
+        }
+      }
+    },
+    "B (exact)": {
+      "runId": "nfcorpus-rrf-ettin-p100-s40-o20-dx-all-20260929-155957-741308",
+      "queries": 323,
+      "secondsPerQuery": 0.7392735072569584,
+      "byK": {
+        "5": {
+          "ndcg": 0.37712,
+          "recall": 0.13553,
+          "mrr": 0.54272,
+          "distinctRelevantRecall": 0.13553304231036567,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.11455108359133127,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0006191950464396285,
+          "chunkDuplicateGroup": 0.11455108359133127
+        },
+        "10": {
+          "ndcg": 0.34269,
+          "recall": 0.1649,
+          "mrr": 0.54888,
+          "distinctRelevantRecall": 0.16489919680420867,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.13529411764705881,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0006191950464396285,
+          "chunkDuplicateGroup": 0.13529411764705881
+        }
+      },
+      "vsBaseline": {
+        "baseline": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260929-155538-109110",
+        "candidate": "nfcorpus-rrf-ettin-p100-s40-o20-dx-all-20260929-155957-741308",
+        "queries": 323,
+        "baselineNdcg10": 0.34269329733888493,
+        "candidateNdcg10": 0.34269329733888493,
+        "delta": 0.0,
+        "pValue": 1.0,
+        "wins": 0,
+        "ties": 323,
+        "losses": 0,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "C (near)": {
+      "runId": "nfcorpus-rrf-ettin-p100-s40-o20-dn-all-20260929-160415-888991",
+      "queries": 323,
+      "secondsPerQuery": 0.7375875232136262,
+      "byK": {
+        "5": {
+          "ndcg": 0.37712,
+          "recall": 0.13553,
+          "mrr": 0.54272,
+          "distinctRelevantRecall": 0.13553304231036567,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.11455108359133127,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.11455108359133127
+        },
+        "10": {
+          "ndcg": 0.34269,
+          "recall": 0.1649,
+          "mrr": 0.54888,
+          "distinctRelevantRecall": 0.16489919680420867,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.13529411764705881,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.13529411764705881
+        }
+      },
+      "vsBaseline": {
+        "baseline": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260929-155538-109110",
+        "candidate": "nfcorpus-rrf-ettin-p100-s40-o20-dn-all-20260929-160415-888991",
+        "queries": 323,
+        "baselineNdcg10": 0.34269329733888493,
+        "candidateNdcg10": 0.34269329733888493,
+        "delta": 0.0,
+        "pValue": 1.0,
+        "wins": 0,
+        "ties": 323,
+        "losses": 0,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "D (\u22642 per doc)": {
+      "runId": "nfcorpus-rrf-ettin-p100-s40-o20-dc2-all-20260929-160833-058725",
+      "queries": 323,
+      "secondsPerQuery": 0.7451204915293486,
+      "byK": {
+        "5": {
+          "ndcg": 0.37628,
+          "recall": 0.13382,
+          "mrr": 0.53849,
+          "distinctRelevantRecall": 0.13382127254814843,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.10773993808049535,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0006191950464396285,
+          "chunkDuplicateGroup": 0.10773993808049535
+        },
+        "10": {
+          "ndcg": 0.34169,
+          "recall": 0.1652,
+          "mrr": 0.5459,
+          "distinctRelevantRecall": 0.1652046008476279,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.12786377708978328,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0006191950464396285,
+          "chunkDuplicateGroup": 0.12786377708978328
+        }
+      },
+      "vsBaseline": {
+        "baseline": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260929-155538-109110",
+        "candidate": "nfcorpus-rrf-ettin-p100-s40-o20-dc2-all-20260929-160833-058725",
+        "queries": 323,
+        "baselineNdcg10": 0.34269329733888493,
+        "candidateNdcg10": 0.3416941956675678,
+        "delta": -0.0009991016713170842,
+        "pValue": 0.6535,
+        "wins": 20,
+        "ties": 285,
+        "losses": 18,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    }
+  },
+  "arguana": {
+    "A (baseline)": {
+      "runId": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260929-161253-638675",
+      "queries": 300,
+      "secondsPerQuery": 2.017342371120018,
+      "byK": {
+        "5": {
+          "ndcg": 0.57388,
+          "recall": 0.74667,
+          "mrr": 0.5155,
+          "distinctRelevantRecall": 0.7466666666666667,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.064,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.013333333333333334,
+          "chunkDuplicateGroup": 0.064
+        },
+        "10": {
+          "ndcg": 0.60145,
+          "recall": 0.83,
+          "mrr": 0.52725,
+          "distinctRelevantRecall": 0.83,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.076,
+          "chunkExactText": 0.0006666666666666666,
+          "chunkNearDuplicate": 0.015666666666666666,
+          "chunkDuplicateGroup": 0.076
+        }
+      }
+    },
+    "B (exact)": {
+      "runId": "arguana-rrf-ettin-p100-s40-o20-dx-300q-seed42-20260929-162318-298602",
+      "queries": 300,
+      "secondsPerQuery": 2.0227325048833213,
+      "byK": {
+        "5": {
+          "ndcg": 0.57364,
+          "recall": 0.74667,
+          "mrr": 0.51522,
+          "distinctRelevantRecall": 0.7466666666666667,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.064,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.013333333333333334,
+          "chunkDuplicateGroup": 0.064
+        },
+        "10": {
+          "ndcg": 0.60122,
+          "recall": 0.83,
+          "mrr": 0.52697,
+          "distinctRelevantRecall": 0.83,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.07533333333333334,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.015,
+          "chunkDuplicateGroup": 0.07533333333333334
+        }
+      },
+      "vsBaseline": {
+        "baseline": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260929-161253-638675",
+        "candidate": "arguana-rrf-ettin-p100-s40-o20-dx-300q-seed42-20260929-162318-298602",
+        "queries": 300,
+        "baselineNdcg10": 0.6014548476166078,
+        "candidateNdcg10": 0.6012237694768525,
+        "delta": -0.00023107813975535647,
+        "pValue": 1.0,
+        "wins": 0,
+        "ties": 299,
+        "losses": 1,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "C (near)": {
+      "runId": "arguana-rrf-ettin-p100-s40-o20-dn-300q-seed42-20260929-163344-590590",
+      "queries": 300,
+      "secondsPerQuery": 2.0240967098599625,
+      "byK": {
+        "5": {
+          "ndcg": 0.55826,
+          "recall": 0.71667,
+          "mrr": 0.50461,
+          "distinctRelevantRecall": 0.7166666666666667,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.06266666666666666,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.06266666666666666
+        },
+        "10": {
+          "ndcg": 0.58228,
+          "recall": 0.79,
+          "mrr": 0.51469,
+          "distinctRelevantRecall": 0.79,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.07466666666666667,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.0,
+          "chunkDuplicateGroup": 0.07466666666666667
+        }
+      },
+      "vsBaseline": {
+        "baseline": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260929-161253-638675",
+        "candidate": "arguana-rrf-ettin-p100-s40-o20-dn-300q-seed42-20260929-163344-590590",
+        "queries": 300,
+        "baselineNdcg10": 0.6014548476166078,
+        "candidateNdcg10": 0.5822785176255628,
+        "delta": -0.01917632999104507,
+        "pValue": 0.00155,
+        "wins": 3,
+        "ties": 283,
+        "losses": 14,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    },
+    "D (\u22642 per doc)": {
+      "runId": "arguana-rrf-ettin-p100-s40-o20-dc2-300q-seed42-20260929-164411-121437",
+      "queries": 300,
+      "secondsPerQuery": 2.032836630466718,
+      "byK": {
+        "5": {
+          "ndcg": 0.57575,
+          "recall": 0.75,
+          "mrr": 0.51689,
+          "distinctRelevantRecall": 0.75,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.058666666666666666,
+          "chunkExactText": 0.0,
+          "chunkNearDuplicate": 0.013333333333333334,
+          "chunkDuplicateGroup": 0.058666666666666666
+        },
+        "10": {
+          "ndcg": 0.60438,
+          "recall": 0.83667,
+          "mrr": 0.52905,
+          "distinctRelevantRecall": 0.8366666666666667,
+          "documentDuplicateRate": 0.0,
+          "chunkSameDocument": 0.071,
+          "chunkExactText": 0.0006666666666666666,
+          "chunkNearDuplicate": 0.015666666666666666,
+          "chunkDuplicateGroup": 0.071
+        }
+      },
+      "vsBaseline": {
+        "baseline": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260929-161253-638675",
+        "candidate": "arguana-rrf-ettin-p100-s40-o20-dc2-300q-seed42-20260929-164411-121437",
+        "queries": 300,
+        "baselineNdcg10": 0.6014548476166078,
+        "candidateNdcg10": 0.6043784182447098,
+        "delta": 0.002923570628101931,
+        "pValue": 0.1864,
+        "wins": 8,
+        "ties": 290,
+        "losses": 2,
+        "bm25Identical": true,
+        "semanticIdentical": true,
+        "corpusDifferences": [],
+        "retrievers": "yes",
+        "unexpectedRetrieverDifference": false
+      }
+    }
+  }
+}

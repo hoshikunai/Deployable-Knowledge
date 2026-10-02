@@ -1,14 +1,12 @@
-import { resolve } from 'node:path';
 import {
 	AutoModelForSequenceClassification,
 	AutoTokenizer,
 	type Tensor
 } from '@huggingface/transformers';
-import { INFERENCE_THREADS } from '../../embedding-model';
+import { INFERENCE_THREADS, MODEL_CACHE_DIR } from '../../inference';
 import { sigmoidScore, type CrossEncoder } from './cross-encoder';
 
 const MODEL_ID = 'Xenova/ms-marco-MiniLM-L-6-v2';
-const MODEL_CACHE_DIR = resolve(process.cwd(), '.cache', 'transformersjs');
 const MAX_SUPPORTED_TOKENS = 512;
 const BATCH_SIZE = 32;
 

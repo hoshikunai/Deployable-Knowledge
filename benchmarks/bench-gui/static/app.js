@@ -1,6 +1,7 @@
 const byId = (id) => document.getElementById(id);
 
-// [key, label, hint, minimum]; hints marked live are recomputed as values change
+// [key, label, hint, minimum, choices?]; hints marked live are recomputed as values change.
+// Fields with choices render as a select and keep string values.
 const SETTINGS_GROUPS = [
 	{
 		title: 'Retrieval depths',
@@ -19,6 +20,39 @@ const SETTINGS_GROUPS = [
 				'Reranker max tokens',
 				'Query + passage tokens read before truncating. Ettin up to 7,999; MS MARCO up to 512.',
 				16
+			],
+			[
+				'rerankTitle',
+				'Title in reranker input',
+				"on: chunks that don't start with their document title get it prepended",
+				0,
+				['off', 'on']
+			]
+		]
+	},
+	{
+		title: 'Fusion and document scoring',
+		fields: [
+			[
+				'rrfSemanticWeight',
+				'RRF weight: semantic',
+				'Multiplies semantic ranks in RRF (default 1)',
+				0
+			],
+			['rrfBm25Weight', 'RRF weight: BM25', 'Multiplies BM25 ranks in RRF (default 1)', 0],
+			[
+				'fusionLevel',
+				'Fuse by',
+				'document: retrievers agreeing on a document through different chunks reinforce each other',
+				0,
+				['chunk', 'document']
+			],
+			[
+				'documentOrder',
+				'Order results',
+				"sum-top2: rank documents by their two best chunks, keeping each document's chunks together",
+				0,
+				['none', 'sum-top2']
 			]
 		]
 	},
@@ -27,6 +61,19 @@ const SETTINGS_GROUPS = [
 		fields: [
 			['chunkMaxTokens', 'Chunk size (tokens)', 'live', 0],
 			['chunkOverlapTokens', 'Chunk overlap (tokens)', 'live', 0]
+		]
+	},
+	{
+		title: 'Experimental: candidate dedup',
+		fields: [
+			[
+				'dedupMode',
+				'Dedup before the shortlist',
+				'none = current pipeline. exact: same text; near: ≥ 90% shared 5-word shingles; document-cap: limit chunks per document',
+				0,
+				['none', 'exact', 'near', 'document-cap']
+			],
+			['maxChunksPerDocument', 'Max chunks per document', 'Used by document-cap', 1]
 		]
 	},
 	{
@@ -118,20 +165,43 @@ function describeDepths() {
 	byId('depth-summary').textContent = `${steps.join(' → ')}. Change depths in Settings.`;
 }
 
+function corpusRow(corpus) {
+	const name = `<span><strong>${corpus.name}</strong><br><span class="hint">${escapeHtml(corpus.description)}</span></span>`;
+	const split = options.settings.split;
+	if (!corpus.splits.includes(split)) {
+		return `<div class="choice disabled-choice">
+			${name}
+			<small>no ${escapeHtml(split)} split (has ${escapeHtml(corpus.splits.join(', '))})</small>
+		</div>`;
+	}
+	if (corpus.prepared) {
+		return `<label class="choice">
+			<input type="checkbox" name="corpus" value="${corpus.name}">
+			${name}
+			<small>${corpus.queryCount ?? '?'} queries · ${escapeHtml(corpus.corpusSize)} docs</small>
+		</label>`;
+	}
+	const preparable = corpus.reason !== 'BEIR dataset files are not downloaded';
+	const action = preparable
+		? `<button type="button" class="button small" data-prepare-corpus="${corpus.name}">Prepare</button>`
+		: '';
+	return `<div class="choice disabled-choice">
+		${name}
+		<small>${escapeHtml(corpus.state)} · ${escapeHtml(corpus.reason)}</small>
+		${action}
+	</div>`;
+}
+
 function renderOptions() {
-	byId('corpora-legend').textContent = `Corpora · ${options.corpora[0]?.chunking ?? ''}`;
-	byId('corpora').innerHTML = options.corpora
-		.map((corpus) => {
-			const detail = corpus.prepared
-				? `${corpus.queryCount ?? '?'} queries · ${corpus.corpusSize} docs`
-				: 'not prepared';
-			return `<label class="choice ${corpus.prepared ? '' : 'disabled'}">
-				<input type="checkbox" name="corpus" value="${corpus.name}" ${corpus.prepared ? '' : 'disabled'}>
-				<span><strong>${corpus.name}</strong><br><span class="hint">${escapeHtml(corpus.description)}</span></span>
-				<small>${escapeHtml(detail)}${corpus.prepared ? '' : `<br>${escapeHtml(corpus.reason)}. Prepare it in Settings.`}</small>
-			</label>`;
-		})
+	byId('embedding-model').innerHTML = options.embeddingModels
+		.map(
+			(model) =>
+				`<option value="${model.id}" ${model.id === options.settings.embeddingModel ? 'selected' : ''}>${escapeHtml(model.label)}</option>`
+		)
 		.join('');
+	byId('split').value = options.settings.split;
+	byId('corpora-legend').textContent = `Corpora · ${options.corpora[0]?.chunking ?? ''}`;
+	byId('corpora').innerHTML = options.corpora.map(corpusRow).join('');
 	byId('pipelines').innerHTML = options.pipelines
 		.map(
 			(pipeline, index) => `<label class="choice">
@@ -150,7 +220,7 @@ function renderOptions() {
 function updateQueryMode() {
 	const sample = document.querySelector('input[name="query-mode"]:checked').value === 'sample';
 	byId('sample-size').disabled = !sample;
-	byId('seeds-row').hidden = !sample;
+	byId('seeds').disabled = !sample;
 }
 
 async function startJobs(event) {
@@ -180,7 +250,10 @@ async function startJobs(event) {
 
 function jobStatusLine(job) {
 	if (job.kind === 'prepare') {
-		return `${job.dataset} · preparing ${job.settings.chunkMaxTokens}-token chunks, ${job.settings.chunkOverlapTokens} overlap`;
+		const chunks = job.settings.chunkMaxTokens
+			? `${job.settings.chunkMaxTokens}-token chunks, ${job.settings.chunkOverlapTokens} overlap`
+			: '1,200-character chunks';
+		return `${job.dataset} · preparing ${chunks} · ${job.settings.embeddingModel}`;
 	}
 	const pipeline = options?.pipelines.find((item) => item.key === job.pipeline)?.label ?? '';
 	const queries =
@@ -481,11 +554,20 @@ async function copyText(text, label) {
 
 // Settings
 
-function settingsField([key, label, hint, minimum], values) {
-	const step = key === 'memoryCeilingGb' ? '0.5' : '1';
+function settingsField([key, label, hint, minimum, choices], values) {
+	const steps = { memoryCeilingGb: '0.5', rrfSemanticWeight: '0.05', rrfBm25Weight: '0.05' };
+	const step = steps[key] ?? '1';
 	const help = hint === 'live' ? '' : escapeHtml(hint);
+	const input = choices
+		? `<select class="field" name="${key}">${choices
+				.map(
+					(choice) =>
+						`<option value="${choice}" ${choice === values[key] ? 'selected' : ''}>${choice}</option>`
+				)
+				.join('')}</select>`
+		: `<input class="field" type="number" name="${key}" value="${values[key]}" step="${step}" min="${minimum}">`;
 	return `<label>${label}
-		<input class="field" type="number" name="${key}" value="${values[key]}" step="${step}" min="${minimum}">
+		${input}
 		<span class="hint" data-hint="${key}">${help}</span>
 	</label>`;
 }
@@ -502,9 +584,16 @@ function renderSettingsFields(values) {
 	loadCorpusCopies();
 }
 
+// Settings fields in the dialog, over the saved settings they don't cover (the embedding model)
 function formSettings() {
 	const form = new FormData(byId('settings-form'));
-	return Object.fromEntries(SETTINGS_FIELDS.map(([key]) => [key, Number(form.get(key))]));
+	const fields = Object.fromEntries(
+		SETTINGS_FIELDS.map(([key, , , , choices]) => [
+			key,
+			choices ? String(form.get(key)) : Number(form.get(key))
+		])
+	);
+	return { ...options.settings, ...fields };
 }
 
 function approximateCharacters(tokens) {
@@ -550,18 +639,18 @@ let copiesRequest = 0;
 async function loadCorpusCopies() {
 	const container = byId('corpus-copies');
 	if (!container) return;
-	const { chunkMaxTokens, chunkOverlapTokens } = formSettings();
-	if (!chunkMaxTokens) {
+	const { chunkMaxTokens, chunkOverlapTokens, embeddingModel } = formSettings();
+	if (!chunkMaxTokens && embeddingModel === options.defaults.embeddingModel) {
 		container.innerHTML =
-			'<p class="hint">Default copies (1,200-character chunks) are used. Enter a chunk size in tokens to prepare other copies.</p>';
+			'<p class="hint">Default copies (1,200-character chunks, nomic) are used. Enter a chunk size in tokens, or pick another embedding model on the Run tab, to prepare other copies.</p>';
 		return;
 	}
 	const request = ++copiesRequest;
-	const params = new URLSearchParams({ chunkMaxTokens, chunkOverlapTokens });
+	const params = new URLSearchParams({ chunkMaxTokens, chunkOverlapTokens, embeddingModel });
 	try {
 		const corpora = await api(`/api/corpora?${params}`);
 		if (request !== copiesRequest) return;
-		container.innerHTML = `<p class="hint">Copies for ${escapeHtml(corpora[0].chunking)}. Preparing ingests the whole corpus and can take a long time.</p>
+		container.innerHTML = `<p class="hint">Copies for ${escapeHtml(corpora[0].variant)}. Preparing ingests the whole corpus and can take a long time.</p>
 			<ul class="plain-list">${corpora
 				.map((corpus) => {
 					const action =
@@ -607,6 +696,34 @@ async function saveSettings(event) {
 	}
 }
 
+// Run-tab selectors save straight into the settings, like the Settings dialog does
+async function saveRunSetting(key, value) {
+	byId('job-error').textContent = '';
+	try {
+		options.settings = await api('/api/settings', {
+			method: 'PUT',
+			body: JSON.stringify({ ...options.settings, [key]: value })
+		});
+		options = await api('/api/options');
+		renderOptions();
+	} catch (error) {
+		byId('job-error').textContent = error.message;
+	}
+}
+
+async function prepareFromRunTab(dataset) {
+	byId('job-error').textContent = '';
+	try {
+		await api('/api/corpora/prepare', {
+			method: 'POST',
+			body: JSON.stringify({ datasets: [dataset] })
+		});
+		await refreshState();
+	} catch (error) {
+		byId('job-error').textContent = error.message;
+	}
+}
+
 async function prepareCorpus(dataset) {
 	byId('settings-error').textContent = '';
 	try {
@@ -630,6 +747,14 @@ function bindEvents() {
 		tab.addEventListener('click', () => selectTab(tab.dataset.tab));
 	}
 	byId('job-form').addEventListener('submit', startJobs);
+	byId('embedding-model').addEventListener('change', (event) =>
+		saveRunSetting('embeddingModel', event.target.value)
+	);
+	byId('split').addEventListener('change', (event) => saveRunSetting('split', event.target.value));
+	byId('corpora').addEventListener('click', (event) => {
+		const dataset = event.target.closest('button')?.dataset.prepareCorpus;
+		if (dataset) prepareFromRunTab(dataset);
+	});
 	byId('job-form').addEventListener('change', (event) => {
 		if (event.target.name === 'query-mode') updateQueryMode();
 		if (event.target.name === 'pipeline') describeDepths();
