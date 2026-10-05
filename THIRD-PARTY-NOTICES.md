@@ -142,6 +142,9 @@ By downloading a Gemma model through this application, you agree to those terms.
 - `nomic-ai/nomic-embed-text-v1.5` — embeddings. Apache-2.0.
 - `Xenova/whisper-tiny.en` — audio transcription. ONNX conversion of OpenAI Whisper (MIT).
 - `Xenova/ms-marco-MiniLM-L-6-v2` — cross-encoder reranking. Apache-2.0.
+- `knowledgator/gliner-relex-large-v0.5` — entity and relation extraction. Apache-2.0. Not bundled
+  and not downloaded by the app: `benchmarks/gliner-parity/relex_split.py` converts it to three ONNX
+  graphs in `models/gliner-relex/` on the developer's machine.
 
 ---
 
@@ -172,6 +175,11 @@ Specific acknowledgements:
 - **shadcn-svelte** — the 98 UI primitive files under `src/lib/components/ui/` were generated from
   the shadcn-svelte registry (<https://shadcn-svelte.com>). MIT, copyright Huntabyte and
   contributors.
+- **GLiNER.js** and **GLiNER** — the word splitting, prompt and span-input construction in
+  `src/lib/server/entities/relex/processor.ts` follow GLiNER.js (<https://github.com/Knowledgator/GLiNER.js>),
+  and the entity selection, pairing and decoding in `runtime.ts` and `decode.ts` follow the GLiNER
+  Python library (<https://github.com/urchade/GLiNER>). Both Apache-2.0, copyright Knowledgator and
+  the GLiNER authors.
 - **bits-ui** (`2.18.1`) and **svelte-toolbelt** (`0.10.6`) — MIT, copyright Hunter Johnston and
   Thomas G. Lopes. Note that `svelte-toolbelt` omits the `license` field from its `package.json` but
   ships an MIT `LICENSE` file.

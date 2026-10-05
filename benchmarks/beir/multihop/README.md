@@ -16,22 +16,22 @@ Every multi-hop dataset name starts with `multihop-`, and its catalog entry in
 copies (`.cache/beir/runtime-<dataset>-<variant>`) therefore show the kind too. The builder
 refuses names without the prefix.
 
-| Dataset                    | Source                                   | Paragraphs per question         | Types                                                    |
-| -------------------------- | ---------------------------------------- | ------------------------------- | -------------------------------------------------------- |
-| `multihop-hotpotqa`        | HotpotQA distractor dev (CC BY-SA 4.0)   | 2 gold + 8 TF-IDF distractors   | bridge, comparison                                       |
-| `multihop-musique`         | MuSiQue-Ans dev (CC BY 4.0)              | 2–4 gold + the rest of 20       | 2-hop, 3-hop, 4-hop                                      |
-| `multihop-2wiki`           | 2WikiMultiHopQA dev (Apache-2.0)         | 2–4 gold + the rest of 10       | comparison, inference, compositional, bridge_comparison  |
-| `multihop-hotpotqa-filler` | `multihop-hotpotqa` + HotpotQA train paragraphs | same questions, larger corpus | as `multihop-hotpotqa`                             |
+| Dataset                    | Source                                          | Paragraphs per question       | Types                                                   |
+| -------------------------- | ----------------------------------------------- | ----------------------------- | ------------------------------------------------------- |
+| `multihop-hotpotqa`        | HotpotQA distractor dev (CC BY-SA 4.0)          | 2 gold + 8 TF-IDF distractors | bridge, comparison                                      |
+| `multihop-musique`         | MuSiQue-Ans dev (CC BY 4.0)                     | 2–4 gold + the rest of 20     | 2-hop, 3-hop, 4-hop                                     |
+| `multihop-2wiki`           | 2WikiMultiHopQA dev (Apache-2.0)                | 2–4 gold + the rest of 10     | comparison, inference, compositional, bridge_comparison |
+| `multihop-hotpotqa-filler` | `multihop-hotpotqa` + HotpotQA train paragraphs | same questions, larger corpus | as `multihop-hotpotqa`                                  |
 
 ## Get the source files
 
 Put the raw files under `benchmarks/beir/datasets/_sources/` (ignored by Git):
 
-| Dataset  | File                                                          | Where                                              |
-| -------- | ------------------------------------------------------------- | -------------------------------------------------- |
-| HotpotQA | `hotpot_dev_distractor_v1.json`, `hotpot_train_v1.1.json`     | https://hotpotqa.github.io (download links)        |
-| MuSiQue  | `musique_ans_v1.0_dev.jsonl`                                  | https://github.com/StonyBrookNLP/musique (`download_data.sh`) |
-| 2Wiki    | `dev.json`                                                    | https://github.com/Alab-NII/2wikimultihop (dataset link in README) |
+| Dataset  | File                                                      | Where                                                              |
+| -------- | --------------------------------------------------------- | ------------------------------------------------------------------ |
+| HotpotQA | `hotpot_dev_distractor_v1.json`, `hotpot_train_v1.1.json` | https://hotpotqa.github.io (download links)                        |
+| MuSiQue  | `musique_ans_v1.0_dev.jsonl`                              | https://github.com/StonyBrookNLP/musique (`download_data.sh`)      |
+| 2Wiki    | `dev.json`                                                | https://github.com/Alab-NII/2wikimultihop (dataset link in README) |
 
 ## Build
 
@@ -62,14 +62,14 @@ Then prepare each corpus in `npm run bench` (Settings → corpus copies, or Prep
 
 ## What a pool contains
 
-| File                    | Contents                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| `corpus.jsonl`          | Gold and distractor paragraphs of every sampled question, deduplicated on (title, text)          |
-| `queries.jsonl`         | The sampled questions                                                                            |
-| `qrels/dev.tsv`, `qrels/test.tsv` | Gold paragraphs per question, score 1                                                  |
-| `multihop.json`         | Per question: split, type, level, answers, supporting facts, MuSiQue decomposition, gold hops    |
-| `manifest.json`         | Seed, source SHA-256, sampled IDs, drop counts, corpus counts, hop-role coverage                  |
-| `evidence-triples.json` | 2Wiki only: gold (subject, relation, object) triples per question                               |
+| File                              | Contents                                                                                      |
+| --------------------------------- | --------------------------------------------------------------------------------------------- |
+| `corpus.jsonl`                    | Gold and distractor paragraphs of every sampled question, deduplicated on (title, text)       |
+| `queries.jsonl`                   | The sampled questions                                                                         |
+| `qrels/dev.tsv`, `qrels/test.tsv` | Gold paragraphs per question, score 1                                                         |
+| `multihop.json`                   | Per question: split, type, level, answers, supporting facts, MuSiQue decomposition, gold hops |
+| `manifest.json`                   | Seed, source SHA-256, sampled IDs, drop counts, corpus counts, hop-role coverage              |
+| `evidence-triples.json`           | 2Wiki only: gold (subject, relation, object) triples per question                             |
 
 Questions are dropped before sampling when a gold paragraph has fewer than five words (the
 harness cannot index it), when they have fewer than two gold paragraphs, when a context repeats
@@ -87,7 +87,7 @@ sampled question.
 
 The Scores page adds a multi-hop section for these corpora, computed from saved rankings:
 
-- **Complete@k**: share of questions with *every* gold paragraph in the top k. BEIR's Recall@10
+- **Complete@k**: share of questions with _every_ gold paragraph in the top k. BEIR's Recall@10
   gives 0.5 when one of two hops is found, which hides the failure that matters here.
 - **By type**: Complete@10 and Recall@10 per question type (or hop count for MuSiQue). HotpotQA
   comparison questions name both entities, so they behave almost like single-hop questions.
