@@ -42,6 +42,7 @@ export class Ollama extends OpenAiCompatible {
 				model,
 				messages: messages.map(encodeOllamaMessage),
 				tools: tools?.length ? tools : undefined,
+				format: options.responseSchema,
 				options: {
 					num_ctx: CONTEXT_WINDOW_TOKENS_MAX,
 					num_predict: options.maxTokens,

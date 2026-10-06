@@ -1,11 +1,14 @@
 import type { LlamaGpuMode } from '$lib/types';
 
+export type ProviderJsonSchema = Record<string, unknown>;
+
 export type ProviderChatOptions = {
 	temperature?: number;
 	topK?: number;
 	maxTokens?: number;
 	reasoningBudget?: number;
 	gpuMode?: LlamaGpuMode;
+	responseSchema?: ProviderJsonSchema;
 	tools?: ProviderToolDefinition[];
 	toolChoice?: 'auto' | 'none';
 	parallelToolCalls?: boolean;

@@ -5,8 +5,10 @@ import { basename, join, resolve } from 'node:path';
 import type {
 	ChatHistoryItem,
 	ChatModelFunctions,
+	GbnfJsonSchema,
 	Llama,
 	LlamaChat,
+	LlamaGrammar,
 	LlamaContext,
 	LlamaModel,
 	ModelDownloader
@@ -205,10 +207,20 @@ function resolveThoughtTokens(reasoningBudget: number | undefined): number | und
 	return reasoningBudget;
 }
 
+function responseConstraint(
+	functions: ChatModelFunctions | undefined,
+	grammar: LlamaGrammar | undefined
+) {
+	if (functions) return { functions, documentFunctionParams: true } as const;
+	if (grammar) return { grammar } as const;
+	return {};
+}
+
 export function generateChatResponse(params: {
 	modelPath: string;
 	history: ChatHistoryItem[];
 	functions?: ChatModelFunctions;
+	responseSchema?: GbnfJsonSchema;
 	temperature?: number;
 	topK?: number;
 	maxTokens?: number;
@@ -220,7 +232,10 @@ export function generateChatResponse(params: {
 }): Promise<{ functionCalls: LocalFunctionCall[] }> {
 	return withLock(async () => {
 		params.signal?.throwIfAborted();
-		const { chat } = await getRuntime(params.modelPath, params.gpuMode ?? 'auto');
+		const { chat, llama } = await getRuntime(params.modelPath, params.gpuMode ?? 'auto');
+		const grammar = params.responseSchema
+			? await llama.createGrammarForJsonSchema<GbnfJsonSchema>(params.responseSchema)
+			: undefined;
 
 		const thoughtTokens = resolveThoughtTokens(params.reasoningBudget);
 		// generateResponse counts thought tokens against maxTokens, so a thinking
@@ -233,7 +248,7 @@ export function generateChatResponse(params: {
 				: params.maxTokens;
 
 		const result = await chat.generateResponse(params.history, {
-			...(params.functions ? { functions: params.functions, documentFunctionParams: true } : {}),
+			...responseConstraint(params.functions, grammar),
 			...(thoughtTokens === undefined ? {} : { budgets: { thoughtTokens } }),
 			temperature: params.temperature,
 			topK: params.topK,

@@ -47,6 +47,14 @@ export class OpenAiCompatible extends Provider {
 				messages: messages.map(this.chatCodec.encodeMessage),
 				temperature: options.temperature,
 				max_tokens: options.maxTokens,
+				...(options.responseSchema
+					? {
+							response_format: {
+								type: 'json_schema',
+								json_schema: { name: 'response', schema: options.responseSchema }
+							}
+						}
+					: {}),
 				...(tools?.length
 					? {
 							tools,

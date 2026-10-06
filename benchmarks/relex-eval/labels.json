@@ -1,0 +1,26 @@
+{
+	"entityLabels": [
+		"military role",
+		"person",
+		"organization",
+		"document",
+		"medical procedure",
+		"medication",
+		"injury or condition",
+		"medical equipment",
+		"flight maneuver",
+		"award or decoration",
+		"uniform item"
+	],
+	"relationLabels": [
+		"treats",
+		"used for",
+		"requires",
+		"responsible for",
+		"rated by",
+		"approves",
+		"governed by",
+		"part of",
+		"authorized for"
+	]
+}

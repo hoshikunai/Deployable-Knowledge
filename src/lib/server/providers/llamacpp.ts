@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 
-import type { ChatHistoryItem, ChatModelFunctions, ChatModelResponse } from 'node-llama-cpp';
+import type {
+	ChatHistoryItem,
+	ChatModelFunctions,
+	ChatModelResponse,
+	GbnfJsonSchema
+} from 'node-llama-cpp';
 
 import {
 	Provider,
@@ -33,12 +38,18 @@ export class LlamaCpp extends Provider {
 
 		const tools = options.toolChoice === 'none' ? undefined : options.tools;
 		const functions = toChatModelFunctions(tools);
+		if (functions && options.responseSchema) {
+			throw new Error('A local model cannot use tools and a response schema in the same request.');
+		}
 		const queue = createChunkQueue<ProviderChatChunk>();
 
 		const run = generateChatResponse({
 			modelPath,
 			history: toChatHistory(messages),
 			functions,
+			responseSchema: options.responseSchema
+				? (sanitizeGbnfSchema(options.responseSchema) as GbnfJsonSchema)
+				: undefined,
 			temperature: options.temperature,
 			topK: options.topK,
 			maxTokens: options.maxTokens,
