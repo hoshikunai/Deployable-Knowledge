@@ -140,9 +140,10 @@ By downloading a Gemma model through this application, you agree to those terms.
 ### Other models
 
 - `nomic-ai/nomic-embed-text-v1.5` — embeddings. Apache-2.0.
-- `Xenova/whisper-small.en` — audio transcription. ONNX conversion of OpenAI Whisper (MIT).
+- `Xenova/whisper-small.en` — audio transcription. ONNX conversion of `openai/whisper-small.en`
+  (Apache-2.0 on Hugging Face; OpenAI's original Whisper release is MIT).
 - `Xenova/wav2vec2-base-960h` — word timing alignment. ONNX conversion of Meta's
-  `facebook/wav2vec2-base-960h` (Apache-2.0).
+  `facebook/wav2vec2-base-960h` (Apache-2.0). The conversion does not declare a license of its own.
 - `Xenova/ms-marco-MiniLM-L-6-v2` — cross-encoder reranking. Apache-2.0.
 
 ### Voice activity detection — Silero VAD
@@ -175,13 +176,13 @@ merged, so that a person who speaks only briefly is still identified.
 
 | Component                   | Version | License                                                   |
 | --------------------------- | ------- | --------------------------------------------------------- |
-| Electron                    | 43.3.0  | MIT (bundles Chromium — BSD-3-Clause — and Node.js — MIT) |
+| Electron                    | 43.7.7  | MIT (bundles Chromium — BSD-3-Clause — and Node.js — MIT) |
 | `node-llama-cpp`            | 3.19.1  | MIT (bundles llama.cpp — MIT)                             |
-| `onnxruntime-node`          | 1.24.3  | MIT (ONNX Runtime, Microsoft)                             |
-| `@huggingface/transformers` | 4.2.0   | Apache-2.0                                                |
+| `onnxruntime-node`          | 1.30.0  | MIT (ONNX Runtime, Microsoft)                             |
+| `@huggingface/transformers` | 4.3.0   | Apache-2.0                                                |
 | `sherpa-onnx-node`          | 1.13.8  | Apache-2.0 (bundles sherpa-onnx native libraries)         |
 | `@libsql/client`            | 0.17.4  | MIT (libSQL, a fork of SQLite — public domain)            |
-| `sharp`                     | 0.35.3  | Apache-2.0 (see §2 for libvips)                           |
+| `sharp`                     | 0.35.5  | Apache-2.0 (see §2 for libvips)                           |
 | `exceljs`                   | 4.4.0   | MIT                                                       |
 | `pdf-parse`                 | 2.4.5   | MIT                                                       |
 
