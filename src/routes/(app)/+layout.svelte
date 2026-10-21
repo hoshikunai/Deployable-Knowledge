@@ -7,6 +7,7 @@
 	import { DialogProgress } from '$lib/components/app/dialogs';
 	import { AppStartupOverlay } from '$lib/components/app/navigation';
 	import { SettingsDialog } from '$lib/components/app/settings';
+	import { UserGuideDialog } from '$lib/components/app/user-guide';
 	import EngineHeartbeat from '$lib/components/app/navigation/EngineHeartbeat.svelte';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import {
@@ -14,6 +15,7 @@
 		embeddingStore,
 		settingsStore,
 		themeStore,
+		userGuideStore,
 		workspaceStore
 	} from '$lib/stores';
 
@@ -23,6 +25,13 @@
 	// The workspace layout arrives from the database, so the overlay has to cover
 	// that fetch or the tab strip renders empty first.
 	const layoutReady = $derived(framesPainted && workspaceStore.ready);
+
+	// A fresh install also opens the semantic search download dialog, so the
+	// guide waits for that to close rather than stacking on top of it.
+	$effect(() => {
+		if (!layoutReady || !embeddingStore.startupChecked || embeddingStore.setupOpen) return;
+		void userGuideStore.openOnFirstRun();
+	});
 
 	onMount(() => {
 		themeStore.init();
@@ -55,6 +64,7 @@
 	<Toaster richColors />
 	<EngineHeartbeat />
 	<SettingsDialog />
+	<UserGuideDialog />
 
 	<DialogProgress
 		open={embeddingStore.setupOpen}

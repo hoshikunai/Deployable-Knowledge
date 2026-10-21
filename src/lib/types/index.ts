@@ -5,3 +5,4 @@ export * from './documents';
 export * from './workspace';
 export * from './diagnostics';
 export * from './desktop-window';
+export * from './user-guide';

@@ -51,12 +51,6 @@ export class NotebooksRepository {
 		return notebookId;
 	}
 
-	static async isUninitialized(): Promise<boolean> {
-		const [notebook] = await db.select({ id: notebooks.id }).from(notebooks).limit(1);
-		const [state] = await db.select({ id: notebookState.id }).from(notebookState).limit(1);
-		return !notebook && !state;
-	}
-
 	static async setActive(notebookId: string | null): Promise<void> {
 		const updatedAt = new Date().toISOString();
 		const state: NewNotebookState = {

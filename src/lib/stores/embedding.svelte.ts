@@ -13,13 +13,14 @@ class EmbeddingStore {
 	progress = $state<ApiDocumentIngestProgress | null>(null);
 	error = $state<string | null>(null);
 	setupOpen = $state(false);
+	startupChecked = $state(false);
 
 	async init(): Promise<void> {
 		await this.refresh();
-		if (!this.status || this.status.ready) return;
-
-		this.setupOpen = true;
-		await this.retrySetup();
+		const needsSetup = this.status !== null && !this.status.ready;
+		this.setupOpen = needsSetup;
+		this.startupChecked = true;
+		if (needsSetup) await this.retrySetup();
 	}
 
 	async retrySetup(): Promise<void> {
