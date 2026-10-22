@@ -14,14 +14,22 @@ function createEngine(): MarkdownIt {
 	return engine;
 }
 
-// Renders the notebook's `[text]{color=… hl=…}` as a classed span,
-// tokenizing the bracketed text as ordinary inline markdown
+// Renders the notebook's `[text]{color=… hl=…}` as a span, tokenizing the
+// bracketed text as ordinary inline markdown. The classes style it inside the
+// editor; the inline theme tokens style it everywhere else.
 function styledSpanRule(state: StateInline, silent: boolean): boolean {
 	const match = matchStyledSpan(state.src, state.pos);
 	if (!match || match.end > state.posMax) return false;
 	if (!silent) {
 		const { posMax } = state;
-		state.push('styled_span_open', 'span', 1).attrSet('class', textStyleClasses(match.style));
+		const { color, highlight } = match.style;
+		const css = [
+			color && `color: var(--nb-color-${color})`,
+			highlight && `background-color: var(--nb-highlight-${highlight})`
+		];
+		const open = state.push('styled_span_open', 'span', 1);
+		open.attrSet('class', textStyleClasses(match.style));
+		open.attrSet('style', css.filter(Boolean).join('; '));
 		state.pos = match.open + 1;
 		state.posMax = match.close;
 		state.md.inline.tokenize(state);

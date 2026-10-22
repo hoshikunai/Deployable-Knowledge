@@ -5,11 +5,12 @@
 	interface Props {
 		class?: string;
 		content: string;
+		styledSpans?: boolean;
 	}
 
-	let { class: className, content }: Props = $props();
+	let { class: className, content, styledSpans = false }: Props = $props();
 </script>
 
 <div class={cn('markdown-content prose prose-sm max-w-none dark:prose-invert', className)}>
-	{@html renderMarkdown(content)}
+	{@html renderMarkdown(content, { styledSpans })}
 </div>
