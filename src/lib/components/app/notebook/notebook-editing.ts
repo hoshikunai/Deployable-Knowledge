@@ -2,6 +2,16 @@
 // current text plus selection and returns the next text with the selection to
 // restore, so the component only moves the caret.
 
+import type { NotebookHighlight, NotebookTextColor } from '$lib/constants';
+import {
+	formatTextStyle,
+	skipBlockPrefix,
+	styledSpanAt,
+	wrapStyledLines,
+	type NotebookTextStyle,
+	type StyledSpanMatch
+} from '$lib/utils/notebook-styles';
+
 export interface EditorSelection {
 	start: number;
 	end: number;
@@ -20,8 +30,8 @@ export type RibbonCommand =
 	| LineFormat
 	| 'link'
 	| 'code-block'
-	| { color: string }
-	| { highlight: string };
+	| { color: NotebookTextColor }
+	| { highlight: NotebookHighlight };
 
 const INLINE_MARKERS: Record<InlineFormat, string> = {
 	bold: '**',
@@ -157,33 +167,48 @@ export function insertLink(text: string, { start, end }: EditorSelection): Forma
 	};
 }
 
-function wrapStyle(
-	text: string,
-	selection: EditorSelection,
-	declaration: string,
-	fallback: string
-): FormatResult {
-	const { start, end } = trimSelection(text, selection);
-	const selected = text.slice(start, end) || fallback;
-	const prefix = `<span style="${declaration}">`;
-	const suffix = '</span>';
+function restyleSpan(text: string, span: StyledSpanMatch, style: NotebookTextStyle): FormatResult {
+	const next: NotebookTextStyle = { ...span.style };
+	if (style.color) next.color = span.style.color === style.color ? undefined : style.color;
+	if (style.highlight) {
+		next.highlight = span.style.highlight === style.highlight ? undefined : style.highlight;
+	}
+	const content = text.slice(span.open + 1, span.close);
+	if (!next.color && !next.highlight) {
+		return {
+			text: text.slice(0, span.open) + content + text.slice(span.end),
+			start: span.open,
+			end: span.open + content.length
+		};
+	}
 	return {
-		text: text.slice(0, start) + prefix + selected + suffix + text.slice(end),
-		start: start + prefix.length,
-		end: start + prefix.length + selected.length
+		text: `${text.slice(0, span.close + 1)}{${formatTextStyle(next)}}${text.slice(span.end)}`,
+		start: span.open + 1,
+		end: span.close
 	};
 }
 
-export function wrapColor(text: string, selection: EditorSelection, color: string): FormatResult {
-	return wrapStyle(text, selection, `color:${color}`, 'colored text');
-}
-
-export function wrapHighlight(
+// Restyles the span under the caret or selection (choosing its current color
+// again removes it), otherwise wraps the selection in a new styled span
+export function applyTextStyle(
 	text: string,
 	selection: EditorSelection,
-	color: string
+	style: NotebookTextStyle
 ): FormatResult {
-	return wrapStyle(text, selection, `background-color:${color}`, 'highlighted text');
+	const trimmed = trimSelection(text, selection);
+	const span = styledSpanAt(text, trimmed.start, trimmed.end);
+	if (span) return restyleSpan(text, span, style);
+
+	const start = Math.min(skipBlockPrefix(text, trimmed.start), trimmed.end);
+	const selected =
+		text.slice(start, trimmed.end) || (style.color ? 'colored text' : 'highlighted text');
+	const wrapped = wrapStyledLines(selected, style, { override: true });
+	const plain = wrapped === `[${selected}]{${formatTextStyle(style)}}`;
+	return {
+		text: text.slice(0, start) + wrapped + text.slice(trimmed.end),
+		start: plain ? start + 1 : start,
+		end: plain ? start + 1 + selected.length : start + wrapped.length
+	};
 }
 
 export function toggleCodeBlock(text: string, selection: EditorSelection): FormatResult {
@@ -199,11 +224,7 @@ export function applyRibbonCommand(
 	selection: EditorSelection,
 	command: RibbonCommand
 ): FormatResult {
-	if (typeof command === 'object') {
-		return 'highlight' in command
-			? wrapHighlight(text, selection, command.highlight)
-			: wrapColor(text, selection, command.color);
-	}
+	if (typeof command === 'object') return applyTextStyle(text, selection, command);
 	if (command === 'link') return insertLink(text, selection);
 	if (command === 'code-block') return toggleCodeBlock(text, selection);
 	if (command in INLINE_MARKERS) return toggleInline(text, selection, command as InlineFormat);

@@ -166,6 +166,77 @@
 	--window-shadow: 0 0 0 2px oklch(0.88 0.23 155);
 }
 
+/* Notebook text colors and highlights, named by NOTEBOOK_TEXT_COLORS and
+   NOTEBOOK_HIGHLIGHTS. Highlights keep the surrounding text color, so light
+   modes use pale fills and dark modes use deep ones. */
+:root {
+	--nb-color-red: #dc2626;
+	--nb-color-orange: #ea580c;
+	--nb-color-yellow: #ca8a04;
+	--nb-color-green: #16a34a;
+	--nb-color-blue: #2563eb;
+	--nb-color-violet: #7c3aed;
+	--nb-color-pink: #db2777;
+	--nb-color-gray: #6b7280;
+	--nb-highlight-yellow: #fef08a;
+	--nb-highlight-orange: #fed7aa;
+	--nb-highlight-green: #bbf7d0;
+	--nb-highlight-teal: #99f6e4;
+	--nb-highlight-blue: #bfdbfe;
+	--nb-highlight-violet: #e9d5ff;
+	--nb-highlight-pink: #fbcfe8;
+	--nb-highlight-gray: #e5e7eb;
+}
+
+.dark {
+	--nb-color-red: #f87171;
+	--nb-color-orange: #fb923c;
+	--nb-color-yellow: #facc15;
+	--nb-color-green: #4ade80;
+	--nb-color-blue: #60a5fa;
+	--nb-color-violet: #a78bfa;
+	--nb-color-pink: #f472b6;
+	--nb-color-gray: #9ca3af;
+	--nb-highlight-yellow: #713f12;
+	--nb-highlight-orange: #7c2d12;
+	--nb-highlight-green: #14532d;
+	--nb-highlight-teal: #134e4a;
+	--nb-highlight-blue: #1e3a8a;
+	--nb-highlight-violet: #4c1d95;
+	--nb-highlight-pink: #831843;
+	--nb-highlight-gray: #374151;
+}
+
+:root[data-theme='high-contrast'] {
+	--nb-color-red: #991b1b;
+	--nb-color-orange: #9a3412;
+	--nb-color-yellow: #854d0e;
+	--nb-color-green: #166534;
+	--nb-color-blue: #1e40af;
+	--nb-color-violet: #5b21b6;
+	--nb-color-pink: #9d174d;
+	--nb-color-gray: #374151;
+}
+
+:root.dark[data-theme='high-contrast'] {
+	--nb-color-red: #fca5a5;
+	--nb-color-orange: #fdba74;
+	--nb-color-yellow: #fde047;
+	--nb-color-green: #86efac;
+	--nb-color-blue: #93c5fd;
+	--nb-color-violet: #c4b5fd;
+	--nb-color-pink: #f9a8d4;
+	--nb-color-gray: #d1d5db;
+	--nb-highlight-yellow: #713f12;
+	--nb-highlight-orange: #7c2d12;
+	--nb-highlight-green: #14532d;
+	--nb-highlight-teal: #134e4a;
+	--nb-highlight-blue: #1e3a8a;
+	--nb-highlight-violet: #4c1d95;
+	--nb-highlight-pink: #831843;
+	--nb-highlight-gray: #374151;
+}
+
 @theme inline {
 	--radius-sm: calc(var(--radius) - 0.25rem);
 	--radius-md: calc(var(--radius) - 0.125rem);

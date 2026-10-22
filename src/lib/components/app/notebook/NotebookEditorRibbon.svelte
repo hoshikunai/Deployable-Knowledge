@@ -16,6 +16,13 @@
 	import { ActionIcon } from '$lib/components/app/actions';
 	import * as Popover from '$lib/components/ui/popover';
 	import { Separator } from '$lib/components/ui/separator';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import {
+		NOTEBOOK_HIGHLIGHTS,
+		NOTEBOOK_TEXT_COLORS,
+		type NotebookHighlight,
+		type NotebookTextColor
+	} from '$lib/constants';
 	import type { RibbonCommand } from './notebook-editing';
 
 	interface Props {
@@ -26,37 +33,17 @@
 	let colorOpen = $state(false);
 	let highlightOpen = $state(false);
 
-	const COLORS = [
-		{ label: 'Red', value: '#dc2626' },
-		{ label: 'Orange', value: '#ea580c' },
-		{ label: 'Yellow', value: '#ca8a04' },
-		{ label: 'Green', value: '#16a34a' },
-		{ label: 'Blue', value: '#2563eb' },
-		{ label: 'Violet', value: '#7c3aed' },
-		{ label: 'Pink', value: '#db2777' },
-		{ label: 'Gray', value: '#6b7280' }
-	];
+	const SWATCH_CLASS =
+		'size-6 cursor-pointer rounded-full border border-border/60 transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
-	// Pale enough that the dark text set by .nb-highlight stays readable
-	const HIGHLIGHTS = [
-		{ label: 'Yellow', value: '#fef08a' },
-		{ label: 'Orange', value: '#fed7aa' },
-		{ label: 'Green', value: '#bbf7d0' },
-		{ label: 'Teal', value: '#99f6e4' },
-		{ label: 'Blue', value: '#bfdbfe' },
-		{ label: 'Violet', value: '#e9d5ff' },
-		{ label: 'Pink', value: '#fbcfe8' },
-		{ label: 'Gray', value: '#e5e7eb' }
-	];
-
-	function pickColor(value: string): void {
+	function pickColor(color: NotebookTextColor): void {
 		colorOpen = false;
-		onCommand({ color: value });
+		onCommand({ color });
 	}
 
-	function pickHighlight(value: string): void {
+	function pickHighlight(highlight: NotebookHighlight): void {
 		highlightOpen = false;
-		onCommand({ highlight: value });
+		onCommand({ highlight });
 	}
 </script>
 
@@ -90,15 +77,17 @@
 		</Popover.Trigger>
 		<Popover.Content align="start" class="w-auto p-2">
 			<div class="grid grid-cols-4 gap-1.5">
-				{#each COLORS as color (color.value)}
-					<button
-						type="button"
-						class="size-6 cursor-pointer rounded-full border border-border/60 transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-						style={`background-color: ${color.value}`}
-						title={color.label}
-						aria-label={`Color text ${color.label.toLowerCase()}`}
-						onclick={() => pickColor(color.value)}
-					></button>
+				{#each NOTEBOOK_TEXT_COLORS as color (color.name)}
+					<Tooltip.Root>
+						<Tooltip.Trigger
+							type="button"
+							class={SWATCH_CLASS}
+							style={`background-color: var(--nb-color-${color.name})`}
+							aria-label={`Color text ${color.label.toLowerCase()}`}
+							onclick={() => pickColor(color.name)}
+						></Tooltip.Trigger>
+						<Tooltip.Content>{color.label}</Tooltip.Content>
+					</Tooltip.Root>
 				{/each}
 			</div>
 		</Popover.Content>
@@ -113,15 +102,17 @@
 		</Popover.Trigger>
 		<Popover.Content align="start" class="w-auto p-2">
 			<div class="grid grid-cols-4 gap-1.5">
-				{#each HIGHLIGHTS as color (color.value)}
-					<button
-						type="button"
-						class="size-6 cursor-pointer rounded-full border border-border/60 transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-						style={`background-color: ${color.value}`}
-						title={color.label}
-						aria-label={`Highlight text ${color.label.toLowerCase()}`}
-						onclick={() => pickHighlight(color.value)}
-					></button>
+				{#each NOTEBOOK_HIGHLIGHTS as highlight (highlight.name)}
+					<Tooltip.Root>
+						<Tooltip.Trigger
+							type="button"
+							class={SWATCH_CLASS}
+							style={`background-color: var(--nb-highlight-${highlight.name})`}
+							aria-label={`Highlight text ${highlight.label.toLowerCase()}`}
+							onclick={() => pickHighlight(highlight.name)}
+						></Tooltip.Trigger>
+						<Tooltip.Content>{highlight.label}</Tooltip.Content>
+					</Tooltip.Root>
 				{/each}
 			</div>
 		</Popover.Content>

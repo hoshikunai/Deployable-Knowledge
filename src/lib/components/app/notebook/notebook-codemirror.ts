@@ -1,10 +1,11 @@
 // CodeMirror configuration for the notebook's live-preview editor: one
 // continuous editing surface where markdown renders styled in place and the
-// syntax marks (**, #, color spans…) only reveal themselves around the cursor.
+// syntax marks (**, #, [text]{color=…}) only reveal themselves around the cursor.
 
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
+import type { DelimiterType, MarkdownConfig } from '@lezer/markdown';
 import {
 	Annotation,
 	EditorState,
@@ -24,8 +25,10 @@ import {
 	type ViewUpdate,
 	WidgetType
 } from '@codemirror/view';
-import { tags } from '@lezer/highlight';
+import { styleTags, tags } from '@lezer/highlight';
+import { NOTEBOOK_HIGHLIGHTS, NOTEBOOK_TEXT_COLORS } from '$lib/constants';
 import { renderMarkdown } from '$lib/utils/markdown';
+import { matchStyledSpan, parseTextStyle, textStyleClasses } from '$lib/utils/notebook-styles';
 import type { RibbonCommand } from './notebook-editing';
 
 export interface NotebookEditorHooks {
@@ -90,7 +93,7 @@ class TableWidget extends WidgetType {
 		const el = document.createElement('div');
 		// markdown-content carries the shared table styling the chat pane uses
 		el.className = 'nb-table markdown-content';
-		el.innerHTML = renderMarkdown(this.source);
+		el.innerHTML = renderMarkdown(this.source, { styledSpans: true });
 		return el;
 	}
 	eq(other: TableWidget): boolean {
@@ -101,11 +104,47 @@ class TableWidget extends WidgetType {
 	}
 }
 
-// Only the properties and color values our ribbon writes (or close cousins) get
-// styled; anything else stays plain source so arbitrary CSS never reaches the
-// editor DOM.
-const STYLE_SPAN =
-	/<span style="(color|background-color):\s*(#[0-9a-fA-F]{3,8}|[a-zA-Z]{1,25})\s*;?\s*">((?:(?!<\/?span)[\s\S])*?)<\/span>/g;
+const StyledSpanDelimiter: DelimiterType = {};
+
+// `[text]{color=red hl=yellow}` parses into a StyledSpan node whose
+// content keeps its own inline markdown. The opener only claims a `[` whose
+// balanced `]` is followed by a valid style, so every other bracket still
+// reaches the link parser.
+const styledSpanSyntax: MarkdownConfig = {
+	defineNodes: ['StyledSpan', 'StyledSpanMark'],
+	props: [styleTags({ StyledSpanMark: tags.processingInstruction })],
+	parseInline: [
+		{
+			name: 'StyledSpanStart',
+			before: 'Link',
+			parse(cx, next, start) {
+				if (next !== 91 || !matchStyledSpan(cx.slice(start, cx.end), 0)) return -1;
+				return cx.addDelimiter(StyledSpanDelimiter, start, start + 1, true, false);
+			}
+		},
+		{
+			name: 'StyledSpanEnd',
+			before: 'LinkEnd',
+			parse(cx, next, start) {
+				if (next !== 93) return -1;
+				const index = cx.findOpeningDelimiter(StyledSpanDelimiter);
+				const opener = index === null ? null : cx.getDelimiterAt(index);
+				if (index === null || !opener) return -1;
+				const match = matchStyledSpan(cx.slice(opener.from, cx.end), 0);
+				if (!match || opener.from + match.close !== start) return -1;
+				const end = opener.from + match.end;
+				const content = cx.takeContent(index);
+				return cx.addElement(
+					cx.elt('StyledSpan', opener.from, end, [
+						cx.elt('StyledSpanMark', opener.from, opener.to),
+						...content,
+						cx.elt('StyledSpanMark', start, end)
+					])
+				);
+			}
+		}
+	]
+};
 
 interface PendingDecoration {
 	from: number;
@@ -234,6 +273,23 @@ function buildLivePreview(view: EditorView): DecorationSet {
 						}
 						return;
 					}
+					case 'StyledSpan': {
+						const open = node.node.firstChild;
+						const close = node.node.lastChild;
+						if (!open || !close || open === close) return;
+						const style = parseTextStyle(state.doc.sliceString(close.from + 2, close.to - 1));
+						if (!style) return;
+						pending.push({
+							from: open.to,
+							to: close.from,
+							deco: Decoration.mark({ class: textStyleClasses(style) })
+						});
+						if (!touches(node.from, node.to)) {
+							hide(open.from, open.to);
+							hide(close.from, close.to);
+						}
+						return;
+					}
 					case 'QuoteMark': {
 						if (!parent || touches(parent.from, parent.to)) return;
 						const after = state.doc.sliceString(node.to, node.to + 1);
@@ -243,7 +299,6 @@ function buildLivePreview(view: EditorView): DecorationSet {
 				}
 			}
 		});
-		collectStyleSpans(state, range.from, range.to, touches, pending);
 	}
 
 	return Decoration.set(
@@ -291,37 +346,6 @@ const tableField = StateField.define<DecorationSet>({
 	},
 	provide: (field) => EditorView.decorations.from(field)
 });
-
-function collectStyleSpans(
-	state: EditorState,
-	from: number,
-	to: number,
-	touches: (from: number, to: number) => boolean,
-	pending: PendingDecoration[]
-): void {
-	const text = state.doc.sliceString(from, to);
-	for (const match of text.matchAll(STYLE_SPAN)) {
-		const [, property, value] = match;
-		const start = from + match.index;
-		const end = start + match[0].length;
-		const openEnd = start + match[0].indexOf('>') + 1;
-		const closeStart = end - '</span>'.length;
-		if (openEnd < closeStart) {
-			pending.push({
-				from: openEnd,
-				to: closeStart,
-				deco: Decoration.mark({
-					class: property === 'background-color' ? 'nb-highlight' : undefined,
-					attributes: { style: `${property}:${value}` }
-				})
-			});
-		}
-		if (!touches(start, end)) {
-			pending.push({ from: start, to: openEnd, deco: HIDE });
-			pending.push({ from: closeStart, to: end, deco: HIDE });
-		}
-	}
-}
 
 const livePreviewPlugin = ViewPlugin.fromClass(
 	class {
@@ -412,8 +436,24 @@ const editorTheme = EditorView.theme({
 		borderRadius: '4px',
 		padding: '0.08em 0.3em'
 	},
-	// The background colour itself is applied inline from the source span
-	'.nb-highlight': { borderRadius: '3px', padding: '0.05em 0.1em', color: '#1f2937' },
+	// Highlights come first so a span's own text color wins over the
+	// highlight's on the same element
+	...Object.fromEntries(
+		NOTEBOOK_HIGHLIGHTS.map(({ name }) => [
+			`.nb-highlight-${name}`,
+			{
+				backgroundColor: `var(--nb-highlight-${name})`,
+				borderRadius: '3px',
+				padding: '0.05em 0.1em'
+			}
+		])
+	),
+	...Object.fromEntries(
+		NOTEBOOK_TEXT_COLORS.map(({ name }) => [
+			`.nb-color-${name}`,
+			{ color: `var(--nb-color-${name})` }
+		])
+	),
 	'.nb-codeblock': {
 		backgroundColor: 'color-mix(in oklab, var(--color-muted) 55%, transparent)',
 		fontFamily: 'var(--font-mono, ui-monospace, monospace)',
@@ -520,7 +560,7 @@ export function notebookEditorExtensions(hooks: NotebookEditorHooks): Extension 
 		drawSelection(),
 		EditorView.lineWrapping,
 		placeholder('Write notes here…'),
-		markdown({ base: markdownLanguage }),
+		markdown({ base: markdownLanguage, extensions: [styledSpanSyntax] }),
 		syntaxHighlighting(markdownHighlighting),
 		livePreviewPlugin,
 		tableField,

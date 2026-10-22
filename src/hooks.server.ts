@@ -2,6 +2,7 @@ import type { Handle, ServerInit } from '@sveltejs/kit';
 import { createAppStateOnFirstRun, getThemeSettings } from '$lib/server/database/app-state';
 import { bootstrapSchema } from '$lib/server/database/bootstrap-schema';
 import { configureDatabase } from '$lib/server/database/database';
+import { convertLegacyNotebookStyles } from '$lib/server/notebooks/convert-legacy-styles';
 import { applyVulkanDevice } from '$lib/server/providers/vulkan-devices';
 import { refreshStaleEmbeddings } from '$lib/server/rag/embedding';
 
@@ -27,6 +28,8 @@ export const init: ServerInit = async () => {
 	if (migrationsFolder) await bootstrapSchema(migrationsFolder);
 
 	await createAppStateOnFirstRun();
+
+	await convertLegacyNotebookStyles();
 
 	await applyVulkanDevice();
 

@@ -1,9 +1,11 @@
 import { browser } from '$app/environment';
 import MarkdownIt from 'markdown-it';
+import type StateInline from 'markdown-it/lib/rules_inline/state_inline.mjs';
 import DOMPurify from 'dompurify';
+import { matchStyledSpan, textStyleClasses } from '$lib/utils/notebook-styles';
 
-function createEngine(html: boolean): MarkdownIt {
-	const engine = new MarkdownIt({ html, linkify: true });
+function createEngine(): MarkdownIt {
+	const engine = new MarkdownIt({ html: false, linkify: true });
 	engine.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
 		tokens[idx].attrSet('target', '_blank');
 		tokens[idx].attrSet('rel', 'noopener noreferrer');
@@ -12,20 +14,34 @@ function createEngine(html: boolean): MarkdownIt {
 	return engine;
 }
 
-const md = createEngine(false);
-// Inline HTML passthrough for user-authored content (notebooks); the rendered
-// output is always DOMPurify-sanitized, so only harmless markup like
-// <span style="color:…"> survives.
-const mdWithHtml = createEngine(true);
+// Renders the notebook's `[text]{color=… hl=…}` as a classed span,
+// tokenizing the bracketed text as ordinary inline markdown
+function styledSpanRule(state: StateInline, silent: boolean): boolean {
+	const match = matchStyledSpan(state.src, state.pos);
+	if (!match || match.end > state.posMax) return false;
+	if (!silent) {
+		const { posMax } = state;
+		state.push('styled_span_open', 'span', 1).attrSet('class', textStyleClasses(match.style));
+		state.pos = match.open + 1;
+		state.posMax = match.close;
+		state.md.inline.tokenize(state);
+		state.posMax = posMax;
+		state.push('styled_span_close', 'span', -1);
+	}
+	state.pos = match.end;
+	return true;
+}
+
+const md = createEngine();
+const notebookMd = createEngine();
+notebookMd.inline.ruler.before('link', 'styled_span', styledSpanRule);
 
 export interface RenderMarkdownOptions {
-	allowHtml?: boolean;
+	styledSpans?: boolean;
 }
 
 export function renderMarkdown(text = '', options: RenderMarkdownOptions = {}): string {
-	// Raw HTML is only ever rendered where DOMPurify can sanitize it (browser)
-	const allowHtml = options.allowHtml === true && browser;
-	const html = (allowHtml ? mdWithHtml : md).render(text.trim());
+	const html = (options.styledSpans ? notebookMd : md).render(text.trim());
 	if (!browser) return html;
 	return DOMPurify.sanitize(html);
 }
