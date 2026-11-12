@@ -26,6 +26,7 @@ export type SearchMatchBase = {
 	chunkIndex: number;
 	chunkType: SearchChunkType;
 	content: string;
+	sectionPath: string | null;
 };
 
 export type ScoredSearchMatch = SearchMatchBase & {

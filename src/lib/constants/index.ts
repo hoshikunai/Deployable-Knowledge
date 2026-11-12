@@ -3,6 +3,7 @@ export * from './assistant-defaults';
 export * from './chat';
 export * from './context-limits';
 export * from './css-classes';
+export * from './document-parsing';
 export * from './embedding';
 export * from './error';
 export * from './folder-sync';

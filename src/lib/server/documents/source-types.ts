@@ -12,6 +12,7 @@ import { extractCsv } from '#lib/server/rag/chunk/tabular-extract';
 import { extractSpreadsheet } from '#lib/server/rag/chunk/spreadsheet-extract';
 import { chunkTranscript, extractTranscript } from '#lib/server/rag/chunk/transcript-extract';
 import { extractYoutubeTranscript } from '#lib/server/rag/chunk/youtube-extract';
+import { shouldUseStructuredParsing } from './document-parsing';
 import { convertOfficeToPdf } from './office-converter';
 
 export type SourceTypeHandler = {
@@ -56,10 +57,8 @@ const pdfHandler: SourceTypeHandler = {
 			throw new Error('Only PDF uploads are supported.');
 		}
 	},
-	extract: (source, onProgress) =>
-		extractText(source, (current, total) => {
-			onProgress(current / total, `OCR page ${current} of ${total}`);
-		})
+	extract: async (source, onProgress) =>
+		extractText(source, onProgress, { structured: await shouldUseStructuredParsing() })
 };
 
 const audioHandler: SourceTypeHandler = {

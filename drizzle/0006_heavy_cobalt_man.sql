@@ -1,0 +1,1 @@
+ALTER TABLE `app_state` ADD `structured_pdf_parsing` integer DEFAULT false NOT NULL;

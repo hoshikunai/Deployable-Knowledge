@@ -6,6 +6,7 @@ import type { ScoredSearchMatch, SearchChunkType, SearchMatchBase } from './sear
 import { DEFAULT_ASSISTANT_CONFIG, RAG_CHUNK_CHARACTER_LIMIT } from '#lib/constants';
 import { RetrievalMode } from '#lib/enums';
 import { compactText } from '#lib/server/utils/values';
+import { SECTION_PATH_SEPARATOR } from '../chunk-passage';
 
 const MAX_PREVIEW_CHARS = 200;
 const ENV_RETRIEVAL_MODES: readonly RetrievalMode[] = [RetrievalMode.BM25, RetrievalMode.SEMANTIC];
@@ -76,11 +77,14 @@ export type RagSource = {
 export function describeChunkLocation(
 	sourceType: SearchMatchBase['sourceType'],
 	pageIndex: number,
-	preview: string
+	preview: string,
+	sectionPath: string | null
 ): string {
-	if (sourceType === 'AUDIO' || sourceType === 'YOUTUBE') return preview;
-	if (sourceType === 'XLSX') return `Sheet ${pageIndex + 1}: ${preview}`;
-	return `Page ${pageIndex + 1}: ${preview}`;
+	const section = sectionPath?.split(SECTION_PATH_SEPARATOR).at(-1);
+	const text = section ? `${section} — ${preview}` : preview;
+	if (sourceType === 'AUDIO' || sourceType === 'YOUTUBE') return text;
+	if (sourceType === 'XLSX') return `Sheet ${pageIndex + 1}: ${text}`;
+	return `Page ${pageIndex + 1}: ${text}`;
 }
 
 export type RagContextResult = {
@@ -95,8 +99,9 @@ function formatContext(matches: SearchMatchBase[]) {
 	const items = matches.map((match) => {
 		const content = compactText(match.content, RAG_CHUNK_CHARACTER_LIMIT);
 		const source = match.sourceTitle || match.sourcePath || 'unknown';
+		const section = match.sectionPath ? `[${match.sectionPath}] ` : '';
 
-		return `- ${content} (source: ${source})`;
+		return `- ${section}${content} (source: ${source})`;
 	});
 
 	return ['Relevant context:', ...items].join('\n');
@@ -113,7 +118,12 @@ export function buildSources(
 		return {
 			title: match.sourceTitle,
 			// Transcripts have no pages, so only paged sources get a page reference
-			description: describeChunkLocation(match.sourceType, match.pageIndex, preview),
+			description: describeChunkLocation(
+				match.sourceType,
+				match.pageIndex,
+				preview,
+				match.sectionPath
+			),
 			documentId: match.documentId,
 			chunkId: match.chunkId,
 			sourceType: match.sourceType,

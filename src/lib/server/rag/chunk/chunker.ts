@@ -212,6 +212,7 @@ function chunkSentenceWindows(page: ExtractedChunk, content: string): ParsedChun
 			chunkType: page.chunkType,
 			source: page.source,
 			pageIndex: page.pageIndex,
+			sectionPath: page.sectionPath ?? null,
 			chunkIndex,
 			content: text
 		}));
@@ -230,6 +231,10 @@ function chunkPage(page: ExtractedChunk): ParsedChunk[] {
 	const content = preparePageContent(page);
 	if (!content) return [];
 
+	if (page.chunkType === 'IMAGE' && content.length > RAG_CHUNK_CHARACTER_LIMIT) {
+		return chunkSentenceWindows(page, content);
+	}
+
 	if (page.chunkType === 'IMAGE') {
 		return [
 			{
@@ -237,6 +242,7 @@ function chunkPage(page: ExtractedChunk): ParsedChunk[] {
 				chunkType: page.chunkType,
 				source: page.source,
 				pageIndex: page.pageIndex,
+				sectionPath: page.sectionPath ?? null,
 				chunkIndex: 0,
 				content
 			}
@@ -253,6 +259,7 @@ function chunkPage(page: ExtractedChunk): ParsedChunk[] {
 				chunkType: page.chunkType,
 				source: page.source,
 				pageIndex: page.pageIndex,
+				sectionPath: page.sectionPath ?? null,
 				chunkIndex,
 				content: chunkContent
 			};

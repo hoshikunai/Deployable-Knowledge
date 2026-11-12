@@ -150,6 +150,33 @@ By downloading a Gemma model through this application, you agree to those terms.
 - `cross-encoder/ettin-reranker-32m-v1` — default cross-encoder reranking. Apache-2.0.
 - `Xenova/ms-marco-MiniLM-L-6-v2` — alternative cross-encoder reranking. Apache-2.0.
 - `tesseract-ocr/tessdata` `eng.traineddata` (4.1.0) — OCR language data. Apache-2.0.
+- `docling-project/docling-layout-heron-onnx` — page layout detection for structure-aware PDF
+  parsing (optional download). ONNX export of the Docling Heron layout model. Apache-2.0.
+
+### Docling (ported code)
+
+`src/lib/server/rag/chunk/layout/postprocess.ts` and `reading-order.ts` are TypeScript ports of
+parts of [Docling](https://github.com/docling-project/docling) (`layout_postprocessor.py` and
+`reading_order_rb.py`), used under the MIT License:
+
+> MIT License
+>
+> Copyright The Docling Contributors
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+> and associated documentation files (the "Software"), to deal in the Software without
+> restriction, including without limitation the rights to use, copy, modify, merge, publish,
+> distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+> Software is furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+> BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+> DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 

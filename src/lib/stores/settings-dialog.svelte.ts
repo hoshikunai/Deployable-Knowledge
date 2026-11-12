@@ -4,6 +4,7 @@ export type SettingsSection =
 	| 'skills'
 	| 'models'
 	| 'embeddings'
+	| 'documents'
 	| 'appearance'
 	| 'diagnostics';
 

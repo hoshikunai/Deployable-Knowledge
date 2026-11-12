@@ -1,11 +1,28 @@
 import { eq } from 'drizzle-orm';
 
-import { DEFAULT_EMBEDDING_SETTINGS, parseThemeColor, parseThemeMode } from '#lib/constants';
+import {
+	DEFAULT_EMBEDDING_SETTINGS,
+	DEFAULT_STRUCTURED_PDF_PARSING,
+	parseThemeColor,
+	parseThemeMode
+} from '#lib/constants';
 import type { EmbeddingSettings, ThemeSettings } from '#lib/types';
 import { db } from '#lib/server/database/database';
 import { appState } from '#lib/server/database/schema';
 
 const APP_STATE_ID = 'app';
+
+export async function getStructuredPdfParsing(): Promise<boolean> {
+	const state = await db.select().from(appState).where(eq(appState.id, APP_STATE_ID)).get();
+	return state?.structuredPdfParsing ?? DEFAULT_STRUCTURED_PDF_PARSING;
+}
+
+export async function setStructuredPdfParsing(structuredPdfParsing: boolean): Promise<void> {
+	await db
+		.insert(appState)
+		.values({ id: APP_STATE_ID, structuredPdfParsing })
+		.onConflictDoUpdate({ target: appState.id, set: { structuredPdfParsing } });
+}
 
 export async function getActiveProfileId(): Promise<string | null> {
 	const state = await db.select().from(appState).where(eq(appState.id, APP_STATE_ID)).get();

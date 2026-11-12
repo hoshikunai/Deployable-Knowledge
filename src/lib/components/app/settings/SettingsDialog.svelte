@@ -2,6 +2,7 @@
 	import Bot from '@lucide/svelte/icons/bot';
 	import Bug from '@lucide/svelte/icons/bug';
 	import Cpu from '@lucide/svelte/icons/cpu';
+	import FileScan from '@lucide/svelte/icons/file-scan';
 	import FileSearch from '@lucide/svelte/icons/file-search';
 	import HardDrive from '@lucide/svelte/icons/hard-drive';
 	import Layers from '@lucide/svelte/icons/layers';
@@ -15,6 +16,7 @@
 	import Wrench from '@lucide/svelte/icons/wrench';
 	import type { Component } from 'svelte';
 	import SettingsAppearance from './SettingsAppearance.svelte';
+	import SettingsDocumentParsingSection from './SettingsDocumentParsingSection.svelte';
 	import SettingsEmbeddingSection from './SettingsEmbeddingSection.svelte';
 	import SettingsFieldGroup from './SettingsFieldGroup.svelte';
 	import SettingsGenerationFields from './SettingsGenerationFields.svelte';
@@ -141,6 +143,24 @@
 			]
 		},
 		{
+			id: 'documents',
+			label: 'Documents',
+			description: 'How added documents are read and split into chunks for search.',
+			icon: FileScan,
+			keywords: [
+				'pdf',
+				'parsing',
+				'layout',
+				'structure',
+				'headings',
+				'tables',
+				'headers',
+				'footers',
+				'chunks',
+				'docling'
+			]
+		},
+		{
 			id: 'appearance',
 			label: 'Appearance',
 			description: 'Choose how the workspace looks. Changes are applied immediately.',
@@ -214,7 +234,8 @@
 		class="flex h-[min(46rem,88dvh)] w-[min(70rem,calc(100vw-3rem))] max-w-none gap-0 overflow-hidden p-0 sm:max-w-none"
 	>
 		<Dialog.Description class="sr-only">
-			Configure the assistant, tools, skills, models, embeddings, appearance, and diagnostics.
+			Configure the assistant, tools, skills, models, embeddings, document parsing, appearance, and
+			diagnostics.
 		</Dialog.Description>
 
 		<aside
@@ -362,6 +383,8 @@
 						</div>
 					{:else if activeSection.id === 'embeddings'}
 						<SettingsEmbeddingSection />
+					{:else if activeSection.id === 'documents'}
+						<SettingsDocumentParsingSection />
 					{:else if activeSection.id === 'diagnostics'}
 						<DiagnosticsConsole />
 					{:else}

@@ -8,14 +8,14 @@ import { apiStream, formatBytes, parseNdjsonStream } from '#lib/utils';
 
 export async function streamModelDownload(
 	endpoint: string,
-	body: ApiLocalModelDownloadRequest | ApiSetupInstallRequest,
+	body: ApiLocalModelDownloadRequest | ApiSetupInstallRequest | null,
 	label: string,
 	onProgress?: (progress: ApiDocumentIngestProgress) => void,
 	signal?: AbortSignal
 ): Promise<void> {
 	const response = await apiStream(endpoint, {
 		method: 'POST',
-		body: JSON.stringify(body),
+		body: body ? JSON.stringify(body) : undefined,
 		signal
 	});
 

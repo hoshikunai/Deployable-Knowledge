@@ -4,7 +4,13 @@ import { PDFParse, type TableArray } from 'pdf-parse';
 import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
 import { createLogger } from '#lib/server/logging';
 import { TimeoutError, withTimeout } from '#lib/server/utils/with-timeout';
+import { collectLayoutChunks } from './layout/layout-extract.ts';
 import { installOcrData, OCR_DATA_DIR } from './ocr-data.ts';
+import {
+	carryTrailingHeadings,
+	joinCrossPageSentences,
+	stripRepeatedPageLines
+} from './page-cleanup.ts';
 import { extractPageImages, type PageImage, type PdfDocument } from './page-images.ts';
 import {
 	normalizeWhitespace,
@@ -232,10 +238,10 @@ async function getPageTables(pdf: PdfSession, pageNumber: number): Promise<Table
 
 async function collectTables(
 	pdf: PdfSession,
-	pageCount: number
+	pageNumbers: number[]
 ): Promise<Map<number, TableArray[]>> {
 	const tablesByPage = new Map<number, TableArray[]>();
-	for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+	for (const pageNumber of pageNumbers) {
 		const tables = await getPageTables(pdf, pageNumber);
 		if (tables.length > 0) tablesByPage.set(pageNumber, tables);
 		await yieldEventLoop();
@@ -243,12 +249,36 @@ async function collectTables(
 	return tablesByPage;
 }
 
+function compactText(text: string): string {
+	return text.toLowerCase().replace(/\s+/g, '');
+}
+
+// pdf-parse finds tables in the same text layer getText reads, so a table whose every cell
+// already appears in the page text would only index that text a second time
+function isTableInPageText(table: TableArray, pageText: string): boolean {
+	const page = compactText(pageText);
+	const cells = table.flat().map(compactText).filter(Boolean);
+	return cells.length > 0 && cells.every((cell) => page.includes(cell));
+}
+
+function cleanUpPages(chunks: Chunk[], file: Source): Chunk[] {
+	const cleaned = carryTrailingHeadings(stripRepeatedPageLines(chunks));
+	// Slides routinely end without punctuation, so a slide break is never a sentence break
+	return file.type === 'PPTX' ? cleaned : joinCrossPageSentences(cleaned);
+}
+
+export type PdfExtractOptions = {
+	structured: boolean;
+};
+
 export async function extractText(
 	file: Source,
-	onPageProgress?: (current: number, total: number) => void
+	onProgress?: (ratio: number, message: string) => void,
+	options: PdfExtractOptions = { structured: false }
 ): Promise<ExtractionResult> {
 	const data = await readFile(file.path);
 	const pdf: PdfSession = { data, parser: new PDFParse({ data }) };
+	const ocrShare = options.structured ? 0.5 : 1;
 
 	try {
 		const textStarted = Date.now();
@@ -272,7 +302,8 @@ export async function extractText(
 			documentOf(pdf.parser),
 			textResult.total,
 			pagesWithText,
-			onPageProgress
+			(current, total) =>
+				onProgress?.((current / total) * ocrShare, `OCR page ${current} of ${total}`)
 		);
 		ocrLog.debug('OCR pass finished', {
 			document: file.title,
@@ -280,8 +311,22 @@ export async function extractText(
 			pagesWithText: ocrTextByPage.size
 		});
 
+		const layoutByPage = options.structured
+			? await collectLayoutChunks(
+					() => documentOf(pdf.parser),
+					file,
+					[...pagesWithText],
+					(current, total) =>
+						onProgress?.(
+							ocrShare + (current / total) * (1 - ocrShare),
+							`Analyzing layout of page ${current} of ${total}`
+						)
+				)
+			: new Map<number, Chunk[]>();
+
 		const tableStarted = Date.now();
-		const tablesByPage = await collectTables(pdf, textResult.total);
+		const plainPages = [...pagesWithText].filter((pageNumber) => !layoutByPage.has(pageNumber));
+		const tablesByPage = await collectTables(pdf, plainPages);
 		const tableCount = [...tablesByPage.values()].reduce((sum, tables) => sum + tables.length, 0);
 		pdfLog.debug('PDF table detection finished', {
 			document: file.title,
@@ -294,8 +339,11 @@ export async function extractText(
 		for (let pageNumber = 1; pageNumber <= textResult.total; pageNumber += 1) {
 			const pageIndex = pageNumber - 1;
 			const nativeText = normalizeWhitespace(textResult.getPageText(pageNumber));
+			const layoutChunks = layoutByPage.get(pageNumber);
 
-			if (nativeText) {
+			if (layoutChunks) {
+				chunks.push(...layoutChunks);
+			} else if (nativeText) {
 				chunks.push({ chunkType: 'TEXT', source: file, pageIndex, content: nativeText });
 			}
 
@@ -306,13 +354,13 @@ export async function extractText(
 			for (const table of tablesByPage.get(pageNumber) ?? []) {
 				const content = tableToText(table);
 
-				if (content) {
+				if (content && !isTableInPageText(table, nativeText)) {
 					chunks.push({ chunkType: 'TABLE', source: file, pageIndex, content });
 				}
 			}
 		}
 
-		return { chunks, pageCount: textResult.total };
+		return { chunks: cleanUpPages(chunks, file), pageCount: textResult.total };
 	} finally {
 		await pdf.parser.destroy();
 	}

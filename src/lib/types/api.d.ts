@@ -384,6 +384,17 @@ export interface ApiEmbeddingStatus {
 	pendingChunks: number;
 }
 
+export interface ApiDocumentParsingStatus {
+	/** Whether PDFs go through layout analysis when the model is present. */
+	structuredPdfParsing: boolean;
+	modelInstalled: boolean;
+	modelSizeBytes: number;
+}
+
+export interface ApiDocumentParsingUpdate {
+	structuredPdfParsing: boolean;
+}
+
 export interface ApiLocalModelInfo {
 	fileName: string;
 	downloaded: boolean;

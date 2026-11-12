@@ -1,4 +1,5 @@
 export { chatStore } from './chat.svelte';
+export { documentParsingStore } from './document-parsing.svelte';
 export { documentsStore } from './documents.svelte';
 export { embeddingStore } from './embedding.svelte';
 export { localModelsStore } from './local-models.svelte';

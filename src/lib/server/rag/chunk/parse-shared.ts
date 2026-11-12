@@ -20,6 +20,12 @@ export type TranscriptTimelineEntry = {
 	endMs: number;
 };
 
+export type SectionHeading = {
+	text: string;
+	level?: number;
+	fontHeight?: number;
+};
+
 export type ExtractedChunk = {
 	chunkType: DocumentChunk['chunkType'];
 	source: Source;
@@ -27,6 +33,9 @@ export type ExtractedChunk = {
 	content: DocumentChunk['content'];
 	timeline?: TranscriptTimelineEntry[];
 	speaker?: number;
+	opensSection?: boolean;
+	headings?: SectionHeading[];
+	sectionPath?: string;
 };
 
 export type ParsedChunk = {
@@ -39,6 +48,7 @@ export type ParsedChunk = {
 	startMs?: number | null;
 	endMs?: number | null;
 	speaker?: number | null;
+	sectionPath?: string | null;
 };
 
 // Every extractor hands back the same page-shaped result, so the rest of the pipeline is shared

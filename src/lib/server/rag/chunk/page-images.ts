@@ -25,15 +25,57 @@ type PdfObjects = {
 	get(objId: string, callback: (data: unknown) => void): unknown;
 };
 
+export type PdfViewport = {
+	width: number;
+	height: number;
+	transform: number[];
+	convertToViewportPoint(x: number, y: number): number[];
+};
+
+export type PdfCanvasContext = {
+	getImageData(x: number, y: number, width: number, height: number): { data: Uint8ClampedArray };
+};
+
+export type PdfCanvasAndContext = {
+	canvas: unknown;
+	context: PdfCanvasContext;
+};
+
+export type PdfTextContent = {
+	items: unknown[];
+};
+
 export type PdfPage = {
 	getOperatorList(): Promise<{ fnArray: number[]; argsArray: unknown[][] }>;
+	getViewport(params: { scale: number }): PdfViewport;
+	getTextContent(): Promise<PdfTextContent>;
+	render(params: {
+		canvas: unknown;
+		canvasContext: PdfCanvasContext;
+		viewport: PdfViewport;
+		transform: number[];
+	}): { promise: Promise<void> };
 	cleanup(): boolean;
 	objs: PdfObjects;
 	commonObjs: PdfObjects;
 };
 
+export type PdfOutlineNode = {
+	title: string;
+	dest: string | unknown[] | null;
+	items: PdfOutlineNode[];
+};
+
 export type PdfDocument = {
+	numPages: number;
 	getPage(pageNumber: number): Promise<PdfPage>;
+	getOutline(): Promise<PdfOutlineNode[] | null>;
+	getDestination(id: string): Promise<unknown[] | null>;
+	getPageIndex(ref: unknown): Promise<number>;
+	canvasFactory: {
+		create(width: number, height: number): PdfCanvasAndContext;
+		destroy(canvasAndContext: PdfCanvasAndContext): void;
+	};
 };
 
 function expandBlackAndWhite(src: Buffer, width: number, height: number): Buffer {

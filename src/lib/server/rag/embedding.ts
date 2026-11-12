@@ -11,6 +11,7 @@ import {
 import { createLogger } from '../logging';
 import { DocumentsRepository } from '../repositories';
 import type { ParsedChunk } from './chunk/parse-shared';
+import { chunkPassageText } from './chunk-passage';
 import { embedTexts, getActiveEmbedding } from './embedding-model';
 import { putChunkVectors, removeDocumentVectors } from './search/vector-index';
 import type { VectorIndexRow } from './search/vector-store';
@@ -74,6 +75,7 @@ function buildChunkRow(
 		startMs: chunk.startMs ?? null,
 		endMs: chunk.endMs ?? null,
 		speaker: chunk.speaker ?? null,
+		sectionPath: chunk.sectionPath ?? null,
 		embedding: embedding === null ? null : embeddingToBuffer(embedding.vector),
 		embeddingModel: embedding?.key ?? null,
 		createdAt: now
@@ -163,7 +165,7 @@ async function embedChunks(
 	const embeddings: ChunkEmbedding[] = [];
 
 	for (let offset = 0; offset < chunks.length; offset += EMBED_SLICE_SIZE) {
-		const texts = chunks.slice(offset, offset + EMBED_SLICE_SIZE).map((chunk) => chunk.content);
+		const texts = chunks.slice(offset, offset + EMBED_SLICE_SIZE).map(chunkPassageText);
 		const reportProgress = (current: number) =>
 			onProgress?.({ stage: 'embedding', current: offset + current, total: chunks.length });
 
@@ -220,7 +222,8 @@ async function reembedStaleChunks(): Promise<void> {
 				id: documentChunks.id,
 				documentId: documentChunks.documentId,
 				chunkType: documentChunks.chunkType,
-				content: documentChunks.content
+				content: documentChunks.content,
+				sectionPath: documentChunks.sectionPath
 			})
 			.from(documentChunks)
 			.innerJoin(documents, eq(documents.id, documentChunks.documentId))
@@ -232,11 +235,9 @@ async function reembedStaleChunks(): Promise<void> {
 
 		if ((await getActiveEmbedding()).key !== key) return;
 
-		const embedded = await embedTexts(
-			batch.map((chunk) => chunk.content),
-			'search_document',
-			{ localOnly: includeLocalOnly }
-		);
+		const embedded = await embedTexts(batch.map(chunkPassageText), 'search_document', {
+			localOnly: includeLocalOnly
+		});
 		const updated: VectorIndexRow[] = [];
 		// Rows re-ingested while this batch was embedding already have fresh vectors.
 		await db.transaction(async (tx) => {

@@ -14,6 +14,7 @@ export type ChunkWindowChunk = {
 	chunkIndex: number;
 	chunkType: DocumentChunk['chunkType'];
 	content: string;
+	sectionPath: string | null;
 };
 
 export type ChunkWindow = {
@@ -64,13 +65,14 @@ export class ChunksRepository {
 		const clampedEnd = Math.min(clampedStart + Math.max(1, Math.floor(maxCount)) - 1, totalChunks);
 
 		const result = await databaseClient.execute({
-			sql: `SELECT chunkId, position, pageIndex, chunkIndex, chunkType, content FROM (
+			sql: `SELECT chunkId, position, pageIndex, chunkIndex, chunkType, content, sectionPath FROM (
 					SELECT
 						dc.id AS chunkId,
 						dc.page_index AS pageIndex,
 						dc.chunk_index AS chunkIndex,
 						dc.chunk_type AS chunkType,
 						dc.content AS content,
+						dc.section_path AS sectionPath,
 						ROW_NUMBER() OVER (ORDER BY dc.page_index, dc.chunk_index) AS position
 					FROM document_chunks dc
 					WHERE dc.document_id = ?
@@ -86,7 +88,8 @@ export class ChunksRepository {
 			pageIndex: Number(row.pageIndex),
 			chunkIndex: Number(row.chunkIndex),
 			chunkType: String(row.chunkType) as DocumentChunk['chunkType'],
-			content: String(row.content)
+			content: String(row.content),
+			sectionPath: row.sectionPath === null ? null : String(row.sectionPath)
 		}));
 
 		return { document, totalChunks, start: clampedStart, end: clampedEnd, chunks };

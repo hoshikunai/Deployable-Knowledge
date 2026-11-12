@@ -9,19 +9,32 @@ const log = createLogger('search');
 const SCHEMA_STATEMENTS = [
 	`CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
 		content,
+		section_path,
 		content='document_chunks',
 		tokenize='porter unicode61'
 	)`,
 	`CREATE TRIGGER IF NOT EXISTS chunk_fts_after_insert AFTER INSERT ON document_chunks BEGIN
-		INSERT INTO chunk_fts(rowid, content) VALUES (new.rowid, new.content);
+		INSERT INTO chunk_fts(rowid, content, section_path)
+			VALUES (new.rowid, new.content, new.section_path);
 	END`,
 	`CREATE TRIGGER IF NOT EXISTS chunk_fts_after_delete AFTER DELETE ON document_chunks BEGIN
-		INSERT INTO chunk_fts(chunk_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+		INSERT INTO chunk_fts(chunk_fts, rowid, content, section_path)
+			VALUES ('delete', old.rowid, old.content, old.section_path);
 	END`,
-	`CREATE TRIGGER IF NOT EXISTS chunk_fts_after_update AFTER UPDATE OF content ON document_chunks BEGIN
-		INSERT INTO chunk_fts(chunk_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
-		INSERT INTO chunk_fts(rowid, content) VALUES (new.rowid, new.content);
+	`CREATE TRIGGER IF NOT EXISTS chunk_fts_after_update
+		AFTER UPDATE OF content, section_path ON document_chunks BEGIN
+		INSERT INTO chunk_fts(chunk_fts, rowid, content, section_path)
+			VALUES ('delete', old.rowid, old.content, old.section_path);
+		INSERT INTO chunk_fts(rowid, content, section_path)
+			VALUES (new.rowid, new.content, new.section_path);
 	END`
+];
+
+const DROP_STATEMENTS = [
+	'DROP TRIGGER IF EXISTS chunk_fts_after_insert',
+	'DROP TRIGGER IF EXISTS chunk_fts_after_delete',
+	'DROP TRIGGER IF EXISTS chunk_fts_after_update',
+	'DROP TABLE IF EXISTS chunk_fts'
 ];
 
 let readyPromise: Promise<void> | undefined;
@@ -34,7 +47,23 @@ export function ensureChunkFts(): Promise<void> {
 	return readyPromise;
 }
 
+// Indexes created before section paths existed only cover content; drop them so they are
+// recreated with both columns and refilled by the backfill below.
+async function dropOutdatedIndex(): Promise<void> {
+	const existing = await databaseClient.execute(
+		`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'chunk_fts'`
+	);
+	const definition = existing.rows[0]?.sql;
+	if (typeof definition !== 'string' || definition.includes('section_path')) return;
+
+	log.info('Recreating search index with section paths');
+	for (const statement of DROP_STATEMENTS) {
+		await databaseClient.execute(statement);
+	}
+}
+
 async function initialize(): Promise<void> {
+	await dropOutdatedIndex();
 	for (const statement of SCHEMA_STATEMENTS) {
 		await databaseClient.execute(statement);
 	}
@@ -63,8 +92,8 @@ async function initialize(): Promise<void> {
 		if (!size || upper === null) break;
 
 		await databaseClient.execute({
-			sql: `INSERT INTO chunk_fts(rowid, content)
-				SELECT rowid, content FROM document_chunks WHERE rowid > ? AND rowid <= ?`,
+			sql: `INSERT INTO chunk_fts(rowid, content, section_path)
+				SELECT rowid, content, section_path FROM document_chunks WHERE rowid > ? AND rowid <= ?`,
 			args: [lastRowid, upper]
 		});
 		lastRowid = upper;
