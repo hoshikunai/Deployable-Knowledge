@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 
 import {
 	DEFAULT_EMBEDDING_SETTINGS,
-	DEFAULT_STRUCTURED_PDF_PARSING,
+	DEFAULT_TABLE_RECOGNITION,
 	parseThemeColor,
 	parseThemeMode
 } from '#lib/constants';
@@ -12,16 +12,16 @@ import { appState } from '#lib/server/database/schema';
 
 const APP_STATE_ID = 'app';
 
-export async function getStructuredPdfParsing(): Promise<boolean> {
+export async function getTableRecognition(): Promise<boolean> {
 	const state = await db.select().from(appState).where(eq(appState.id, APP_STATE_ID)).get();
-	return state?.structuredPdfParsing ?? DEFAULT_STRUCTURED_PDF_PARSING;
+	return state?.tableRecognition ?? DEFAULT_TABLE_RECOGNITION;
 }
 
-export async function setStructuredPdfParsing(structuredPdfParsing: boolean): Promise<void> {
+export async function setTableRecognition(tableRecognition: boolean): Promise<void> {
 	await db
 		.insert(appState)
-		.values({ id: APP_STATE_ID, structuredPdfParsing })
-		.onConflictDoUpdate({ target: appState.id, set: { structuredPdfParsing } });
+		.values({ id: APP_STATE_ID, tableRecognition })
+		.onConflictDoUpdate({ target: appState.id, set: { tableRecognition } });
 }
 
 export async function getActiveProfileId(): Promise<string | null> {

@@ -16,7 +16,7 @@ const RUNTIME_DIRECTORIES = [
 	'documents',
 	'models',
 	join('.cache', 'embeddings'),
-	join('.cache', 'layout'),
+	join('.cache', 'tables'),
 	join('.cache', 'tessdata'),
 	join('.cache', 'transformersjs'),
 	'logs'

@@ -29,7 +29,6 @@ export type PdfViewport = {
 	width: number;
 	height: number;
 	transform: number[];
-	convertToViewportPoint(x: number, y: number): number[];
 };
 
 export type PdfCanvasContext = {
@@ -41,14 +40,10 @@ export type PdfCanvasAndContext = {
 	context: PdfCanvasContext;
 };
 
-export type PdfTextContent = {
-	items: unknown[];
-};
-
 export type PdfPage = {
 	getOperatorList(): Promise<{ fnArray: number[]; argsArray: unknown[][] }>;
 	getViewport(params: { scale: number }): PdfViewport;
-	getTextContent(): Promise<PdfTextContent>;
+	getTextContent(): Promise<{ items: unknown[] }>;
 	render(params: {
 		canvas: unknown;
 		canvasContext: PdfCanvasContext;
@@ -60,18 +55,8 @@ export type PdfPage = {
 	commonObjs: PdfObjects;
 };
 
-export type PdfOutlineNode = {
-	title: string;
-	dest: string | unknown[] | null;
-	items: PdfOutlineNode[];
-};
-
 export type PdfDocument = {
-	numPages: number;
 	getPage(pageNumber: number): Promise<PdfPage>;
-	getOutline(): Promise<PdfOutlineNode[] | null>;
-	getDestination(id: string): Promise<unknown[] | null>;
-	getPageIndex(ref: unknown): Promise<number>;
 	canvasFactory: {
 		create(width: number, height: number): PdfCanvasAndContext;
 		destroy(canvasAndContext: PdfCanvasAndContext): void;

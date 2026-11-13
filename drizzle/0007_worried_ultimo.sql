@@ -1,1 +1,0 @@
-ALTER TABLE `document_chunks` ADD `section_path` text;

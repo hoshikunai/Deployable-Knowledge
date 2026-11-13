@@ -9,7 +9,6 @@ const MIN_PAGES_FOR_BANNERS = 4;
 const MAX_CARRIED_FRAGMENT = RAG_CHUNK_CHARACTER_LIMIT / 2;
 const CONTINUES_SENTENCE = /[a-z,\-­]\s*$/;
 const HYPHENATED_END = /\p{L}[-­]\s*$/u;
-const MAX_CARRIED_HEADING = 120;
 
 type PageText = { first: number; last: number };
 
@@ -74,31 +73,6 @@ export function stripRepeatedPageLines(chunks: ExtractedChunk[]): ExtractedChunk
 	return cleaned.filter((chunk) => chunk.chunkType !== 'TEXT' || chunk.content.trim());
 }
 
-/**
- * Moves a section heading stranded at the foot of a page onto the start of the next page's
- * text, so the heading stays with the body it introduces.
- */
-export function carryTrailingHeadings(chunks: ExtractedChunk[]): ExtractedChunk[] {
-	const pages = textChunksByPage(chunks);
-	const carried = chunks.map((chunk) => ({ ...chunk }));
-	const moved = new Set<number>();
-
-	for (const [pageIndex, page] of pages) {
-		const next = pages.get(pageIndex + 1);
-		const heading = carried[page.last];
-		const isHeadingOnly =
-			heading.content.length <= MAX_CARRIED_HEADING && !heading.content.includes('\n');
-		if (!next || !heading.opensSection || !isHeadingOnly) continue;
-
-		const following = carried[next.first];
-		following.content = `${heading.content}\n${following.content}`;
-		following.opensSection = true;
-		moved.add(page.last);
-	}
-
-	return carried.filter((_, index) => !moved.has(index));
-}
-
 function joinFragment(previous: string, fragment: string): string {
 	const trimmed = previous.trimEnd();
 	if (HYPHENATED_END.test(trimmed)) return trimmed.slice(0, -1) + fragment;
@@ -120,7 +94,7 @@ export function joinCrossPageSentences(chunks: ExtractedChunk[]): ExtractedChunk
 
 		const previous = joined[page.last];
 		const following = joined[next.first];
-		if (following.opensSection || emptied.has(page.last)) continue;
+		if (emptied.has(page.last)) continue;
 
 		const previousText = previous.content.trimEnd();
 		const followingText = normalizeWhitespace(following.content);

@@ -19,7 +19,6 @@ type ReadChunksData = {
 		position: number;
 		pageIndex: number;
 		chunkType: string;
-		sectionPath: string | null;
 		content: string;
 	}[];
 	note: string;
@@ -31,12 +30,7 @@ function buildChunkSources(window: ChunkWindow) {
 
 		return {
 			title: window.document.title,
-			description: describeChunkLocation(
-				window.document.sourceType,
-				chunk.pageIndex,
-				preview,
-				chunk.sectionPath
-			),
+			description: describeChunkLocation(window.document.sourceType, chunk.pageIndex, preview),
 			documentId: window.document.id,
 			chunkId: chunk.chunkId,
 			sourceType: window.document.sourceType,
@@ -128,7 +122,6 @@ export const readChunksTool: AgentTool<ReadChunksData> = {
 				position: chunk.position,
 				pageIndex: chunk.pageIndex,
 				chunkType: chunk.chunkType,
-				sectionPath: chunk.sectionPath,
 				content: compactText(chunk.content, RAG_CHUNK_CHARACTER_LIMIT)
 			})),
 			note: 'positions run 1..totalChunks in reading order'

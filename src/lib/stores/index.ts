@@ -1,5 +1,4 @@
 export { chatStore } from './chat.svelte';
-export { documentParsingStore } from './document-parsing.svelte';
 export { documentsStore } from './documents.svelte';
 export { embeddingStore } from './embedding.svelte';
 export { localModelsStore } from './local-models.svelte';
@@ -9,6 +8,7 @@ export { settingsDialogStore } from './settings-dialog.svelte';
 export { settingsStore } from './settings.svelte';
 export { setupStore } from './setup.svelte';
 export { skillsStore } from './skills.svelte';
+export { tableRecognitionStore } from './table-recognition.svelte';
 export { themeStore } from './theme.svelte';
 export { userGuideStore } from './user-guide.svelte';
 export { vulkanDevicesStore } from './vulkan-devices.svelte';

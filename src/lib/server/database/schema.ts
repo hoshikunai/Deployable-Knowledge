@@ -13,7 +13,7 @@ import {
 	CUSTOM_PROVIDER_TYPES,
 	DEFAULT_ASSISTANT_CONFIG,
 	DEFAULT_EMBEDDING_SETTINGS,
-	DEFAULT_STRUCTURED_PDF_PARSING,
+	DEFAULT_TABLE_RECOGNITION,
 	DEFAULT_THEME,
 	EMBEDDING_DEVICES,
 	LAYOUT_NAME_MAX_LENGTH,
@@ -40,9 +40,9 @@ export const appState = sqliteTable('app_state', {
 		.notNull()
 		.default(DEFAULT_EMBEDDING_SETTINGS.device),
 	vulkanDevice: integer('vulkan_device'),
-	structuredPdfParsing: integer('structured_pdf_parsing', { mode: 'boolean' })
+	tableRecognition: integer('table_recognition', { mode: 'boolean' })
 		.notNull()
-		.default(DEFAULT_STRUCTURED_PDF_PARSING),
+		.default(DEFAULT_TABLE_RECOGNITION),
 	setupCompletedAt: integer('setup_completed_at', { mode: 'timestamp' })
 });
 
@@ -290,7 +290,6 @@ export const documentChunks = sqliteTable(
 		startMs: integer('start_ms'),
 		endMs: integer('end_ms'),
 		speaker: integer('speaker'),
-		sectionPath: text('section_path'),
 		embedding: blob('embedding', { mode: 'buffer' }),
 		// Vectors are only comparable with vectors from the same model.
 		embeddingModel: text('embedding_model'),

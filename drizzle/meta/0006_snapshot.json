@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bf2f4978-fc9c-40af-8709-d9a21c1ad88d",
+  "id": "48015018-65ea-41db-98e9-574aa17b05b7",
   "prevId": "325ddff3-45cd-47f3-826d-9acd6ac66138",
   "tables": {
     "app_state": {
@@ -76,8 +76,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "structured_pdf_parsing": {
-          "name": "structured_pdf_parsing",
+        "table_recognition": {
+          "name": "table_recognition",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

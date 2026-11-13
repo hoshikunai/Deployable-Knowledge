@@ -150,18 +150,24 @@ By downloading a Gemma model through this application, you agree to those terms.
 - `cross-encoder/ettin-reranker-32m-v1` — default cross-encoder reranking. Apache-2.0.
 - `Xenova/ms-marco-MiniLM-L-6-v2` — alternative cross-encoder reranking. Apache-2.0.
 - `tesseract-ocr/tessdata` `eng.traineddata` (4.1.0) — OCR language data. Apache-2.0.
-- `docling-project/docling-layout-heron-onnx` — page layout detection for structure-aware PDF
-  parsing (optional download). ONNX export of the Docling Heron layout model. Apache-2.0.
+- `docling-project/docling-layout-heron-onnx` — finds tables on PDF pages for table recognition
+  (optional download). ONNX export of the Docling Heron layout model. Apache-2.0.
+- `docling-project/docling-models` TableFormer (`accurate`) — reads table structure for table
+  recognition (optional download). CDLA-Permissive-2.0 AND Apache-2.0. The ONNX exports
+  (`encoder.onnx`, `decoder_kv.onnx`, `bbox.onnx`) are downloaded from the
+  [docling.rs](https://github.com/docling-project/docling.rs) `models-v1` release (MIT).
 
 ### Docling (ported code)
 
-`src/lib/server/rag/chunk/layout/postprocess.ts` and `reading-order.ts` are TypeScript ports of
-parts of [Docling](https://github.com/docling-project/docling) (`layout_postprocessor.py` and
-`reading_order_rb.py`), used under the MIT License:
+`src/lib/server/rag/chunk/tables/table-worker.ts` and `otsl.ts` port TableFormer's inference
+loop, image preparation and OTSL-to-grid conversion from
+[docling-ibm-models](https://github.com/docling-project/docling-ibm-models)
+(`tablemodel04_rs.py`, `tf_predictor.py`, `otsl.py`, `tf_cell_matcher.py`), used under the MIT
+License:
 
 > MIT License
 >
-> Copyright The Docling Contributors
+> Copyright (c) 2024 International Business Machines
 >
 > Permission is hereby granted, free of charge, to any person obtaining a copy of this software
 > and associated documentation files (the "Software"), to deal in the Software without

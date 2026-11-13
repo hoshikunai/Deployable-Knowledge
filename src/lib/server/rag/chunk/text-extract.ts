@@ -4,14 +4,10 @@ import { PDFParse, type TableArray } from 'pdf-parse';
 import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
 import { createLogger } from '#lib/server/logging';
 import { TimeoutError, withTimeout } from '#lib/server/utils/with-timeout';
-import { collectLayoutChunks } from './layout/layout-extract.ts';
 import { installOcrData, OCR_DATA_DIR } from './ocr-data.ts';
-import {
-	carryTrailingHeadings,
-	joinCrossPageSentences,
-	stripRepeatedPageLines
-} from './page-cleanup.ts';
+import { joinCrossPageSentences, stripRepeatedPageLines } from './page-cleanup.ts';
 import { extractPageImages, type PageImage, type PdfDocument } from './page-images.ts';
+import { collectRecognizedTables } from './tables/table-extract.ts';
 import {
 	normalizeWhitespace,
 	type ExtractedChunk as Chunk,
@@ -262,23 +258,23 @@ function isTableInPageText(table: TableArray, pageText: string): boolean {
 }
 
 function cleanUpPages(chunks: Chunk[], file: Source): Chunk[] {
-	const cleaned = carryTrailingHeadings(stripRepeatedPageLines(chunks));
+	const cleaned = stripRepeatedPageLines(chunks);
 	// Slides routinely end without punctuation, so a slide break is never a sentence break
 	return file.type === 'PPTX' ? cleaned : joinCrossPageSentences(cleaned);
 }
 
 export type PdfExtractOptions = {
-	structured: boolean;
+	recognizeTables: boolean;
 };
 
 export async function extractText(
 	file: Source,
 	onProgress?: (ratio: number, message: string) => void,
-	options: PdfExtractOptions = { structured: false }
+	options: PdfExtractOptions = { recognizeTables: false }
 ): Promise<ExtractionResult> {
 	const data = await readFile(file.path);
 	const pdf: PdfSession = { data, parser: new PDFParse({ data }) };
-	const ocrShare = options.structured ? 0.5 : 1;
+	const ocrShare = options.recognizeTables ? 0.5 : 1;
 
 	try {
 		const textStarted = Date.now();
@@ -311,22 +307,25 @@ export async function extractText(
 			pagesWithText: ocrTextByPage.size
 		});
 
-		const layoutByPage = options.structured
-			? await collectLayoutChunks(
+		const recognizedByPage = options.recognizeTables
+			? await collectRecognizedTables(
 					() => documentOf(pdf.parser),
 					file,
 					[...pagesWithText],
 					(current, total) =>
 						onProgress?.(
 							ocrShare + (current / total) * (1 - ocrShare),
-							`Analyzing layout of page ${current} of ${total}`
+							`Finding tables on page ${current} of ${total}`
 						)
 				)
 			: new Map<number, Chunk[]>();
 
 		const tableStarted = Date.now();
-		const plainPages = [...pagesWithText].filter((pageNumber) => !layoutByPage.has(pageNumber));
-		const tablesByPage = await collectTables(pdf, plainPages);
+		const pageNumbers = Array.from({ length: textResult.total }, (_, index) => index + 1);
+		const tablesByPage = await collectTables(
+			pdf,
+			pageNumbers.filter((pageNumber) => !recognizedByPage.has(pageNumber))
+		);
 		const tableCount = [...tablesByPage.values()].reduce((sum, tables) => sum + tables.length, 0);
 		pdfLog.debug('PDF table detection finished', {
 			document: file.title,
@@ -339,17 +338,16 @@ export async function extractText(
 		for (let pageNumber = 1; pageNumber <= textResult.total; pageNumber += 1) {
 			const pageIndex = pageNumber - 1;
 			const nativeText = normalizeWhitespace(textResult.getPageText(pageNumber));
-			const layoutChunks = layoutByPage.get(pageNumber);
 
-			if (layoutChunks) {
-				chunks.push(...layoutChunks);
-			} else if (nativeText) {
+			if (nativeText) {
 				chunks.push({ chunkType: 'TEXT', source: file, pageIndex, content: nativeText });
 			}
 
 			for (const content of ocrTextByPage.get(pageNumber) ?? []) {
 				chunks.push({ chunkType: 'IMAGE', source: file, pageIndex, content });
 			}
+
+			chunks.push(...(recognizedByPage.get(pageNumber) ?? []));
 
 			for (const table of tablesByPage.get(pageNumber) ?? []) {
 				const content = tableToText(table);

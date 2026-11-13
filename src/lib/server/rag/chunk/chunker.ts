@@ -212,15 +212,38 @@ function chunkSentenceWindows(page: ExtractedChunk, content: string): ParsedChun
 			chunkType: page.chunkType,
 			source: page.source,
 			pageIndex: page.pageIndex,
-			sectionPath: page.sectionPath ?? null,
 			chunkIndex,
 			content: text
 		}));
 }
 
+// Packs whole rows into chunks under the size limit; only a single row that is too long on its
+// own is cut mid-row
+function splitTableRows(content: string): string[] {
+	const pieces: string[] = [];
+	let current = '';
+	for (const row of content.split('\n')) {
+		if (row.length > RAG_CHUNK_CHARACTER_LIMIT) {
+			if (current) pieces.push(current);
+			current = '';
+			pieces.push(...splitRangeByLength(row, 0, row.length).map((span) => span.text));
+			continue;
+		}
+		if (current && current.length + 1 + row.length > RAG_CHUNK_CHARACTER_LIMIT) {
+			pieces.push(current);
+			current = row;
+		} else {
+			current = current ? `${current}\n${row}` : row;
+		}
+	}
+	if (current) pieces.push(current);
+	return pieces;
+}
+
 function preparePageContent(page: ExtractedChunk): string {
 	switch (page.chunkType) {
 		case 'TEXT':
+		case 'TABLE':
 			return cleanPageText(page.content);
 		default:
 			return normalizeWhitespace(page.content);
@@ -242,7 +265,6 @@ function chunkPage(page: ExtractedChunk): ParsedChunk[] {
 				chunkType: page.chunkType,
 				source: page.source,
 				pageIndex: page.pageIndex,
-				sectionPath: page.sectionPath ?? null,
 				chunkIndex: 0,
 				content
 			}
@@ -250,16 +272,12 @@ function chunkPage(page: ExtractedChunk): ParsedChunk[] {
 	}
 
 	if (page.chunkType === 'TABLE') {
-		// Tables may contain many rows, so keep enforcing the embedding size limit for them.
-		return splitRangeByLength(content, 0, content.length).map((span, chunkIndex) => {
-			const chunkContent = span.text;
-
+		return splitTableRows(content).map((chunkContent, chunkIndex) => {
 			return {
 				chunkId: buildChunkId(page, chunkIndex, chunkContent),
 				chunkType: page.chunkType,
 				source: page.source,
 				pageIndex: page.pageIndex,
-				sectionPath: page.sectionPath ?? null,
 				chunkIndex,
 				content: chunkContent
 			};

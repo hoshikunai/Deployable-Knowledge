@@ -1,1 +1,0 @@
-export const DEFAULT_STRUCTURED_PDF_PARSING = false;

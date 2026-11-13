@@ -1,6 +1,6 @@
-import { installLayoutModel } from '#lib/server/rag/chunk/layout/heron-model';
+import { installTableModels } from '#lib/server/rag/chunk/tables/table-models';
 import { modelDownloadResponse } from '#lib/server/utils/model-download-response';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async () =>
-	modelDownloadResponse('Layout model download', (onProgress) => installLayoutModel(onProgress));
+	modelDownloadResponse('Table model download', (onProgress) => installTableModels(onProgress));

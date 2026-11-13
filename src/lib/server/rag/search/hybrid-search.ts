@@ -1,7 +1,6 @@
 import { searchSemantic } from './semantic-search';
 import { searchBm25 } from './bm25-search';
 import { rerankCandidates } from './cross-rerank';
-import { chunkPassageText } from '../chunk-passage';
 import {
 	type ScoredSearchMatch,
 	type SearchMatchBase,
@@ -57,7 +56,7 @@ async function collectMethodResults(options: SearchOptionsBase): Promise<{
 		query,
 		[...byChunkId.values()].map((match) => ({
 			chunkId: match.chunkId,
-			content: chunkPassageText(match)
+			content: match.content
 		}))
 	);
 	const hybridScored: ScoredSearchMatch[] = [];

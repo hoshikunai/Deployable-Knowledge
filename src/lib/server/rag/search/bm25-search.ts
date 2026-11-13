@@ -10,11 +10,6 @@ import {
 	type SearchResult
 } from './search-shared';
 
-// Section path hits count for less than body hits: a path is shared by every chunk in its section.
-const CONTENT_WEIGHT = 1.0;
-const SECTION_PATH_WEIGHT = 0.5;
-const RANK = `bm25(chunk_fts, ${CONTENT_WEIGHT}, ${SECTION_PATH_WEIGHT})`;
-
 export type Bm25SearchOptions = SearchOptionsBase;
 
 export type Bm25SearchMatch = ScoredSearchMatch;
@@ -72,13 +67,12 @@ export async function searchBm25(options: Bm25SearchOptions): Promise<Bm25Search
 				dc.chunk_index AS chunkIndex,
 				dc.chunk_type AS chunkType,
 				dc.content AS content,
-				dc.section_path AS sectionPath,
-				-${RANK} AS score
+				-bm25(chunk_fts) AS score
 			FROM chunk_fts
 			JOIN document_chunks dc ON dc.rowid = chunk_fts.rowid
 			JOIN documents d ON d.id = dc.document_id
 			WHERE chunk_fts MATCH ? AND ${conditions.join(' AND ')}
-			ORDER BY ${RANK}
+			ORDER BY bm25(chunk_fts)
 			LIMIT ?`,
 		args
 	});

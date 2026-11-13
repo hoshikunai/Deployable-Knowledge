@@ -109,9 +109,9 @@ export const API_DIAGNOSTICS = {
 	REPORT: '/diagnostics/report'
 };
 
-export const API_DOCUMENT_PARSING = {
-	BASE: '/document-parsing',
-	MODEL: '/document-parsing/model'
+export const API_TABLE_RECOGNITION = {
+	BASE: '/table-recognition',
+	MODELS: '/table-recognition/models'
 };
 
 export const API_EMBEDDING = {

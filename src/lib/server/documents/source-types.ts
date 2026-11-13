@@ -12,8 +12,8 @@ import { extractCsv } from '#lib/server/rag/chunk/tabular-extract';
 import { extractSpreadsheet } from '#lib/server/rag/chunk/spreadsheet-extract';
 import { chunkTranscript, extractTranscript } from '#lib/server/rag/chunk/transcript-extract';
 import { extractYoutubeTranscript } from '#lib/server/rag/chunk/youtube-extract';
-import { shouldUseStructuredParsing } from './document-parsing';
 import { convertOfficeToPdf } from './office-converter';
+import { shouldRecognizeTables } from './table-recognition';
 
 export type SourceTypeHandler = {
 	type: Document['sourceType'];
@@ -58,7 +58,7 @@ const pdfHandler: SourceTypeHandler = {
 		}
 	},
 	extract: async (source, onProgress) =>
-		extractText(source, onProgress, { structured: await shouldUseStructuredParsing() })
+		extractText(source, onProgress, { recognizeTables: await shouldRecognizeTables() })
 };
 
 const audioHandler: SourceTypeHandler = {

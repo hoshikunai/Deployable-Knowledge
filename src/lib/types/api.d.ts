@@ -372,6 +372,17 @@ export interface ApiLocalEmbeddingModelInfo {
 	downloaded: boolean;
 }
 
+export interface ApiTableRecognitionStatus {
+	/** Whether PDFs go through TableFormer table recognition when the models are present. */
+	enabled: boolean;
+	modelsInstalled: boolean;
+	modelsSizeBytes: number;
+}
+
+export interface ApiTableRecognitionUpdate {
+	enabled: boolean;
+}
+
 export interface ApiEmbeddingStatus {
 	settings: EmbeddingSettings;
 	providers: ApiEmbeddingProviderOption[];
@@ -382,17 +393,6 @@ export interface ApiEmbeddingStatus {
 	backend: EmbeddingBackend | null;
 	/** Chunks embedded by another model that are waiting to be re-embedded. */
 	pendingChunks: number;
-}
-
-export interface ApiDocumentParsingStatus {
-	/** Whether PDFs go through layout analysis when the model is present. */
-	structuredPdfParsing: boolean;
-	modelInstalled: boolean;
-	modelSizeBytes: number;
-}
-
-export interface ApiDocumentParsingUpdate {
-	structuredPdfParsing: boolean;
 }
 
 export interface ApiLocalModelInfo {

@@ -1,0 +1,1 @@
+ALTER TABLE `app_state` ADD `table_recognition` integer DEFAULT false NOT NULL;

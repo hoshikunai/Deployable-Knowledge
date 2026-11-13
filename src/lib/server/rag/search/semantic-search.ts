@@ -99,8 +99,7 @@ export async function searchSemantic(options: SearchOptionsBase): Promise<Semant
 			pageIndex: documentChunks.pageIndex,
 			chunkIndex: documentChunks.chunkIndex,
 			chunkType: documentChunks.chunkType,
-			content: documentChunks.content,
-			sectionPath: documentChunks.sectionPath
+			content: documentChunks.content
 		})
 		.from(documentChunks)
 		.innerJoin(documents, eq(documents.id, documentChunks.documentId))

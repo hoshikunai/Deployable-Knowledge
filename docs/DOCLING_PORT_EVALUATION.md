@@ -33,7 +33,7 @@ Docling on branch `test/docling`? Measured 2026-11-12 and re-run from scratch th
 | **P2, innermost section**  | P2 chunks, embedded with only the innermost section name.                                                                                                                                                                                                                                                                 |
 | **P2, tables as text (T)** | P2, except Heron's table regions are emitted as plain text in reading order instead of being rebuilt row by row. A one-line change, used to test whether table reconstruction causes the losses.                                                                                                                          |
 
-Not ported from Docling: TableFormer, docling-parse, the OCR/VLM stages, `HybridChunker` and
+Not ported from Docling: TableFormer (no ONNX export was known when the port was built), docling-parse, the OCR/VLM stages, `HybridChunker` and
 picture classification.
 
 ## Results
@@ -151,21 +151,92 @@ questions, not from randomness in the pipeline.
   run shows table quality is not what limits results. Its `HybridChunker` also prepends headings
   to chunks, so it would face the same trade-off as point 3.
 
-## If the branch is shelved
+## Outcome
 
-- **Keep:** `page-cleanup.ts` (running headers and footers, cross-page sentence joins, stranded
-  headings), the duplicate-table drop in `text-extract.ts`, and the long-OCR split in
-  `chunker.ts`. They run on the legacy path and are in the legacy numbers above.
-- **Remove:**
-  - `src/lib/server/rag/chunk/layout/`
-  - the `structured_pdf_parsing` setting, its endpoints, service, store and Settings section
-  - the `section_path` column and FTS column
-  - `chunk-passage.ts`
-  - the `.cache/layout` registration
-  - the Docling and Heron entries in `THIRD-PARTY-NOTICES.md`
-  - the User Guide and `DOCUMENTS_AND_SEARCH.md` text describing them
-- **Migrations 0006 and 0007 are uncommitted.** Delete them along with the schema changes rather
-  than shipping and reverting them.
+The layout pipeline was removed on 2026-11-13; it remains in commit `07891439` on `test/docling`.
+
+- **Kept on the legacy path:** the running header and footer strip and cross-page sentence joins
+  (`page-cleanup.ts`), the duplicate-table drop in `text-extract.ts`, and the long-OCR split in
+  `chunker.ts`. They are included in the legacy numbers above.
+- **Removed:** `src/lib/server/rag/chunk/layout/`, the structure-aware parsing setting, the
+  `section_path` column, migrations 0006 and 0007, and the related notices and docs. The
+  stranded-heading carry in `page-cleanup.ts` went too, because only layout chunks triggered it.
+- **TableFormer:** added instead as an optional setting; see the next section.
+
+## TableFormer table recognition (2026-11-13)
+
+**Settings → Documents → Table recognition**, off by default:
+
+- Heron finds the tables on each page.
+- A TypeScript port of TableFormer's inference reads them, using the ONNX exports of the
+  `accurate` model from the [docling.rs](https://github.com/docling-project/docling.rs) `models-v1`
+  release.
+- Each table becomes a TABLE chunk with one `Header: value; …` line per row.
+- The page text is indexed unchanged.
+- The setting downloads about 435 MB of models.
+- The code is in `src/lib/server/rag/chunk/tables/`.
+
+**The port matches Docling.** On 14 corpus tables, the port and `docling-ibm-models`' own PyTorch
+TableFormer were run on the same crops:
+
+- The tag sequences were identical on all 14.
+- The 384 cell boxes agree to within 2.4×10⁻⁷.
+- The port took 5.2 s in total vs 19.5 s for torch.
+
+**It finds tables pdf-parse can't.** pdf-parse only detects tables drawn with ruled lines and
+found none in the 8 test PDFs. Heron found tables that produced 420 TABLE chunks:
+
+| Document        | TABLE chunks |
+| --------------- | ------------ |
+| afi36-2406      | 234          |
+| afman11-2t-38v2 | 100          |
+| dafman36_2806   | 48           |
+| dafi36-2903     | 22           |
+| aetcman11-251   | 13           |
+| BrownBook       | 2            |
+| afman11-2t-38v3 | 1            |
+
+**Search results.** Both runs used the harness described below. The rebuilt legacy run
+reproduces the appendix's L ranks exactly (65 of 65).
+
+| Questions          | Search   | Legacy MRR | Tables MRR | Rank 1  | In top 10 |
+| ------------------ | -------- | ---------- | ---------- | ------- | --------- |
+| 65 original        | Hybrid   | 0.841      | 0.840      | 51 → 51 | 62 → 62   |
+| 16 table questions | Hybrid   | 0.620      | 0.664      | 8 → 9   | 13 → 14   |
+| 16 table questions | Semantic | 0.354      | 0.469      | 3 → 4   | 10 → 12   |
+| 16 table questions | BM25     | 0.526      | 0.575      | 6 → 7   | 14 → 14   |
+
+- **The original questions don't change.** None of them asks about table contents.
+- **On table questions it helps, but the evidence is weak.** The 16 questions are answered by a
+  table cell and scored by document and page.
+  - Hybrid gains +0.044 MRR (95% CI −0.135 to +0.204; 5 questions better, 3 worse).
+  - Semantic gains +0.115 (CI −0.021 to +0.260; 5 better, 1 worse).
+  - Sixteen questions are too few to rule out a tie.
+- **The clearest wins are answers legacy couldn't find at all:**
+  - the Distinguished Flying Cross citation wording (X10: not in top 10 → rank 5)
+  - the Fire Protection badge abbreviation (X13: not in top 10 → rank 2)
+  - the 25 ft wingtip clearance reference (X3: rank 3 → 1)
+- **Losses come from crowding.**
+  - Checkride grading tables on neighbouring pages use the same wording and push the right page
+    down (X8: 1 → 4, X9: 3 → 6).
+  - The appeal routing table (X16) drops out of the top 10 behind similar tables on adjacent pages.
+- **Ingest takes 2.1× as long.** The full corpus took 1,023 s vs 476 s (3,208 vs 2,788 chunks).
+  Most of the extra time is Heron, at about 0.4 s per page. Each table adds 0.25–0.7 s, and the
+  extra chunks need embedding.
+
+**Known limits:**
+
+- Letter-spaced headers come out spaced ("I T E M").
+- A few multi-line tables collapse into one row. The parity run shows this is the model's own
+  output.
+- Scanned pages are skipped.
+- Cells are filled by box overlap (Docling's `do_cell_matching=False` path). Docling's
+  1,000-line matching post-processor was not ported.
+
+**Verdict:** worth keeping as an opt-in. It costs nothing when off. When on, it makes tables
+findable that weren't indexed in any usable form before, and it doesn't hurt the original
+questions. The search gain on table questions is real in direction but not proven at this sample
+size, and ingest takes twice as long. That is why it stays off by default.
 
 ## Setup
 
@@ -273,3 +344,26 @@ tables as text.
 | T21 | How should the citation for a decoration be prepared?                                             | dafman36_2806   | 88–89   | 4 / 1 / 3 / 3            | 3 / 2 / 1 / 1          |
 | T22 | What does teamwork and partnership with other organizations look like for enlisted Airmen?        | BrownBook       | 12      | 1 / 1 / 1 / 1            | 1 / 1 / 1 / 1          |
 | T23 | What is the difference between mentoring and coaching for Airmen?                                 | BrownBook       | 23–24   | 1 / 1 / 1 / 1            | 1 / 1 / 1 / 1          |
+
+### Table questions
+
+Columns: legacy / table recognition.
+
+| #   | Question                                                                                            | Document        | Page | Semantic | Hybrid |
+| --- | --------------------------------------------------------------------------------------------------- | --------------- | ---- | -------- | ------ |
+| X1  | What pitch change gives a 500 feet per nautical mile descent?                                       | aetcman11-251   | 131  | 2 / 1    | 1 / 1  |
+| X2  | What entry airspeed is used for a loop?                                                             | aetcman11-251   | 57   | 4 / 4    | 4 / 2  |
+| X3  | What visual reference does the front cockpit use for 25 feet of wingtip clearance?                  | aetcman11-251   | 74   | 4 / 1    | 3 / 1  |
+| X4  | What CDI full scale deflection applies in terminal mode?                                            | aetcman11-251   | 138  | 1 / 2    | 2 / 1  |
+| X5  | How much time to impact is there after overbanking to 80 degrees from a 70 degree bank turn?        | aetcman11-251   | 169  | 1 / 1    | 1 / 1  |
+| X6  | What goes in the equipment block of the flight plan for the T-38?                                   | aetcman11-251   | 147  | — / —    | 1 / 1  |
+| X7  | How close to the time on target must I arrive using dead reckoning to get a qualified grade?        | afman11-2t-38v2 | 52   | 2 / 2    | 1 / 1  |
+| X8  | What makes a flight lead's pitchout unsatisfactory on a checkride?                                  | afman11-2t-38v2 | 45   | — / 2    | 1 / 4  |
+| X9  | What altitude tolerance on a low-level route earns a qualified grade?                               | afman11-2t-38v2 | 52   | 2 / 2    | 3 / 6  |
+| X10 | How does the citation open for a Distinguished Flying Cross awarded for achievement?                | dafman36_2806   | 91   | — / 4    | — / 5  |
+| X11 | What are the dates of the Kosovo Air Campaign?                                                      | dafman36_2806   | 170  | 1 / 1    | 1 / 1  |
+| X12 | Who is the approval authority for decorations for a centrally managed IMA reservist?                | dafman36_2806   | 24   | 2 / 2    | 1 / 1  |
+| X13 | What abbreviation is used for the Fire Protection badge?                                            | dafi36-2903     | 8    | — / —    | — / 2  |
+| X14 | What education and skill level is required for Staff Sergeant?                                      | BrownBook       | 26   | 6 / 2    | 1 / 1  |
+| X15 | How many Promote Now and Must Promote allocations are there when 30 to 36 members are eligible?     | afi36-2406      | 140  | — / —    | — / —  |
+| X16 | How does a participating Reserve or Guard member submit an evaluation appeal, and where does it go? | afi36-2406      | 264  | — / —    | 2 / —  |
