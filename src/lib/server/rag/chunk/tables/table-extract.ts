@@ -69,7 +69,13 @@ async function readPageTables(
 				);
 			}
 			if (content) {
-				chunks.push({ chunkType: 'TABLE', source, pageIndex: pageNumber - 1, content });
+				chunks.push({
+					chunkType: 'TABLE',
+					source,
+					pageIndex: pageNumber - 1,
+					content,
+					rowPerLine: true
+				});
 			}
 		}
 		return chunks;

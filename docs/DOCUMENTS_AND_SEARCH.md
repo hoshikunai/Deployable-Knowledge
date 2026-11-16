@@ -15,10 +15,6 @@
    | Audio            | Transcribed on your machine, with speaker labels |
    | YouTube          | The video's captions                             |
 
-   PDF text is cleaned before chunking: running headers and footers that repeat on most pages
-   are removed, tables already present in the page text are not indexed twice, and a sentence
-   cut by a page break is kept whole on the page where it starts.
-
    Tables come from pdf-parse by default, which only finds tables drawn with ruled lines. With
    **Settings → Documents → Table recognition** on, each page with a text layer is rendered and
    run through Docling's Heron layout model to find tables. Each table is then read by a

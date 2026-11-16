@@ -27,6 +27,8 @@ export type ExtractedChunk = {
 	content: DocumentChunk['content'];
 	timeline?: TranscriptTimelineEntry[];
 	speaker?: number;
+	// TableFormer tables hold one row per line, so they are chunked at row boundaries
+	rowPerLine?: boolean;
 };
 
 export type ParsedChunk = {

@@ -29,3 +29,19 @@ app.db-*
 /documents/
 /logs/
 .cache/
+
+# BEIR benchmark harness (local only, never tracked)
+/benchmarks/beir/
+/benchmarks/bench-gui/
+/benchmarks/rag-evaluation/
+/benchmarks/benchmark_lease.py
+/benchmarks/safe_supervisor.py
+/benchmarks/test_*.py
+
+# python virtual environments and caches
+.venv/
+.venv-*/
+venv/
+__pycache__/
+*.pyc
+*.duckdb

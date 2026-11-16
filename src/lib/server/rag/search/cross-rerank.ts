@@ -31,7 +31,8 @@ function validateScores(
 export async function rerankCandidates(
 	query: string,
 	candidates: RerankCandidate[],
-	crossEncoder?: CrossEncoder
+	crossEncoder?: CrossEncoder,
+	maxTokens?: number
 ): Promise<RerankedCandidate[]> {
 	const uniqueCandidates = [
 		...new Map(candidates.map((candidate) => [candidate.chunkId, candidate])).values()
@@ -43,7 +44,7 @@ export async function rerankCandidates(
 
 	const selectedCrossEncoder = crossEncoder ?? getActiveCrossEncoder();
 	const passages = uniqueCandidates.map((candidate) => candidate.content);
-	const scores = await selectedCrossEncoder.predict(query, passages);
+	const scores = await selectedCrossEncoder.predict(query, passages, maxTokens);
 
 	validateScores(selectedCrossEncoder, scores, uniqueCandidates.length);
 

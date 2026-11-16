@@ -5,9 +5,10 @@ import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
 import { createLogger } from '#lib/server/logging';
 import { TimeoutError, withTimeout } from '#lib/server/utils/with-timeout';
 import { installOcrData, OCR_DATA_DIR } from './ocr-data.ts';
-import { joinCrossPageSentences, stripRepeatedPageLines } from './page-cleanup.ts';
 import { extractPageImages, type PageImage, type PdfDocument } from './page-images.ts';
 import { collectRecognizedTables } from './tables/table-extract.ts';
+import { pdfPageCleanup } from './chunking-config.ts';
+import { joinCrossPageSentences, stripRepeatedPageLines } from './page-cleanup.ts';
 import {
 	normalizeWhitespace,
 	type ExtractedChunk as Chunk,
@@ -352,13 +353,16 @@ export async function extractText(
 			for (const table of tablesByPage.get(pageNumber) ?? []) {
 				const content = tableToText(table);
 
-				if (content && !isTableInPageText(table, nativeText)) {
+				if (content && !(pdfPageCleanup && isTableInPageText(table, nativeText))) {
 					chunks.push({ chunkType: 'TABLE', source: file, pageIndex, content });
 				}
 			}
 		}
 
-		return { chunks: cleanUpPages(chunks, file), pageCount: textResult.total };
+		return {
+			chunks: pdfPageCleanup ? cleanUpPages(chunks, file) : chunks,
+			pageCount: textResult.total
+		};
 	} finally {
 		await pdf.parser.destroy();
 	}

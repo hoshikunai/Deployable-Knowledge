@@ -155,9 +155,11 @@ questions, not from randomness in the pipeline.
 
 The layout pipeline was removed on 2026-11-13; it remains in commit `07891439` on `test/docling`.
 
-- **Kept on the legacy path:** the running header and footer strip and cross-page sentence joins
-  (`page-cleanup.ts`), the duplicate-table drop in `text-extract.ts`, and the long-OCR split in
-  `chunker.ts`. They are included in the legacy numbers above.
+- **Kept on the legacy path at first:** the running header and footer strip and cross-page
+  sentence joins (`page-cleanup.ts`), the duplicate-table drop in `text-extract.ts`, and the
+  long-OCR split in `chunker.ts`. They are included in the legacy numbers above. On 2026-11-16
+  they were reverted so the legacy chunker matches upstream `main`; their effect on retrieval was
+  never measured on its own.
 - **Removed:** `src/lib/server/rag/chunk/layout/`, the structure-aware parsing setting, the
   `section_path` column, migrations 0006 and 0007, and the related notices and docs. The
   stranded-heading carry in `page-cleanup.ts` went too, because only layout chunks triggered it.

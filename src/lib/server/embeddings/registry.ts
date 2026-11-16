@@ -2,9 +2,11 @@ import { LOCAL_MODEL_PROVIDER_ID } from '#lib/constants';
 import { CustomProvidersRepository } from '#lib/server/repositories';
 import { LlamaCppEmbeddingProvider } from './llamacpp';
 import { OpenAiCompatibleEmbeddingProvider } from './openai-compatible';
+import { TransformersEmbeddingProvider } from './transformers';
 import type { EmbeddingProvider } from './provider';
 
 export const localEmbeddingProvider = new LlamaCppEmbeddingProvider();
+export const benchmarkEmbeddingProvider = new TransformersEmbeddingProvider();
 
 export async function findEmbeddingProvider(id: string): Promise<EmbeddingProvider | null> {
 	if (id === LOCAL_MODEL_PROVIDER_ID) return localEmbeddingProvider;

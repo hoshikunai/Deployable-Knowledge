@@ -7,9 +7,11 @@ import {
 import type { EmbeddingSettings } from '#lib/types';
 import { getEmbeddingSettings, setEmbeddingSettings } from '#lib/server/database/app-state';
 import type { EmbeddingProvider } from '#lib/server/embeddings/provider';
-import { findEmbeddingProvider } from '#lib/server/embeddings/registry';
+import { benchmarkEmbeddingProvider, findEmbeddingProvider } from '#lib/server/embeddings/registry';
+import { BENCHMARK_EMBEDDING_MODELS } from '#lib/server/embeddings/transformers';
 
 const EMBEDDING_BATCH_SIZE = 16;
+const BENCHMARK_EMBEDDING_MODEL = process.env.RAG_EMBEDDING_MODEL?.trim() || null;
 
 type ActiveEmbedding = {
 	provider: EmbeddingProvider;
@@ -32,7 +34,23 @@ export function getCurrentEmbeddingSettings(): Promise<EmbeddingSettings> {
 	return cachedSettings;
 }
 
+function benchmarkEmbedding(model: string): ActiveEmbedding {
+	if (!BENCHMARK_EMBEDDING_MODELS.some((candidate) => candidate.id === model)) {
+		const known = BENCHMARK_EMBEDDING_MODELS.map((candidate) => candidate.id).join(', ');
+		throw new Error(`RAG_EMBEDDING_MODEL "${model}" is not registered (known: ${known}).`);
+	}
+
+	const provider = benchmarkEmbeddingProvider;
+	return {
+		provider,
+		settings: { provider: provider.id, model, device: 'cpu' },
+		key: `${provider.id}/${model}`
+	};
+}
+
 export async function getActiveEmbedding(): Promise<ActiveEmbedding> {
+	if (BENCHMARK_EMBEDDING_MODEL) return benchmarkEmbedding(BENCHMARK_EMBEDDING_MODEL);
+
 	const current = await getCurrentEmbeddingSettings();
 	const provider = await findEmbeddingProvider(current.provider);
 	if (!provider) throw new Error('The embedding provider no longer exists.');

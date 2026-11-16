@@ -13,7 +13,7 @@ import type { EmbeddingBackend } from '#lib/types';
 import { createLogger } from '#lib/server/logging';
 import { AUTO_GPU, createGgufDownloader } from '#lib/server/providers/llamacpp-runtime';
 import { INFERENCE_THREADS } from '#lib/server/utils/inference-threads';
-import { EmbeddingProvider, normalizeVector } from './provider';
+import { EmbeddingProvider, normalizeVector, type TokenCounter } from './provider';
 
 // Kept apart from `models/`, which the chat provider lists as chat models.
 const MODELS_DIR = resolve(process.cwd(), '.cache', 'embeddings');
@@ -76,6 +76,17 @@ export class LlamaCppEmbeddingProvider extends EmbeddingProvider {
 			}
 			return vectors;
 		});
+	}
+
+	override async createTokenCounter(
+		fileName: string,
+		device: EmbeddingDevice
+	): Promise<TokenCounter> {
+		const { model } = await this.serialize(() => this.load(fileName, device));
+		return {
+			maxTokens: model.trainContextSize - 3,
+			count: (text) => model.tokenize(text).length
+		};
 	}
 
 	override unload(): Promise<void> {

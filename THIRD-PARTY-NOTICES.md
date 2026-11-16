@@ -149,6 +149,9 @@ By downloading a Gemma model through this application, you agree to those terms.
   speaker embedding model, trained on VoxCeleb. CC-BY-4.0.
 - `cross-encoder/ettin-reranker-32m-v1` — default cross-encoder reranking. Apache-2.0.
 - `Xenova/ms-marco-MiniLM-L-6-v2` — alternative cross-encoder reranking. Apache-2.0.
+- `Xenova/bge-small-en-v1.5` — benchmark-only embeddings, downloaded only when
+  `RAG_EMBEDDING_MODEL` selects it for a retrieval benchmark and never offered in Settings.
+  Transformers.js conversion of `BAAI/bge-small-en-v1.5`. MIT.
 - `tesseract-ocr/tessdata` `eng.traineddata` (4.1.0) — OCR language data. Apache-2.0.
 - `docling-project/docling-layout-heron-onnx` — finds tables on PDF pages for table recognition
   (optional download). ONNX export of the Docling Heron layout model. Apache-2.0.

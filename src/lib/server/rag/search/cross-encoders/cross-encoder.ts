@@ -3,10 +3,15 @@ import type { DownloadProgressHandler } from '#lib/server/utils/download-progres
 export interface CrossEncoder {
 	readonly id: string;
 	readonly name: string;
+	readonly maxSupportedTokens: number;
 
 	isInstalled(): Promise<boolean>;
 	prepare(onProgress: DownloadProgressHandler): Promise<void>;
-	predict(query: string, passages: readonly string[]): Promise<readonly number[]>;
+	predict(
+		query: string,
+		passages: readonly string[],
+		maxTokens?: number
+	): Promise<readonly number[]>;
 }
 
 export function sigmoidScore(value: number): number {

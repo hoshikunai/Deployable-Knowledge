@@ -3,6 +3,7 @@ import type { ApiDocumentIngestProgress, Document } from '#lib/types';
 import { createLogger } from '#lib/server/logging';
 import { handlerForPath, handlerForType } from '#lib/server/documents/source-types';
 import { chunkPages } from '#lib/server/rag/chunk/chunker';
+import { loadChunkBudget, pdfPageCleanup } from '#lib/server/rag/chunk/chunking-config';
 import { assembleChunks } from '#lib/server/rag/chunk/assemble-chunks';
 import type { Source } from '#lib/server/rag/chunk/parse-shared';
 import { storeDocumentChunks } from './embedding';
@@ -53,7 +54,13 @@ export async function ingestDocument(
 	const extraction = await extract(source, (ratio, message) => report(ratio * 50, message));
 
 	const chunks =
-		handler.chunk?.(extraction) ?? assembleChunks(extraction.chunks, chunkPages(extraction.chunks));
+		handler.chunk?.(extraction) ??
+		assembleChunks(
+			extraction.chunks,
+			chunkPages(extraction.chunks, await loadChunkBudget(), {
+				splitLongImages: pdfPageCleanup
+			})
+		);
 
 	if (chunks.length === 0) throw new Error(identity.emptyResultMessage);
 	const shouldEmbed = source.type !== 'CSV';

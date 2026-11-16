@@ -1,6 +1,11 @@
 import type { EmbeddingDevice, EmbeddingTask } from '#lib/constants';
 import type { EmbeddingBackend } from '#lib/types';
 
+export type TokenCounter = {
+	maxTokens: number;
+	count(text: string): number;
+};
+
 export abstract class EmbeddingProvider {
 	abstract id: string;
 	abstract name: string;
@@ -15,6 +20,10 @@ export abstract class EmbeddingProvider {
 
 	async isInstalled(_model: string): Promise<boolean> {
 		return true;
+	}
+
+	async createTokenCounter(_model: string, _device: EmbeddingDevice): Promise<TokenCounter> {
+		throw new Error(`${this.name} cannot size chunks by tokens.`);
 	}
 
 	backend(): EmbeddingBackend | null {

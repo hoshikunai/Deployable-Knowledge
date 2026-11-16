@@ -4,7 +4,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, normalizePath } from 'vite';
 
-const UNWATCHED_RUNTIME_PATHS = ['./documents/', './app.db'].map((path) =>
+const UNWATCHED_RUNTIME_PATHS = ['./documents/', './app.db', './benchmarks/'].map((path) =>
 	normalizePath(fileURLToPath(new URL(path, import.meta.url)))
 );
 
