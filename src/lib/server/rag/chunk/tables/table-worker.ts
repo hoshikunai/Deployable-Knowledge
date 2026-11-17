@@ -35,7 +35,13 @@ const LAYERS = 6;
 const T = { start: 2, end: 3, ecel: 4, fcel: 5, lcel: 6, ucel: 7, xcel: 8, nl: 9, ched: 10, rhed: 11, srow: 12 };
 const BOX_TAGS = new Set([T.fcel, T.ecel, T.ched, T.rhed, T.srow, T.nl, T.ucel]);
 
-const options = { intraOpNumThreads: workerData.threads, interOpNumThreads: 1, graphOptimizationLevel: "all" };
+const options = {
+	intraOpNumThreads: workerData.threads,
+	interOpNumThreads: 1,
+	graphOptimizationLevel: "all",
+	enableCpuMemArena: false,
+	enableMemPattern: false
+};
 let sessions;
 const ready = Promise.all([
 	ort.InferenceSession.create(workerData.paths.layout, options),
