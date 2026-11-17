@@ -1,0 +1,54 @@
+{
+  "unit": "page",
+  "source": "eval-assets questions.json, table-questions.json",
+  "documents": [
+    {
+      "id": "afi36-2406",
+      "file": "pdfs/afi36-2406.pdf",
+      "pages": 302,
+      "sha256": "c43e4d361db427022d148734402b979211026d00fce3b87ce4c791bb3bc1a58e"
+    },
+    {
+      "id": "aetcman11-251",
+      "file": "pdfs/aetcman11-251.pdf",
+      "pages": 203,
+      "sha256": "3104b32cf4aa2b1adae4e57a0390a2736a6f758d38b3bd7c95cd8b038298932e"
+    },
+    {
+      "id": "dafman36_2806",
+      "file": "pdfs/dafman36_2806.pdf",
+      "pages": 231,
+      "sha256": "057631e71de46bf259f3b797231ad5eaa2212584158ceb5f06dc97a52ddd2866"
+    },
+    {
+      "id": "dafi36-2903",
+      "file": "pdfs/dafi36-2903.pdf",
+      "pages": 165,
+      "sha256": "fd7d9f5c416b1b8e6c66a506a144663cb5ddb83c690c70f16e7f04701bce080b"
+    },
+    {
+      "id": "afman11-2t-38v3",
+      "file": "pdfs/afman11-2t-38v3.pdf",
+      "pages": 59,
+      "sha256": "5300f0c13308ac279f20e2f3ebe054cd074f4e571168966861858cca22f8df31"
+    },
+    {
+      "id": "afman11-2t-38v2",
+      "file": "pdfs/afman11-2t-38v2.pdf",
+      "pages": 66,
+      "sha256": "f9e8d698ae74f71284151a9cae52556f992f30bca3b765fda5c96411a59de680"
+    },
+    {
+      "id": "dafi90-160",
+      "file": "pdfs/dafi90-160.pdf",
+      "pages": 17,
+      "sha256": "2c210c2b2416a960c82868ccee89d20d8f9800703f820c9d0ddbc718454fe584"
+    },
+    {
+      "id": "BrownBook",
+      "file": "pdfs/BrownBook.pdf",
+      "pages": 28,
+      "sha256": "01379f757fa11f8953255ff87efecd5e917f3629bd33b89f0f6748fcbf79ffc5"
+    }
+  ]
+}

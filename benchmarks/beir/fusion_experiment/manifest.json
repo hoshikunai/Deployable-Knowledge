@@ -1,0 +1,74 @@
+{
+  "runs": {
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-train-all-20260929-200502-008850",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-dev-all-20260929-203740-279132",
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.75], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-w1x0.75-train-all-20260929-203813-321208",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.75], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-w1x0.75-dev-all-20260929-204103-259535",
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-w1x0.5-train-all-20260929-204133-761905",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-w1x0.5-dev-all-20260929-204422-084404",
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 0.75]]]": "scifact-rrf-p100-o20-w0.75x1-train-all-20260929-204454-615935",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 0.75]]]": "nfcorpus-rrf-p100-o20-w0.75x1-dev-all-20260929-204739-932455",
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 0.5]]]": "scifact-rrf-p100-o20-w0.5x1-train-all-20260929-204811-959901",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 0.5]]]": "nfcorpus-rrf-p100-o20-w0.5x1-dev-all-20260929-205057-812071",
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"sum-top2\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-w1x0.5-os2-train-all-20260929-205132-358716",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"sum-top2\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-w1x0.5-os2-dev-all-20260929-205429-421347",
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"document\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-w1x0.5-fdoc-train-all-20260929-205502-481033",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"document\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-w1x0.5-fdoc-dev-all-20260929-205739-701834",
+    "[\"scifact\", \"rrf\", \"all\", \"train\", [[\"documentOrder\", \"sum-top2\"], [\"fusionLevel\", \"document\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-w1x0.5-fdoc-os2-train-all-20260929-205810-204893",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"dev\", [[\"documentOrder\", \"sum-top2\"], [\"fusionLevel\", \"document\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-w1x0.5-fdoc-os2-dev-all-20260929-210054-601128",
+    "[\"scifact\", \"rrf\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-all-20260929-212036-536847",
+    "[\"scifact\", \"rrf\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-p100-o20-w1x0.5-all-20260929-212114-616054",
+    "[\"scifact\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-ettin-p100-s40-o20-all-20260929-212149-652449",
+    "[\"scifact\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"on\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-ettin-p100-s40-o20-rt-all-20260930-124438-785733",
+    "[\"scifact\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-124933-676803",
+    "[\"scifact\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"on\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-125359-443431",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-all-20260930-125839-005538",
+    "[\"nfcorpus\", \"rrf\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-p100-o20-w1x0.5-all-20260930-125909-056720",
+    "[\"nfcorpus\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260930-125938-577912",
+    "[\"nfcorpus\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"on\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-ettin-p100-s40-o20-rt-all-20260930-130404-571446",
+    "[\"nfcorpus\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-130843-166011",
+    "[\"nfcorpus\", \"rrf-ettin\", \"all\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"on\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-131314-658603",
+    "[\"arguana\", \"rrf\", \"300\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "arguana-rrf-p100-o20-300q-seed42-20260930-131753-826241",
+    "[\"arguana\", \"rrf\", \"300\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "arguana-rrf-p100-o20-w1x0.5-300q-seed42-20260930-132039-148868",
+    "[\"arguana\", \"rrf-ettin\", \"300\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260930-132322-889666",
+    "[\"arguana\", \"rrf-ettin\", \"300\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"on\"], [\"rrfBm25Weight\", 1.0], [\"rrfSemanticWeight\", 1.0]]]": "arguana-rrf-ettin-p100-s40-o20-rt-300q-seed42-20260930-133359-713949",
+    "[\"arguana\", \"rrf-ettin\", \"300\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"off\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-300q-seed42-20260930-134436-991905",
+    "[\"arguana\", \"rrf-ettin\", \"300\", \"test\", [[\"documentOrder\", \"none\"], [\"fusionLevel\", \"chunk\"], [\"rerankTitle\", \"on\"], [\"rrfBm25Weight\", 0.5], [\"rrfSemanticWeight\", 1.0]]]": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-rt-300q-seed42-20260930-135501-124192"
+  },
+  "chosen": {
+    "fusion": {
+      "rrfSemanticWeight": 1.0,
+      "rrfBm25Weight": 0.5,
+      "fusionLevel": "chunk",
+      "documentOrder": "none",
+      "rerankTitle": "off"
+    },
+    "tuningAverageNdcg10": 0.5405249999999999
+  },
+  "test": {
+    "scifact": {
+      "RRF \u00b7 baseline": "scifact-rrf-p100-o20-all-20260929-212036-536847",
+      "RRF \u00b7 tuned": "scifact-rrf-p100-o20-w1x0.5-all-20260929-212114-616054",
+      "RRF + Ettin \u00b7 baseline": "scifact-rrf-ettin-p100-s40-o20-all-20260929-212149-652449",
+      "RRF + Ettin \u00b7 title": "scifact-rrf-ettin-p100-s40-o20-rt-all-20260930-124438-785733",
+      "RRF + Ettin \u00b7 tuned": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-124933-676803",
+      "RRF + Ettin \u00b7 tuned + title": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-125359-443431"
+    },
+    "nfcorpus": {
+      "RRF \u00b7 baseline": "nfcorpus-rrf-p100-o20-all-20260930-125839-005538",
+      "RRF \u00b7 tuned": "nfcorpus-rrf-p100-o20-w1x0.5-all-20260930-125909-056720",
+      "RRF + Ettin \u00b7 baseline": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260930-125938-577912",
+      "RRF + Ettin \u00b7 title": "nfcorpus-rrf-ettin-p100-s40-o20-rt-all-20260930-130404-571446",
+      "RRF + Ettin \u00b7 tuned": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-130843-166011",
+      "RRF + Ettin \u00b7 tuned + title": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-131314-658603"
+    },
+    "arguana": {
+      "RRF \u00b7 baseline": "arguana-rrf-p100-o20-300q-seed42-20260930-131753-826241",
+      "RRF \u00b7 tuned": "arguana-rrf-p100-o20-w1x0.5-300q-seed42-20260930-132039-148868",
+      "RRF + Ettin \u00b7 baseline": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260930-132322-889666",
+      "RRF + Ettin \u00b7 title": "arguana-rrf-ettin-p100-s40-o20-rt-300q-seed42-20260930-133359-713949",
+      "RRF + Ettin \u00b7 tuned": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-300q-seed42-20260930-134436-991905",
+      "RRF + Ettin \u00b7 tuned + title": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-rt-300q-seed42-20260930-135501-124192"
+    }
+  }
+}

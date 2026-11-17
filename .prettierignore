@@ -5,3 +5,5 @@ release/
 drizzle/
 .claude/
 src/lib/server/user-guide/chapters/*.md
+benchmarks/beir/datasets/
+benchmarks/beir/*_experiment/

@@ -30,13 +30,9 @@ app.db-*
 /logs/
 .cache/
 
-# BEIR benchmark harness (local only, never tracked)
-/benchmarks/beir/
-/benchmarks/bench-gui/
-/benchmarks/rag-evaluation/
-/benchmarks/benchmark_lease.py
-/benchmarks/safe_supervisor.py
-/benchmarks/test_*.py
+# BEIR benchmark run output
+/benchmarks/beir/runs/
+/benchmarks/rag-evaluation/runs/
 
 # python virtual environments and caches
 .venv/

@@ -1,0 +1,472 @@
+{
+  "tuning": {
+    "weights 1:1 \u00b7 chunk fusion \u00b7 order none": {
+      "scifact train": {
+        "ndcg10": 0.7336,
+        "recall10": 0.85344,
+        "mrr10": 0.70135,
+        "runId": "scifact-rrf-p100-o20-train-all-20260929-200502-008850"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.33635,
+        "recall10": 0.1615,
+        "mrr10": 0.5294,
+        "runId": "nfcorpus-rrf-p100-o20-dev-all-20260929-203740-279132"
+      }
+    },
+    "weights 1:0.75 \u00b7 chunk fusion \u00b7 order none": {
+      "scifact train": {
+        "ndcg10": 0.73363,
+        "recall10": 0.85045,
+        "mrr10": 0.70245,
+        "runId": "scifact-rrf-p100-o20-w1x0.75-train-all-20260929-203813-321208"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.33913,
+        "recall10": 0.16251,
+        "mrr10": 0.53573,
+        "runId": "nfcorpus-rrf-p100-o20-w1x0.75-dev-all-20260929-204103-259535"
+      }
+    },
+    "weights 1:0.5 \u00b7 chunk fusion \u00b7 order none": {
+      "scifact train": {
+        "ndcg10": 0.74125,
+        "recall10": 0.85416,
+        "mrr10": 0.7128,
+        "runId": "scifact-rrf-p100-o20-w1x0.5-train-all-20260929-204133-761905"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.3398,
+        "recall10": 0.16206,
+        "mrr10": 0.54067,
+        "runId": "nfcorpus-rrf-p100-o20-w1x0.5-dev-all-20260929-204422-084404"
+      }
+    },
+    "weights 0.75:1 \u00b7 chunk fusion \u00b7 order none": {
+      "scifact train": {
+        "ndcg10": 0.73302,
+        "recall10": 0.85035,
+        "mrr10": 0.70207,
+        "runId": "scifact-rrf-p100-o20-w0.75x1-train-all-20260929-204454-615935"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.33453,
+        "recall10": 0.15829,
+        "mrr10": 0.53852,
+        "runId": "nfcorpus-rrf-p100-o20-w0.75x1-dev-all-20260929-204739-932455"
+      }
+    },
+    "weights 0.5:1 \u00b7 chunk fusion \u00b7 order none": {
+      "scifact train": {
+        "ndcg10": 0.72798,
+        "recall10": 0.84788,
+        "mrr10": 0.69596,
+        "runId": "scifact-rrf-p100-o20-w0.5x1-train-all-20260929-204811-959901"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.33093,
+        "recall10": 0.1562,
+        "mrr10": 0.53927,
+        "runId": "nfcorpus-rrf-p100-o20-w0.5x1-dev-all-20260929-205057-812071"
+      }
+    },
+    "weights 1:0.5 \u00b7 chunk fusion \u00b7 order sum-top2": {
+      "scifact train": {
+        "ndcg10": 0.59216,
+        "recall10": 0.83294,
+        "mrr10": 0.52847,
+        "runId": "scifact-rrf-p100-o20-w1x0.5-os2-train-all-20260929-205132-358716"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.30467,
+        "recall10": 0.14617,
+        "mrr10": 0.50019,
+        "runId": "nfcorpus-rrf-p100-o20-w1x0.5-os2-dev-all-20260929-205429-421347"
+      }
+    },
+    "weights 1:0.5 \u00b7 document fusion \u00b7 order none": {
+      "scifact train": {
+        "ndcg10": 0.73924,
+        "recall10": 0.85416,
+        "mrr10": 0.70926,
+        "runId": "scifact-rrf-p100-o20-w1x0.5-fdoc-train-all-20260929-205502-481033"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.33862,
+        "recall10": 0.16161,
+        "mrr10": 0.53804,
+        "runId": "nfcorpus-rrf-p100-o20-w1x0.5-fdoc-dev-all-20260929-205739-701834"
+      }
+    },
+    "weights 1:0.5 \u00b7 document fusion \u00b7 order sum-top2": {
+      "scifact train": {
+        "ndcg10": 0.52155,
+        "recall10": 0.61417,
+        "mrr10": 0.5053,
+        "runId": "scifact-rrf-p100-o20-w1x0.5-fdoc-os2-train-all-20260929-205810-204893"
+      },
+      "nfcorpus dev": {
+        "ndcg10": 0.27845,
+        "recall10": 0.12099,
+        "mrr10": 0.49497,
+        "runId": "nfcorpus-rrf-p100-o20-w1x0.5-fdoc-os2-dev-all-20260929-210054-601128"
+      }
+    }
+  },
+  "test": {
+    "scifact": {
+      "RRF \u00b7 baseline": {
+        "ndcg10": 0.73377,
+        "recall10": 0.86411,
+        "mrr10": 0.6979,
+        "chunksPerTop10Document": 1.9575555555555555,
+        "foundByBothRetrievers": 0.3309259259259259,
+        "runId": "scifact-rrf-p100-o20-all-20260929-212036-536847"
+      },
+      "RRF \u00b7 tuned": {
+        "ndcg10": 0.73214,
+        "recall10": 0.85689,
+        "mrr10": 0.7011,
+        "chunksPerTop10Document": 1.962925925925926,
+        "foundByBothRetrievers": 0.3313333333333333,
+        "runId": "scifact-rrf-p100-o20-w1x0.5-all-20260929-212114-616054",
+        "vsBaseline": {
+          "baseline": "scifact-rrf-p100-o20-all-20260929-212036-536847",
+          "candidate": "scifact-rrf-p100-o20-w1x0.5-all-20260929-212114-616054",
+          "queries": 300,
+          "baselineNdcg10": 0.7337665471466592,
+          "candidateNdcg10": 0.7321413228942575,
+          "delta": -0.0016252242524018015,
+          "pValue": 0.81785,
+          "wins": 33,
+          "ties": 243,
+          "losses": 24,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 baseline": {
+        "ndcg10": 0.73252,
+        "recall10": 0.85078,
+        "mrr10": 0.69947,
+        "chunksPerTop10Document": 2.077148148148148,
+        "foundByBothRetrievers": 0.2842962962962963,
+        "runId": "scifact-rrf-ettin-p100-s40-o20-all-20260929-212149-652449"
+      },
+      "RRF + Ettin \u00b7 title": {
+        "ndcg10": 0.74027,
+        "recall10": 0.85744,
+        "mrr10": 0.70937,
+        "chunksPerTop10Document": 2.034148148148148,
+        "foundByBothRetrievers": 0.288962962962963,
+        "runId": "scifact-rrf-ettin-p100-s40-o20-rt-all-20260930-124438-785733",
+        "vsBaseline": {
+          "baseline": "scifact-rrf-ettin-p100-s40-o20-all-20260929-212149-652449",
+          "candidate": "scifact-rrf-ettin-p100-s40-o20-rt-all-20260930-124438-785733",
+          "queries": 300,
+          "baselineNdcg10": 0.7325196486663592,
+          "candidateNdcg10": 0.7402677569575851,
+          "delta": 0.0077481082912259506,
+          "pValue": 0.3325,
+          "wins": 39,
+          "ties": 233,
+          "losses": 28,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 tuned": {
+        "ndcg10": 0.72637,
+        "recall10": 0.84233,
+        "mrr10": 0.69375,
+        "chunksPerTop10Document": 2.105814814814815,
+        "foundByBothRetrievers": 0.285962962962963,
+        "runId": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-124933-676803",
+        "vsBaseline": {
+          "baseline": "scifact-rrf-ettin-p100-s40-o20-all-20260929-212149-652449",
+          "candidate": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-124933-676803",
+          "queries": 300,
+          "baselineNdcg10": 0.7325196486663592,
+          "candidateNdcg10": 0.72636952538372,
+          "delta": -0.006150123282639148,
+          "pValue": 0.46535,
+          "wins": 35,
+          "ties": 231,
+          "losses": 34,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 tuned + title": {
+        "ndcg10": 0.73438,
+        "recall10": 0.84456,
+        "mrr10": 0.70487,
+        "chunksPerTop10Document": 2.059037037037037,
+        "foundByBothRetrievers": 0.29514814814814816,
+        "runId": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-125359-443431",
+        "vsBaseline": {
+          "baseline": "scifact-rrf-ettin-p100-s40-o20-all-20260929-212149-652449",
+          "candidate": "scifact-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-125359-443431",
+          "queries": 300,
+          "baselineNdcg10": 0.7325196486663592,
+          "candidateNdcg10": 0.7343768839034724,
+          "delta": 0.0018572352371133269,
+          "pValue": 0.84695,
+          "wins": 42,
+          "ties": 230,
+          "losses": 28,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      }
+    },
+    "nfcorpus": {
+      "RRF \u00b7 baseline": {
+        "ndcg10": 0.35447,
+        "recall10": 0.17221,
+        "mrr10": 0.56386,
+        "chunksPerTop10Document": 1.986687306501548,
+        "foundByBothRetrievers": 0.2993808049535604,
+        "runId": "nfcorpus-rrf-p100-o20-all-20260930-125839-005538"
+      },
+      "RRF \u00b7 tuned": {
+        "ndcg10": 0.35396,
+        "recall10": 0.16591,
+        "mrr10": 0.57087,
+        "chunksPerTop10Document": 1.9736842105263157,
+        "foundByBothRetrievers": 0.29845201238390096,
+        "runId": "nfcorpus-rrf-p100-o20-w1x0.5-all-20260930-125909-056720",
+        "vsBaseline": {
+          "baseline": "nfcorpus-rrf-p100-o20-all-20260930-125839-005538",
+          "candidate": "nfcorpus-rrf-p100-o20-w1x0.5-all-20260930-125909-056720",
+          "queries": 323,
+          "baselineNdcg10": 0.35447463165425974,
+          "candidateNdcg10": 0.3539567418329654,
+          "delta": -0.0005178898212944024,
+          "pValue": 0.85285,
+          "wins": 68,
+          "ties": 190,
+          "losses": 65,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 baseline": {
+        "ndcg10": 0.34269,
+        "recall10": 0.1649,
+        "mrr10": 0.54888,
+        "chunksPerTop10Document": 2.0473684210526315,
+        "foundByBothRetrievers": 0.23808049535603715,
+        "runId": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260930-125938-577912"
+      },
+      "RRF + Ettin \u00b7 title": {
+        "ndcg10": 0.34325,
+        "recall10": 0.16423,
+        "mrr10": 0.55361,
+        "chunksPerTop10Document": 2.0092879256965945,
+        "foundByBothRetrievers": 0.24891640866873066,
+        "runId": "nfcorpus-rrf-ettin-p100-s40-o20-rt-all-20260930-130404-571446",
+        "vsBaseline": {
+          "baseline": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260930-125938-577912",
+          "candidate": "nfcorpus-rrf-ettin-p100-s40-o20-rt-all-20260930-130404-571446",
+          "queries": 323,
+          "baselineNdcg10": 0.34269329733888493,
+          "candidateNdcg10": 0.34324680617781933,
+          "delta": 0.0005535088389344334,
+          "pValue": 0.8794,
+          "wins": 91,
+          "ties": 155,
+          "losses": 77,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 tuned": {
+        "ndcg10": 0.33654,
+        "recall10": 0.16342,
+        "mrr10": 0.54167,
+        "chunksPerTop10Document": 2.0473684210526315,
+        "foundByBothRetrievers": 0.24396284829721362,
+        "runId": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-130843-166011",
+        "vsBaseline": {
+          "baseline": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260930-125938-577912",
+          "candidate": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-all-20260930-130843-166011",
+          "queries": 323,
+          "baselineNdcg10": 0.34269329733888493,
+          "candidateNdcg10": 0.3365404617298577,
+          "delta": -0.006152835609027232,
+          "pValue": 0.10985,
+          "wins": 76,
+          "ties": 167,
+          "losses": 80,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 tuned + title": {
+        "ndcg10": 0.3381,
+        "recall10": 0.16171,
+        "mrr10": 0.5511,
+        "chunksPerTop10Document": 2.013931888544892,
+        "foundByBothRetrievers": 0.24736842105263157,
+        "runId": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-131314-658603",
+        "vsBaseline": {
+          "baseline": "nfcorpus-rrf-ettin-p100-s40-o20-all-20260930-125938-577912",
+          "candidate": "nfcorpus-rrf-ettin-p100-s40-o20-w1x0.5-rt-all-20260930-131314-658603",
+          "queries": 323,
+          "baselineNdcg10": 0.34269329733888493,
+          "candidateNdcg10": 0.3380980305265561,
+          "delta": -0.0045952668123287336,
+          "pValue": 0.27505,
+          "wins": 88,
+          "ties": 139,
+          "losses": 96,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      }
+    },
+    "arguana": {
+      "RRF \u00b7 baseline": {
+        "ndcg10": 0.54949,
+        "recall10": 0.83,
+        "mrr10": 0.46075,
+        "chunksPerTop10Document": 1.4275859788359788,
+        "foundByBothRetrievers": 0.5575462962962963,
+        "runId": "arguana-rrf-p100-o20-300q-seed42-20260930-131753-826241"
+      },
+      "RRF \u00b7 tuned": {
+        "ndcg10": 0.53809,
+        "recall10": 0.83,
+        "mrr10": 0.44661,
+        "chunksPerTop10Document": 1.4349351851851853,
+        "foundByBothRetrievers": 0.5597685185185185,
+        "runId": "arguana-rrf-p100-o20-w1x0.5-300q-seed42-20260930-132039-148868",
+        "vsBaseline": {
+          "baseline": "arguana-rrf-p100-o20-300q-seed42-20260930-131753-826241",
+          "candidate": "arguana-rrf-p100-o20-w1x0.5-300q-seed42-20260930-132039-148868",
+          "queries": 300,
+          "baselineNdcg10": 0.5494949834864562,
+          "candidateNdcg10": 0.5380861547780567,
+          "delta": -0.011408828708399519,
+          "pValue": 0.09965,
+          "wins": 33,
+          "ties": 203,
+          "losses": 64,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 baseline": {
+        "ndcg10": 0.60145,
+        "recall10": 0.83,
+        "mrr10": 0.52725,
+        "chunksPerTop10Document": 1.3907037037037038,
+        "foundByBothRetrievers": 0.4349537037037037,
+        "runId": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260930-132322-889666"
+      },
+      "RRF + Ettin \u00b7 title": {
+        "ndcg10": 0.62991,
+        "recall10": 0.86667,
+        "mrr10": 0.55296,
+        "chunksPerTop10Document": 1.3824074074074075,
+        "foundByBothRetrievers": 0.440212962962963,
+        "runId": "arguana-rrf-ettin-p100-s40-o20-rt-300q-seed42-20260930-133359-713949",
+        "vsBaseline": {
+          "baseline": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260930-132322-889666",
+          "candidate": "arguana-rrf-ettin-p100-s40-o20-rt-300q-seed42-20260930-133359-713949",
+          "queries": 300,
+          "baselineNdcg10": 0.6014548476166078,
+          "candidateNdcg10": 0.6299134013028214,
+          "delta": 0.028458553686213625,
+          "pValue": 0.00155,
+          "wins": 70,
+          "ties": 191,
+          "losses": 39,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 tuned": {
+        "ndcg10": 0.6046,
+        "recall10": 0.85,
+        "mrr10": 0.52551,
+        "chunksPerTop10Document": 1.4011693121693123,
+        "foundByBothRetrievers": 0.4335555555555555,
+        "runId": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-300q-seed42-20260930-134436-991905",
+        "vsBaseline": {
+          "baseline": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260930-132322-889666",
+          "candidate": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-300q-seed42-20260930-134436-991905",
+          "queries": 300,
+          "baselineNdcg10": 0.6014548476166078,
+          "candidateNdcg10": 0.6046034726592834,
+          "delta": 0.003148625042675436,
+          "pValue": 0.62935,
+          "wins": 37,
+          "ties": 227,
+          "losses": 36,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      },
+      "RRF + Ettin \u00b7 tuned + title": {
+        "ndcg10": 0.62689,
+        "recall10": 0.87667,
+        "mrr10": 0.54648,
+        "chunksPerTop10Document": 1.3871481481481482,
+        "foundByBothRetrievers": 0.44062962962962965,
+        "runId": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-rt-300q-seed42-20260930-135501-124192",
+        "vsBaseline": {
+          "baseline": "arguana-rrf-ettin-p100-s40-o20-300q-seed42-20260930-132322-889666",
+          "candidate": "arguana-rrf-ettin-p100-s40-o20-w1x0.5-rt-300q-seed42-20260930-135501-124192",
+          "queries": 300,
+          "baselineNdcg10": 0.6014548476166078,
+          "candidateNdcg10": 0.6268874423915821,
+          "delta": 0.02543259477497415,
+          "pValue": 0.00535,
+          "wins": 71,
+          "ties": 182,
+          "losses": 47,
+          "bm25Identical": true,
+          "semanticIdentical": true,
+          "corpusDifferences": [],
+          "retrievers": "yes",
+          "unexpectedRetrieverDifference": false
+        }
+      }
+    }
+  }
+}
