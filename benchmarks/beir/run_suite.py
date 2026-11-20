@@ -32,9 +32,24 @@ SHARED_EMBEDDING_CACHE = REPOSITORY_ROOT / ".cache" / "embeddings"
 SHARED_TABLE_CACHE = REPOSITORY_ROOT / ".cache" / "tables"
 SHARED_OCR_CACHE = REPOSITORY_ROOT / ".cache" / "tessdata"
 sys.path.insert(0, str(REPOSITORY_ROOT))
-from benchmarks.benchmark_lease import (terminate_group, MemoryWatchdog, memory_preflight,
+from benchmarks.benchmark_lease import (MemoryWatchdog, memory_preflight,
     BenchmarkLease, TimedOutError, MemoryPausedError)
 from benchmarks.benchmark_lease import start_identity, atomic_json
+from benchmarks.process_group import WINDOWS, interrupt_signals, new_group_kwargs, terminate_group
+
+
+def is_directory_link(path: Path) -> bool:
+    """A link to a shared cache (a symlink, or a junction on Windows); never followed or emptied."""
+    return path.is_symlink() or path.is_junction()
+
+
+def link_directory(link: Path, target: Path) -> None:
+    """Junctions on Windows need neither admin rights nor Developer Mode, unlike symlinks."""
+    if WINDOWS:
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
 
 
 def port_is_available(port: int) -> bool:
@@ -159,8 +174,8 @@ def prepare_runtime(dataset: str, share_model_cache: bool, runtime_id: str | Non
             cache_parent = runtime / ".cache"
             cache_parent.mkdir(parents=True, exist_ok=True)
             runtime_cache = cache_parent / shared.name
-            if not runtime_cache.exists() and not runtime_cache.is_symlink():
-                runtime_cache.symlink_to(shared.resolve(), target_is_directory=True)
+            if not runtime_cache.exists() and not is_directory_link(runtime_cache):
+                link_directory(runtime_cache, shared.resolve())
 
     return runtime
 
@@ -189,7 +204,7 @@ def validate_existing_runtime_schema(runtime: Path, dataset: str | None = None,
         if not marker.is_file() or json.loads(marker.read_text()).get("dataset") != dataset:
             raise RuntimeError("Existing runtime dataset marker mismatch")
     database_path = runtime / "app.db"
-    with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as database:
+    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as database:
         existing_tables = {
             row[0]
             for row in database.execute(
@@ -333,7 +348,7 @@ def start_server(
         env=environment,
         stdout=log_file,
         stderr=subprocess.STDOUT,
-        start_new_session=True,
+        **new_group_kwargs(),
     )
     marker = runtime / 'benchmark-owner.json'
     atomic_json(marker, {'pid':process.pid,'startIdentity':start_identity(process.pid),'pgid':process.pid,'command':'node '+str(SERVER_ENTRYPOINT),'runtimePath':str(runtime.resolve()),'port':port,'heartbeatAt':time.time()})
@@ -464,7 +479,7 @@ def run_dataset(
             command += ["--pdf-prepare-runtime", str(runtime)]
         if getattr(arguments, "resume", False):
             command.append("--resume")
-        child = subprocess.Popen(command, cwd=REPOSITORY_ROOT, start_new_session=True)
+        child = subprocess.Popen(command, cwd=REPOSITORY_ROOT, **new_group_kwargs())
         resume_command = (f"python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume "
                           f"--dataset {dataset} --run-name {run_name} "
                           f"--search-depth {arguments.search_depth} "
@@ -491,12 +506,8 @@ def run_dataset(
         try:
             child.wait(timeout=1)
         except subprocess.TimeoutExpired:
-            os.killpg(child.pid, signal.SIGTERM)
-            try:
-                child.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                os.killpg(child.pid, signal.SIGKILL)
-                child.wait(timeout=15)
+            terminate_group(child.pid)
+            child.wait(timeout=15)
             raise
         if child.returncode:
             raise subprocess.CalledProcessError(child.returncode, command)
@@ -555,7 +566,7 @@ def main() -> None:
     results: list[dict[str, Any]] = []
     previous_handlers = {
         signum: signal.getsignal(signum)
-        for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+        for signum in interrupt_signals()
     }
 
     def interrupted(signum: int, _frame: object) -> None:

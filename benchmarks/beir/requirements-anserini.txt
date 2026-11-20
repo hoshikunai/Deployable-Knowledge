@@ -1,0 +1,2 @@
+# Only for anserini_bge_rrf.py (needs Java); not installed on Windows.
+pyserini==2.4.0

@@ -5,10 +5,8 @@ from __future__ import annotations
 import asyncio
 import atexit
 import json
-import os
 import re
 import shutil
-import signal
 import subprocess
 import sys
 import threading
@@ -26,6 +24,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 import paths
+from benchmarks.process_group import interrupt_group, new_group_kwargs, terminate_group
 from corpora import (DOCUMENT_PARSING, EMBEDDING_DEVICES, EMBEDDING_MODELS, copy_marker, delete_copy,
                      list_corpora)
 from jobs import (
@@ -133,7 +132,7 @@ class Runner:
         if process is None or process.poll() is not None:
             raise HTTPException(409, "Nothing is running")
         self.log("Cancelling: the app server and search process are being stopped…")
-        os.killpg(process.pid, signal.SIGINT)
+        interrupt_group(process.pid)
         threading.Thread(target=self.force_stop, args=(process,), daemon=True).start()
 
     def force_stop(self, process: subprocess.Popen[str]) -> None:
@@ -141,7 +140,7 @@ class Runner:
             process.wait(timeout=CANCEL_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
             self.log("Cancel grace period passed; terminating.")
-            os.killpg(process.pid, signal.SIGTERM)
+            terminate_group(process.pid)
 
     def work(self) -> None:
         while True:
@@ -164,13 +163,13 @@ class Runner:
     def run_item(self, item: str) -> None:
         if item == BUILD_ITEM:
             self.log("Building the app (npm run build:electron)…")
-            command = ["npm", "run", "build:electron"]
+            command = [shutil.which("npm") or "npm", "run", "build:electron"]
         else:
             self.log(f"Starting {item}")
             command = [sys.executable, "-u", str(paths.BENCH_ROOT / "bench.py"), "run-one", item]
         process = subprocess.Popen(
             command, cwd=paths.REPOSITORY_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, start_new_session=True,
+            text=True, bufsize=1, **new_group_kwargs(),
         )
         with self.lock:
             self.process = process
@@ -187,11 +186,11 @@ class Runner:
         if process is None or process.poll() is not None:
             return
         print("Stopping the running job before exit…", flush=True)
-        os.killpg(process.pid, signal.SIGINT)
+        interrupt_group(process.pid)
         try:
             process.wait(timeout=CANCEL_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGTERM)
+            terminate_group(process.pid)
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:

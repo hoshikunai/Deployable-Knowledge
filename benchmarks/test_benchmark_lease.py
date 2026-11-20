@@ -21,6 +21,36 @@ class LeaseTests(unittest.TestCase):
         finally: child.terminate(); child.wait()
     def test_stale_reused_pid_not_killed(self):
         self.assertFalse(lease.verified_owner({'pid': os.getpid(), 'startIdentity': 'wrong', 'command':'benchmark'}))
+    def test_start_identity_is_stable_and_absent_for_dead_pids(self):
+        self.assertEqual(lease.start_identity(os.getpid()), lease.start_identity(os.getpid()))
+        child = subprocess.Popen([sys.executable, '-c', 'pass']); child.wait()
+        self.assertIsNone(lease.start_identity(child.pid))
+        self.assertEqual(lease.rss_bytes(child.pid), 0)
+        self.assertEqual(lease.descendants(child.pid), [])
+
+    def test_memory_preflight_uses_system_memory(self):
+        with patch.object(lease, 'system_memory', return_value=(8*1024**3, 4*1024**3)):
+            self.assertEqual(lease.memory_preflight()['memAvailable'], 8*1024**3)
+        with patch.object(lease, 'system_memory', return_value=(1024**3, 4*1024**3)):
+            with self.assertRaisesRegex(RuntimeError, 'insufficient memory'):
+                lease.memory_preflight()
+        available, swap = lease.system_memory()
+        self.assertGreater(available, 0); self.assertGreaterEqual(swap, 0)
+
+    def test_lock_is_exclusive_until_released(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d)/'lock'
+            with open(path, 'a+') as first, open(path, 'a+') as second:
+                self.assertTrue(lease.lock_exclusive(first))
+                probe = subprocess.run([sys.executable, '-c',
+                    'import sys; sys.path.insert(0, sys.argv[2]); from benchmarks import benchmark_lease as l; '
+                    'print(l.lock_exclusive(open(sys.argv[1], "a+")))', str(path), str(Path(lease.ROOT))],
+                    capture_output=True, text=True, check=True)
+                self.assertEqual(probe.stdout.strip(), 'False')
+                lease.unlock(first)
+                self.assertTrue(lease.lock_exclusive(second))
+                lease.unlock(second)
+
     def test_watchdog_transition(self):
         with tempfile.TemporaryDirectory() as d:
             w=lease.MemoryWatchdog(os.getpid(), ceiling=1, warning=1, samples_path=Path(d)/'s', status_path=Path(d)/'m', resume_command='resume')

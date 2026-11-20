@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 from dataclasses import asdict
 
@@ -174,8 +175,16 @@ def command_gui(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def raise_keyboard_interrupt(signum: int, _frame: object) -> None:
+    raise KeyboardInterrupt(f"stopped by signal {signum}")
+
+
 def command_run_one(arguments: argparse.Namespace) -> int:
     """Internal: the GUI runs each queued job in its own process through this command."""
+    # The GUI cancels with CTRL_BREAK_EVENT on Windows, whose default action exits at once.
+    # Raising KeyboardInterrupt instead stops the app server and saves the job, as SIGINT does.
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, raise_keyboard_interrupt)
     return 0 if run_job(load_job(arguments.run_id)) == "complete" else 1
 
 

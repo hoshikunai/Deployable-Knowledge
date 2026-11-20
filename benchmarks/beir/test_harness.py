@@ -402,6 +402,36 @@ class DeviceClient(FakeClient):
         return super().ingest_document(title, text)
 
 
+class SharedCacheLinkTests(unittest.TestCase):
+    def test_windows_links_shared_caches_with_junctions_once(self) -> None:
+        import sys
+        import types
+        import run_suite
+
+        created: list[tuple[str, str]] = []
+
+        def create_junction(target: str, link: str) -> None:
+            created.append((target, link))
+            Path(link).symlink_to(target, target_is_directory=True)
+
+        fake_winapi = types.SimpleNamespace(CreateJunction=create_junction)
+        with tempfile.TemporaryDirectory() as root:
+            shared = Path(root) / "shared-tables"
+            shared.mkdir()
+            with (patch.object(run_suite, "RUNTIME_ROOT", Path(root) / "runtimes"),
+                  patch.object(run_suite, "SHARED_MODEL_CACHE", Path(root) / "missing"),
+                  patch.object(run_suite, "SHARED_EMBEDDING_CACHE", Path(root) / "missing"),
+                  patch.object(run_suite, "SHARED_OCR_CACHE", Path(root) / "missing"),
+                  patch.object(run_suite, "SHARED_TABLE_CACHE", shared),
+                  patch.object(run_suite, "WINDOWS", True),
+                  patch.dict(sys.modules, {"_winapi": fake_winapi})):
+                runtime = run_suite.prepare_runtime("scifact", share_model_cache=True)
+                run_suite.prepare_runtime("scifact", share_model_cache=True)
+            link = runtime / ".cache" / "shared-tables"
+            self.assertEqual(created, [(str(shared.resolve()), str(link))])
+            self.assertTrue(run_suite.is_directory_link(link))
+
+
 class EmbeddingDeviceTests(unittest.TestCase):
     def test_auto_leaves_the_app_default_alone(self) -> None:
         client = DeviceClient(backend="vulkan")

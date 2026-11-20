@@ -1,9 +1,18 @@
 """Exclusive, memory-aware supervision primitives for local benchmark runs."""
 from __future__ import annotations
 
-import fcntl, json, os, signal, time
+import json, os, sys, time
 from contextlib import contextmanager
 from pathlib import Path
+
+import psutil
+
+from benchmarks.process_group import WINDOWS, terminate_group
+
+if WINDOWS:
+    import msvcrt
+else:
+    import fcntl
 
 ROOT = Path(__file__).resolve().parents[1]
 LEASE_PATH = ROOT / ".cache" / "benchmark-lease.lock"
@@ -39,70 +48,40 @@ def atomic_json(path: Path, value: dict) -> None:
     os.replace(tmp, path)
 
 def start_identity(pid: int) -> str | None:
+    """A process's start time, which tells a live owner apart from a reused PID."""
     try:
-        fields = Path(f"/proc/{pid}/stat").read_text().split()
-        return fields[21]
-    except (OSError, IndexError):
+        return repr(psutil.Process(pid).create_time())
+    except psutil.Error:
         return None
 
 def rss_bytes(pid: int) -> int:
     try:
-        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
-            if line.startswith("VmRSS:"):
-                return int(line.split()[1]) * 1024
-    except OSError:
-        pass
-    return 0
+        return psutil.Process(pid).memory_info().rss
+    except psutil.Error:
+        return 0
 
 def descendants(root_pid: int) -> list[int]:
-    children: dict[int, list[int]] = {}
-    for proc in Path("/proc").glob("[0-9]*"):
-        try:
-            data = (proc / "stat").read_text().split()
-            children.setdefault(int(data[3]), []).append(int(data[0]))
-        except (OSError, ValueError, IndexError):
-            continue
-    result: list[int] = []
-    queue = [root_pid]
-    while queue:
-        parent = queue.pop(0)
-        for child in children.get(parent, []):
-            result.append(child); queue.append(child)
-    return result
+    try:
+        return [child.pid for child in psutil.Process(root_pid).children(recursive=True)]
+    except psutil.Error:
+        return []
 
 def tree_rss(root_pid) -> tuple[int, list[int]]:
     roots = [root_pid] if isinstance(root_pid, int) else list(root_pid)
     pids = list(dict.fromkeys(pid for root in roots for pid in [root] + descendants(root)))
     return sum(rss_bytes(pid) for pid in pids), pids
 
+def system_memory() -> tuple[int, int]:
+    """Available memory and free swap (MemAvailable/SwapFree; the page file on Windows)."""
+    return psutil.virtual_memory().available, psutil.swap_memory().free
+
 def memory_preflight(min_available=4*1024**3, min_swap=2*1024**3) -> dict:
-    values = {}
-    for line in Path("/proc/meminfo").read_text().splitlines():
-        key, _, value = line.partition(":")
-        if value.strip().endswith(" kB"):
-            values[key] = int(value.split()[0]) * 1024
-    result = {"memAvailable": values.get("MemAvailable", 0), "swapFree": values.get("SwapFree", 0),
+    available, swap = system_memory()
+    result = {"memAvailable": available, "swapFree": swap,
               "minMemAvailable": min_available, "minSwapFree": min_swap}
     if result["memAvailable"] < min_available or result["swapFree"] < min_swap:
         raise RuntimeError(f"insufficient memory headroom: {result}")
     return result
-
-def terminate_group(pgid: int, term_wait=10, poll_interval=.1) -> None:
-    try: os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError: return
-    deadline = time.monotonic() + term_wait
-    while time.monotonic() < deadline:
-        live = False
-        for proc in Path('/proc').glob('[0-9]*'):
-            try:
-                fields=(proc/'stat').read_text().split()
-                if int(fields[4]) == pgid and fields[2] not in ('Z','X'):
-                    live=True; break
-            except (OSError, ValueError, IndexError): pass
-        if not live: return
-        time.sleep(poll_interval)
-    try: os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError: pass
 
 class MemoryWatchdog:
     """Poll an owned process tree; callers stop work when ``poll`` returns true."""
@@ -115,17 +94,10 @@ class MemoryWatchdog:
         self.root_pid, self.ceiling, self.warning = root_pid, ceiling, warning
         self.interval, self.status_path, self.samples_path = interval, Path(status_path), Path(samples_path)
         self.resume_command, self.peak = resume_command, 0
-        self.read_memory = read_memory or self._read_memory
+        self.read_memory = read_memory or system_memory
         self.global_warning_mem, self.global_stop_mem = global_warning_mem, global_stop_mem
         self.global_warning_swap, self.global_stop_swap = global_warning_swap, global_stop_swap
         self.last = None
-    @staticmethod
-    def _read_memory():
-        values={}
-        for line in Path('/proc/meminfo').read_text().splitlines():
-            key,_,val=line.partition(':')
-            if val.strip().endswith(' kB'): values[key]=int(val.split()[0])*1024
-        return values.get('MemAvailable',0), values.get('SwapFree',0)
     def poll(self):
         total, pids = tree_rss(self.root_pid); self.peak = max(self.peak, total)
         available, swap = self.read_memory()
@@ -152,7 +124,8 @@ def verified_owner(metadata: dict) -> bool:
 def cleanup_verified(metadata: dict) -> bool:
     if not verified_owner(metadata): return False
     pgid = metadata.get("pgid")
-    if not isinstance(pgid, int) or os.getpgid(metadata["pid"]) != pgid: return False
+    if not isinstance(pgid, int): return False
+    if not WINDOWS and os.getpgid(metadata["pid"]) != pgid: return False
     terminate_group(pgid); return True
 
 def scan_markers(roots) -> list[dict]:
@@ -179,6 +152,25 @@ def validate_status(value: dict) -> None:
     if value['status']=='blocked-active-run' and 'activeOwner' not in value:
         raise ValueError('missing activeOwner')
 
+def lock_exclusive(handle) -> bool:
+    """Take a non-blocking exclusive lock on an open file; False if another process holds it."""
+    try:
+        if WINDOWS:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, PermissionError, OSError):
+        return False
+    return True
+
+def unlock(handle) -> None:
+    if WINDOWS:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+
 class BenchmarkLease:
     def __init__(self, *, lease_path=None, meta_path=None, **metadata):
         self.lease_path = Path(lease_path) if lease_path is not None else LEASE_PATH
@@ -187,14 +179,13 @@ class BenchmarkLease:
     def __enter__(self):
         self.lease_path.parent.mkdir(parents=True, exist_ok=True)
         self.fd = open(self.lease_path, "a+")
-        try: fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+        if not lock_exclusive(self.fd):
             self.fd.close(); self.fd = None
             raise RuntimeError(f"blocked-active-run: {self.meta_path}")
         self.metadata = {"schemaVersion": SCHEMA, "pid": os.getpid(),
                          "startIdentity": start_identity(os.getpid()),
-                         "pgid": os.getpgid(os.getpid()),
-                         "command": " ".join(os.sys.argv), "createdAt": time.time(),
+                         "pgid": os.getpid() if WINDOWS else os.getpgid(os.getpid()),
+                         "command": " ".join(sys.argv), "createdAt": time.time(),
                          "heartbeatAt": time.time(), **self.metadata}
         atomic_json(self.meta_path, self.metadata)
         return self
@@ -204,7 +195,7 @@ class BenchmarkLease:
         try:
             if self.meta_path.exists() and json.loads(self.meta_path.read_text()).get("pid") == os.getpid(): self.meta_path.unlink()
         finally:
-            fcntl.flock(self.fd, fcntl.LOCK_UN); self.fd.close(); self.fd = None
+            unlock(self.fd); self.fd.close(); self.fd = None
 
 @contextmanager
 def lease(**metadata):

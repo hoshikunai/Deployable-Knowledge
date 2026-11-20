@@ -24,7 +24,7 @@ import paths
 from dataset_catalog import (DATASETS, DOCUMENT_PARSING_MODES, EMBEDDING_DEVICE_SETTINGS,
                              QUERY_SPLITS, is_pdf_dataset)
 from run_prepared_benchmarks import PREPARED_MAPPINGS
-from run_suite import validate_existing_runtime_schema
+from run_suite import is_directory_link, validate_existing_runtime_schema
 
 DEFAULT_VARIANT = "001"
 
@@ -172,7 +172,7 @@ def count_judged_queries(dataset: str, split: str = "test") -> int | None:
 
 
 def count_chunks(runtime: Path) -> int:
-    with sqlite3.connect(f"file:{runtime / 'app.db'}?mode=ro", uri=True) as database:
+    with sqlite3.connect((runtime / "app.db").resolve().as_uri() + "?mode=ro", uri=True) as database:
         return database.execute("SELECT COUNT(*) FROM document_chunks").fetchone()[0]
 
 
@@ -333,9 +333,27 @@ RUNTIME_PREFIX = "runtime-"
 
 
 def folder_size(folder: Path) -> int:
-    """Bytes on disk, not following the shared model-cache links."""
-    return sum(path.lstat().st_size for path in folder.rglob("*")
-               if path.is_file() and not path.is_symlink())
+    """Bytes on disk, not following the shared model-cache links (symlinks or junctions)."""
+    total = 0
+    for entry in folder.iterdir():
+        if is_directory_link(entry):
+            continue
+        if entry.is_dir():
+            total += folder_size(entry)
+        elif entry.is_file():
+            total += entry.lstat().st_size
+    return total
+
+
+def remove_links(folder: Path) -> None:
+    """Remove links to the shared caches first, so deleting a copy never reaches their files."""
+    for entry in folder.iterdir():
+        if entry.is_junction():
+            entry.rmdir()
+        elif entry.is_symlink():
+            entry.unlink()
+        elif entry.is_dir():
+            remove_links(entry)
 
 
 def copy_variant(marker: dict[str, Any]) -> tuple[str, Chunking, str, str, str]:
@@ -396,5 +414,6 @@ def copy_marker(runtime_name: str) -> dict[str, Any]:
 def delete_copy(runtime_name: str) -> Path:
     """Remove a corpus copy; links to the shared model caches are removed, not their targets."""
     runtime = copy_path(runtime_name)
+    remove_links(runtime)
     shutil.rmtree(runtime)
     return runtime

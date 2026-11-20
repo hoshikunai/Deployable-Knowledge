@@ -2,7 +2,8 @@
 from __future__ import annotations
 import argparse, os, signal, subprocess, time
 from pathlib import Path
-from benchmarks.benchmark_lease import BenchmarkLease, MemoryWatchdog, terminate_group, atomic_json
+from benchmarks.benchmark_lease import BenchmarkLease, MemoryWatchdog, atomic_json
+from benchmarks.process_group import interrupt_signals, new_group_kwargs, terminate_group
 
 def main():
  p=argparse.ArgumentParser(); p.add_argument('--status',required=True); p.add_argument('--checkpoint',required=True); p.add_argument('--metrics',required=True); p.add_argument('--resume-command',required=True); p.add_argument('--ceiling',type=int,default=7*1024**3); p.add_argument('--timeout',type=float,default=300); p.add_argument('command',nargs=argparse.REMAINDER); a=p.parse_args()
@@ -11,9 +12,9 @@ def main():
  def stop(sig, _frame):
   nonlocal reason
   reason='interrupted'; raise KeyboardInterrupt
- for sig in (signal.SIGTERM,signal.SIGINT,signal.SIGHUP): signal.signal(sig, stop)
+ for sig in interrupt_signals(): signal.signal(sig, stop)
  with BenchmarkLease(runName='supervised-fake'):
-  child=subprocess.Popen(a.command, start_new_session=True)
+  child=subprocess.Popen(a.command, **new_group_kwargs())
   try:
    watch=MemoryWatchdog(child.pid, ceiling=a.ceiling, warning=max(1,a.ceiling-1), resume_command=a.resume_command, status_path=status, samples_path=status.with_suffix('.samples.jsonl'))
    deadline=time.monotonic()+a.timeout

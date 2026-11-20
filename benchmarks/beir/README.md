@@ -15,7 +15,22 @@ From the repository root:
 python3 -m venv benchmarks/beir/.venv
 benchmarks/beir/.venv/bin/python -m pip install \
   -r benchmarks/beir/requirements.txt
+# Only for anserini_bge_rrf.py, which also needs Java:
+benchmarks/beir/.venv/bin/python -m pip install \
+  -r benchmarks/beir/requirements-anserini.txt
 ```
+
+On Windows (PowerShell, Python 3.12 through the `py` launcher), install only the core file:
+
+```powershell
+py -3.12 -m venv benchmarks\beir\.venv
+benchmarks\beir\.venv\Scripts\python.exe -m pip install -r benchmarks\beir\requirements.txt
+```
+
+The bench GUI, `run_suite.py` and `run.py` run on Linux and Windows: process control goes
+through `benchmarks/process_group.py`, and the shared model caches are linked into each corpus
+copy as junctions on Windows (no admin rights or Developer Mode needed). The older wrappers
+`full_beir_plan.py`, `run_prepared_benchmarks.py` and the dedup/fusion experiments are Linux-only.
 
 ## Download additional corpora
 

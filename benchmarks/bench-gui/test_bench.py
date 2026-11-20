@@ -380,6 +380,18 @@ class PipelineLabelTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_run_one_turns_ctrl_break_into_keyboard_interrupt(self) -> None:
+        import signal
+        import bench
+
+        installed = {}
+        with patch.object(signal, "SIGBREAK", 21, create=True), \
+                patch.object(signal, "signal", lambda signum, handler: installed.update({signum: handler})), \
+                patch.object(bench, "load_job"), patch.object(bench, "run_job", return_value="complete"):
+            self.assertEqual(bench.command_run_one(SimpleNamespace(run_id="job")), 0)
+        with self.assertRaises(KeyboardInterrupt):
+            installed[21](21, None)
+
     def test_no_command_opens_gui(self) -> None:
         self.assertEqual(parse_arguments([]).command, "gui")
 
@@ -523,6 +535,36 @@ class CorpusCopyTests(unittest.TestCase):
             self.assertFalse(runtime.exists())
             self.assertTrue((Path(shared) / "model.onnx").is_file())
             self.assertTrue((root / "runtime-plain").is_dir())
+
+    def test_junctions_to_shared_caches_are_never_followed_or_emptied(self) -> None:
+        # A symlink stands in for a Windows junction: is_junction says yes, is_symlink says no.
+        real_rmdir = Path.rmdir
+        removed: list[str] = []
+
+        def fake_rmdir(path: Path) -> None:
+            if path.name == "tables":
+                removed.append(path.name)
+                path.unlink()
+                return
+            real_rmdir(path)
+
+        with tempfile.TemporaryDirectory() as runtime_root, \
+                tempfile.TemporaryDirectory() as shared, \
+                patch.object(corpora.paths, "RUNTIME_ROOT", Path(runtime_root)):
+            runtime = self.make_copy(Path(runtime_root), "runtime-scifact-cpu",
+                                     {"dataset": "scifact", "state": "prepared"})
+            (Path(shared) / "model.onnx").write_text("x" * 5000)
+            (runtime / ".cache").mkdir()
+            (runtime / ".cache" / "tables").symlink_to(shared, target_is_directory=True)
+            with patch.object(Path, "is_junction", lambda path: path.name == "tables"), \
+                    patch.object(Path, "is_symlink", lambda path: False), \
+                    patch.object(Path, "rmdir", fake_rmdir):
+                size = corpora.folder_size(runtime)
+                corpora.delete_copy("runtime-scifact-cpu")
+            self.assertLess(size, 5000)
+            self.assertEqual(removed, ["tables"])
+            self.assertFalse(runtime.exists())
+            self.assertEqual((Path(shared) / "model.onnx").read_text(), "x" * 5000)
 
     def test_regenerate_uses_the_copy_variant_not_saved_settings(self) -> None:
         marker = {"dataset": "scifact", "state": "prepared", "embeddingModel": "bge-small-en-v1.5",
