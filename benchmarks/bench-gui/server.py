@@ -163,8 +163,8 @@ class Runner:
 
     def run_item(self, item: str) -> None:
         if item == BUILD_ITEM:
-            self.log("Building the app (npm run build:electron)…")
-            command = [shutil.which("npm") or "npm", "run", "build:electron"]
+            self.log("Building the app (npm run build)…")
+            command = [shutil.which("npm") or "npm", "run", "build"]
         else:
             if not self.sync_before(item):
                 return

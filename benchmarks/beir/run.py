@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import closing
+
 import argparse
 import copy
 import json
@@ -77,7 +79,7 @@ def verify_server_pipeline(
     pdf_page_cleanup: bool | None = None,
 ) -> None:
     response = client.search(query=probe_query, top_k=1)
-    rebuild = "Rebuild with 'npm run build:electron' if the server predates this support."
+    rebuild = "Rebuild with 'npm run build' if the server predates this support."
     if pdf_page_cleanup is not None and response.get("pdfPageCleanup") is not pdf_page_cleanup:
         raise RuntimeError(
             "Server PDF cleanups do not match the corpus copy "
@@ -897,7 +899,7 @@ def device_mapping_fields(embedding_device: str) -> dict[str, str]:
 
 def committed_pdfs(runtime: Path, dataset_path: Path, documents: list[dict[str, Any]]) -> dict[str, str]:
     """Recover PDF checkpoints from the same transaction that commits a document and its chunks."""
-    with sqlite3.connect((runtime / "app.db").resolve().as_uri() + "?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect((runtime / "app.db").resolve().as_uri() + "?mode=ro", uri=True)) as db:
         stored = dict(db.execute("SELECT source_path, id FROM documents"))
     if not stored:
         return {}

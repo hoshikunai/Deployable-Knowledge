@@ -231,7 +231,7 @@ def main() -> None:
 
         memory_preflight()
         with BenchmarkLease(runName="beir-build", dataset="preflight"):
-            subprocess.run(["npm", "run", "build:electron"], cwd=ROOT, check=True)
+            subprocess.run(["npm", "run", "build"], cwd=ROOT, check=True)
     if not (ROOT / "build" / "index.js").is_file() and not arguments.dry_run:
         raise RuntimeError("Application server build is missing; omit --skip-build")
     for dataset, mapping in mappings.items():

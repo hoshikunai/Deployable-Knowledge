@@ -30,7 +30,8 @@ benchmarks\beir\.venv\Scripts\python.exe -m pip install -r benchmarks\beir\requi
 The bench GUI, `run_suite.py` and `run.py` run on Linux and Windows: process control goes
 through `benchmarks/process_group.py`, and the shared model caches are linked into each corpus
 copy as junctions on Windows (no admin rights or Developer Mode needed). The older wrappers
-`full_beir_plan.py`, `run_prepared_benchmarks.py` and the dedup/fusion experiments are Linux-only.
+`full_beir_plan.py`, `run_prepared_benchmarks.py`, `safe_supervisor.py` and the dedup/fusion experiments
+are Linux-only.
 
 ## Download additional corpora
 
@@ -163,7 +164,7 @@ protocol. No answer generation or reranker-only evaluation is included.
 Build the SvelteKit adapter-node server first:
 
 ```bash
-npm run build:electron
+npm run build
 ```
 
 Then run a first cross-dataset suite:

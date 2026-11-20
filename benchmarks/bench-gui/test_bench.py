@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -20,7 +21,7 @@ import corpora
 import jobs
 import scores
 from bench import parse_arguments, parse_seeds
-from run_suite import chunking_environment, pipeline_environment, vulkan_environment
+from run_suite import chunking_environment, link_directory, pipeline_environment, vulkan_environment
 from runs import describe_pipeline, pipeline_key
 
 FIXED_TIME = datetime(2026, 9, 28, 12, 0, 0, 123456, tzinfo=timezone.utc)
@@ -591,7 +592,7 @@ class CorpusCopyTests(unittest.TestCase):
             runtime = self.make_copy(root, "runtime-scifact-t256o32",
                                      {"dataset": "scifact", "state": "prepared"})
             (Path(shared) / "model.onnx").write_text("weights")
-            (runtime / "tables").symlink_to(shared, target_is_directory=True)
+            link_directory(runtime / "tables", Path(shared))
             self.make_copy(root, "runtime-plain", None)
             for name in ("..", "runtime-../x", "scifact", "runtime-plain", "runtime-missing"):
                 with self.assertRaises((ValueError, FileNotFoundError)):
@@ -602,7 +603,9 @@ class CorpusCopyTests(unittest.TestCase):
             self.assertTrue((root / "runtime-plain").is_dir())
 
     def test_junctions_to_shared_caches_are_never_followed_or_emptied(self) -> None:
-        # A symlink stands in for a Windows junction: is_junction says yes, is_symlink says no.
+        # On Windows the link is a real junction. Elsewhere a symlink stands in for one:
+        # is_junction says yes, is_symlink says no, and rmdir removes the link.
+        from contextlib import ExitStack
         real_rmdir = Path.rmdir
         removed: list[str] = []
 
@@ -620,14 +623,18 @@ class CorpusCopyTests(unittest.TestCase):
                                      {"dataset": "scifact", "state": "prepared"})
             (Path(shared) / "model.onnx").write_text("x" * 5000)
             (runtime / ".cache").mkdir()
-            (runtime / ".cache" / "tables").symlink_to(shared, target_is_directory=True)
-            with patch.object(Path, "is_junction", lambda path: path.name == "tables"), \
-                    patch.object(Path, "is_symlink", lambda path: False), \
-                    patch.object(Path, "rmdir", fake_rmdir):
+            link_directory(runtime / ".cache" / "tables", Path(shared))
+            with ExitStack() as patches:
+                if sys.platform != "win32":
+                    patches.enter_context(patch.object(Path, "is_junction",
+                                                       lambda path: path.name == "tables"))
+                    patches.enter_context(patch.object(Path, "is_symlink", lambda path: False))
+                    patches.enter_context(patch.object(Path, "rmdir", fake_rmdir))
                 size = corpora.folder_size(runtime)
                 corpora.delete_copy("runtime-scifact-cpu")
             self.assertLess(size, 5000)
-            self.assertEqual(removed, ["tables"])
+            if sys.platform != "win32":
+                self.assertEqual(removed, ["tables"])
             self.assertFalse(runtime.exists())
             self.assertEqual((Path(shared) / "model.onnx").read_text(), "x" * 5000)
 

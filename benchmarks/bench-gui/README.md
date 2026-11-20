@@ -97,7 +97,7 @@ To add a model:
    It passes when the vectors match (cosine ≥ 0.99 on average) and every test query ranks the
    same top 5. Quantized (8-bit) weights often fail; full precision should match exactly.
 
-5. Rebuild (`npm run build:electron`), then prepare its corpus copies.
+5. Rebuild (`npm run build`), then prepare its corpus copies.
 
 ## Embedding device
 
@@ -172,7 +172,7 @@ and system, and set **Sync branch**. Before each job the GUI starts, it then:
 1. refuses if the copy has local edits to tracked files, has another branch checked out, or has
    commits that `origin/<branch>` lacks (nothing is ever reset, stashed or discarded);
 2. fast-forwards to `origin/<branch>`;
-3. runs `npm ci` only if `package-lock.json` changed, and `npm run build:electron` only if the
+3. runs `npm ci` only if `package-lock.json` changed, and `npm run build` only if the
    build is older than `src/`;
 4. asks you to restart the GUI if the GUI's own files changed (the job already uses the new
    harness, since each job runs in a fresh process).
@@ -205,7 +205,7 @@ The app server reads its hybrid pipeline at startup from `RAG_HYBRID_RERANKER`,
 (`src/lib/server/rag/search/hybrid-pipeline.ts`). Unset, the app runs RRF only. Each run records
 the pipeline in `run-config.json` (`hybridPipeline`) and verifies that the server reports the same
 pipeline before searching, so a stale build fails fast. Rebuild with the GUI's **Rebuild app**
-button or `npm run build:electron` after changing `src/`.
+button or `npm run build` after changing `src/`.
 
 Run names are generated from the configuration, e.g.
 `rrf-ettin-p100-s40-o20-100q-seed42-<timestamp>`: prefetch 100 per retriever, reranker

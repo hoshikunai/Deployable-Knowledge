@@ -70,12 +70,12 @@ class SyncTests(unittest.TestCase):
         self.push({"package-lock.json": '{"v": 2}', "benchmarks/bench-gui/server.py": "2"})
         self.assertTrue(self.sync(stale=True))
         self.assertEqual(git(self.copy, "rev-parse", "HEAD"), git(self.author, "rev-parse", "HEAD"))
-        self.assertEqual(self.commands, [["ci"], ["run", "build:electron"]])
+        self.assertEqual(self.commands, [["ci"], ["run", "build"]])
 
     def test_source_only_change_skips_npm_ci(self) -> None:
         self.push({"src/app.ts": "2"})
         self.assertFalse(self.sync(stale=True))
-        self.assertEqual(self.commands, [["run", "build:electron"]])
+        self.assertEqual(self.commands, [["run", "build"]])
 
     def test_local_edits_refuse_but_untracked_files_do_not(self) -> None:
         (self.copy / "notes.txt").write_text("untracked scratch")

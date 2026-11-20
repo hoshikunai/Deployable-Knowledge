@@ -536,7 +536,7 @@ def execute(spec: JobSpec, log: Log = print_flushed) -> str:
     from benchmarks.benchmark_lease import MemoryPausedError, TimedOutError
 
     if build_status()["buildTime"] is None:
-        raise RuntimeError("The app build is missing; run 'npm run build:electron' first")
+        raise RuntimeError("The app build is missing; run 'npm run build' first")
     if spec.kind == "prepare":
         return execute_prepare(spec, log)
     directory = run_directory(spec)

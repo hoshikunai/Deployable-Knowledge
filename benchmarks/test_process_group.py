@@ -22,13 +22,16 @@ time.sleep(60)
 
 class ProcessGroupTests(unittest.TestCase):
     def test_group_arguments_per_platform(self):
-        self.assertEqual(process_group.new_group_kwargs(), {"start_new_session": True})
+        with patch.object(process_group, "WINDOWS", False):
+            self.assertEqual(process_group.new_group_kwargs(), {"start_new_session": True})
         with patch.object(process_group, "WINDOWS", True), \
                 patch.object(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, create=True):
             self.assertEqual(process_group.new_group_kwargs(), {"creationflags": 0x200})
 
     def test_interrupt_signals_per_platform(self):
-        self.assertIn(signal.SIGHUP, process_group.interrupt_signals())
+        with patch.object(process_group, "WINDOWS", False), \
+                patch.object(signal, "SIGHUP", 1, create=True):
+            self.assertEqual(process_group.interrupt_signals(), (signal.SIGTERM, 1, signal.SIGINT))
         with patch.object(process_group, "WINDOWS", True), \
                 patch.object(signal, "SIGBREAK", 21, create=True):
             self.assertEqual(process_group.interrupt_signals(), (signal.SIGTERM, signal.SIGINT, 21))

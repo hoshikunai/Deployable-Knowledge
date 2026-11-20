@@ -1,5 +1,7 @@
 beir==2.2.0
 psutil==7.2.2
+# beir's download helper imports requests without declaring it
+requests==2.34.2
 fastapi==0.141.1
 uvicorn==0.52.4
 sse-starlette==3.4.11

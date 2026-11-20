@@ -83,8 +83,8 @@ def sync_repository(branch: str, log: Log, root: Path = paths.REPOSITORY_ROOT,
         run_logged(npm("ci"), root, log)
     stale = build_stale() if build_stale else build_status()["stale"]
     if stale:
-        log("Sync: the build is older than the source; running npm run build:electron")
-        run_logged(npm("run", "build:electron"), root, log)
+        log("Sync: the build is older than the source; running npm run build")
+        run_logged(npm("run", "build"), root, log)
 
     gui_changed = any(path.startswith(GUI_PREFIX) for path in changed)
     if gui_changed:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import closing
+
 import argparse
 import json
 import os
@@ -138,7 +140,7 @@ def ensure_build_exists() -> None:
     if not SERVER_ENTRYPOINT.is_file():
         raise RuntimeError(
             "The application server build is missing. Run "
-            "'npm run build:electron' from the repository root first."
+            "'npm run build' from the repository root first."
         )
 
 
@@ -204,7 +206,7 @@ def validate_existing_runtime_schema(runtime: Path, dataset: str | None = None,
         if not marker.is_file() or json.loads(marker.read_text()).get("dataset") != dataset:
             raise RuntimeError("Existing runtime dataset marker mismatch")
     database_path = runtime / "app.db"
-    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as database:
+    with closing(sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True)) as database:
         existing_tables = {
             row[0]
             for row in database.execute(

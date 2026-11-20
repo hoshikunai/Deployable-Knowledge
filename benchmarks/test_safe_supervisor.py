@@ -1,6 +1,7 @@
 import json, os, signal, subprocess, sys, tempfile, time, unittest
 from pathlib import Path
 
+@unittest.skipIf(sys.platform == 'win32', 'safe_supervisor is a Linux-only wrapper: these tests send POSIX signals')
 class SupervisorTests(unittest.TestCase):
  def run_case(self, sig=None, timeout=5, ceiling=10**12):
   with tempfile.TemporaryDirectory() as d:

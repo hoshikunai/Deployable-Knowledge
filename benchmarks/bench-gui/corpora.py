@@ -12,6 +12,8 @@ can never remove it.
 
 from __future__ import annotations
 
+from contextlib import closing
+
 import csv
 import hashlib
 import json
@@ -172,7 +174,7 @@ def count_judged_queries(dataset: str, split: str = "test") -> int | None:
 
 
 def count_chunks(runtime: Path) -> int:
-    with sqlite3.connect((runtime / "app.db").resolve().as_uri() + "?mode=ro", uri=True) as database:
+    with closing(sqlite3.connect((runtime / "app.db").resolve().as_uri() + "?mode=ro", uri=True)) as database:
         return database.execute("SELECT COUNT(*) FROM document_chunks").fetchone()[0]
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import closing
 import json
 import tempfile
 from argparse import Namespace
@@ -284,7 +285,7 @@ class ExistingRuntimeSchemaTests(unittest.TestCase):
         import sqlite3
         with tempfile.TemporaryDirectory() as directory:
             runtime = Path(directory); (runtime / "beir-dataset.json").write_text('{"dataset":"fiqa"}')
-            with sqlite3.connect(runtime / "app.db") as db:
+            with closing(sqlite3.connect(runtime / "app.db")) as db, db:
                 for table in ("__drizzle_migrations", "app_state", "documents", "document_chunks"):
                     db.execute(f"CREATE TABLE {table} (id TEXT)")
                 db.execute("INSERT INTO __drizzle_migrations VALUES ('x')")
@@ -295,7 +296,7 @@ class ExistingRuntimeSchemaTests(unittest.TestCase):
         import sqlite3
         with tempfile.TemporaryDirectory() as directory:
             runtime = Path(directory); (runtime / "beir-dataset.json").write_text('{"dataset":"arguana"}')
-            with sqlite3.connect(runtime / "app.db") as db:
+            with closing(sqlite3.connect(runtime / "app.db")) as db, db:
                 for table in ("__drizzle_migrations", "app_state", "documents", "document_chunks"):
                     db.execute(f"CREATE TABLE {table} (id TEXT)")
             with self.assertRaisesRegex(RuntimeError, "no applied migration"):
@@ -305,7 +306,7 @@ class ExistingRuntimeSchemaTests(unittest.TestCase):
         import sqlite3
         with tempfile.TemporaryDirectory() as directory:
             runtime=Path(directory); (runtime/"beir-dataset.json").write_text('{"dataset":"arguana"}')
-            with sqlite3.connect(runtime/"app.db") as db:
+            with closing(sqlite3.connect(runtime/"app.db")) as db, db:
                 for table in ("__drizzle_migrations","app_state","document_chunks"): db.execute(f"CREATE TABLE {table} (id TEXT)")
                 db.execute("CREATE TABLE documents (id TEXT)"); db.execute("INSERT INTO __drizzle_migrations VALUES ('x')"); db.execute("INSERT INTO documents VALUES ('actual')")
             mapping=runtime/"mapping.json"; mapping.write_text(json.dumps({"applicationToBeir":{"expected":"document"}}))
@@ -317,7 +318,7 @@ class ExistingRuntimeSchemaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             runtime = Path(directory)
             database_path = runtime / "app.db"
-            with sqlite3.connect(database_path) as database:
+            with closing(sqlite3.connect(database_path)) as database, database:
                 for table in (
                     "__drizzle_migrations", "app_state", "documents", "document_chunks"
                 ):
@@ -333,7 +334,7 @@ class ExistingRuntimeSchemaTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             runtime = Path(directory)
-            with sqlite3.connect(runtime / "app.db") as database:
+            with closing(sqlite3.connect(runtime / "app.db")) as database, database:
                 database.execute("CREATE TABLE app_state (id TEXT)")
             with self.assertRaisesRegex(RuntimeError, "missing required tables"):
                 validate_existing_runtime_schema(runtime)
@@ -417,10 +418,14 @@ class SharedCacheLinkTests(unittest.TestCase):
         import run_suite
 
         created: list[tuple[str, str]] = []
+        real_winapi = sys.modules.get("_winapi")
 
         def create_junction(target: str, link: str) -> None:
             created.append((target, link))
-            Path(link).symlink_to(target, target_is_directory=True)
+            if real_winapi is not None:
+                real_winapi.CreateJunction(target, link)
+            else:
+                Path(link).symlink_to(target, target_is_directory=True)
 
         fake_winapi = types.SimpleNamespace(CreateJunction=create_junction)
         with tempfile.TemporaryDirectory() as root:
@@ -984,7 +989,7 @@ class DuplicateDocumentTests(unittest.TestCase):
                 {"id": "a", "file": "first.pdf", "pages": 3},
                 {"id": "b", "file": "second.pdf", "pages": 5},
             ]}
-            with sqlite3.connect(root / "app.db") as db:
+            with closing(sqlite3.connect(root / "app.db")) as db, db:
                 db.execute("CREATE TABLE documents (id TEXT, source_path TEXT)")
                 db.execute("INSERT INTO documents VALUES (?, ?)", ("app-a", managed))
             client = MagicMock()
