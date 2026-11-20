@@ -19,6 +19,10 @@ LEASE_PATH = ROOT / ".cache" / "benchmark-lease.lock"
 META_PATH = ROOT / ".cache" / "benchmark-lease.json"
 SAMPLES_PATH = ROOT / ".cache" / "benchmark-memory-samples.jsonl"
 SCHEMA = 1
+# Prepares parse whole PDF corpora; query runs peak near 1.5 GB and the watchdog still stops
+# any job below 2 GB available.
+PREPARE_MIN_AVAILABLE = 4 * 1024**3
+QUERY_MIN_AVAILABLE = int(2.5 * 1024**3)
 
 class SupervisionError(RuntimeError):
     status = "failed"
@@ -75,7 +79,7 @@ def system_memory() -> tuple[int, int]:
     """Available memory and free swap (MemAvailable/SwapFree; the page file on Windows)."""
     return psutil.virtual_memory().available, psutil.swap_memory().free
 
-def memory_preflight(min_available=4*1024**3, min_swap=2*1024**3) -> dict:
+def memory_preflight(min_available=PREPARE_MIN_AVAILABLE, min_swap=2*1024**3) -> dict:
     available, swap = system_memory()
     result = {"memAvailable": available, "swapFree": swap,
               "minMemAvailable": min_available, "minSwapFree": min_swap}

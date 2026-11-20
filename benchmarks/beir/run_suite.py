@@ -35,7 +35,7 @@ SHARED_TABLE_CACHE = REPOSITORY_ROOT / ".cache" / "tables"
 SHARED_OCR_CACHE = REPOSITORY_ROOT / ".cache" / "tessdata"
 sys.path.insert(0, str(REPOSITORY_ROOT))
 from benchmarks.benchmark_lease import (MemoryWatchdog, memory_preflight,
-    BenchmarkLease, TimedOutError, MemoryPausedError)
+    BenchmarkLease, TimedOutError, MemoryPausedError, PREPARE_MIN_AVAILABLE, QUERY_MIN_AVAILABLE)
 from benchmarks.benchmark_lease import start_identity, atomic_json
 from benchmarks.process_group import WINDOWS, interrupt_signals, new_group_kwargs, terminate_group
 
@@ -427,7 +427,8 @@ def run_dataset(
     lease_owner: BenchmarkLease | None = None,
 ) -> dict[str, Any]:
     if lease_owner is None:
-        memory_preflight()
+        memory_preflight(PREPARE_MIN_AVAILABLE if getattr(arguments, "prepare_only", False)
+                         else QUERY_MIN_AVAILABLE)
         with BenchmarkLease(runName=suite_id, dataset=dataset, port=arguments.port) as owner:
             return run_dataset(dataset, arguments, suite_id, owner)
     if lease_owner.fd is None or lease_owner.metadata.get('pid') != os.getpid():

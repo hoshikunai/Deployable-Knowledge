@@ -19,8 +19,10 @@ import numpy as np
 import paths  # noqa: F401  (puts the BEIR harness on sys.path)
 import corpora
 import jobs
+import run_suite
 import scores
 from bench import parse_arguments, parse_seeds
+from benchmarks.benchmark_lease import PREPARE_MIN_AVAILABLE, QUERY_MIN_AVAILABLE
 from run_suite import (chunking_environment, harness_options, link_directory, pipeline_environment,
                        vulkan_environment)
 from runs import describe_pipeline, pipeline_key
@@ -238,6 +240,15 @@ class JobTests(unittest.TestCase):
         with patch.object(corpora, "require_prepared", return_value=Path("/tmp/mapping.json")):
             options = harness_options(jobs.suite_arguments(spec, resume=False), None)
         self.assertNotIn("--vulkan-device", options)
+
+    def test_query_jobs_start_with_less_free_memory_than_prepares(self) -> None:
+        for prepare_only, minimum in ((True, PREPARE_MIN_AVAILABLE), (False, QUERY_MIN_AVAILABLE)):
+            with patch.object(run_suite, "memory_preflight",
+                              side_effect=RuntimeError("preflight")) as preflight, \
+                    self.assertRaisesRegex(RuntimeError, "preflight"):
+                run_suite.run_dataset("scifact", SimpleNamespace(prepare_only=prepare_only), "suite")
+            preflight.assert_called_once_with(minimum)
+        self.assertLess(QUERY_MIN_AVAILABLE, PREPARE_MIN_AVAILABLE)
 
     def test_docling_parsing_is_unavailable_for_text_corpora(self) -> None:
         with tempfile.TemporaryDirectory() as root, \
