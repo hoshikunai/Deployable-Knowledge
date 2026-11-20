@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 from urllib import error, request
 
-from dataset_catalog import DATASETS, download_dataset, validate_dataset_name
+from dataset_catalog import DATASETS, QUERY_SPLITS, download_dataset, is_pdf_dataset, validate_dataset_name
 from app_client import APP_DEFAULT_EMBEDDING_MODEL
 
 
@@ -96,8 +96,8 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def validate_arguments(arguments: argparse.Namespace) -> list[str]:
-    if arguments.split not in {"train", "dev", "test"}:
-        raise ValueError("--split must be train, dev, or test")
+    if arguments.split not in QUERY_SPLITS:
+        raise ValueError(f"--split must be one of {', '.join(QUERY_SPLITS)}")
     if arguments.search_depth < 10:
         raise ValueError("--search-depth must be at least 10")
     if not 1 <= arguments.port <= 65_535:
@@ -263,6 +263,13 @@ def chunking_environment(chunking: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
+def vulkan_environment(vulkan_device: int | None) -> dict[str, str]:
+    """llama.cpp sees only this Vulkan device; None or -1 leaves every device visible."""
+    if vulkan_device is None or vulkan_device < 0:
+        return {}
+    return {"GGML_VK_VISIBLE_DEVICES": str(vulkan_device)}
+
+
 def parsing_environment(document_parsing: str | None) -> dict[str, str]:
     """PDF cleanups exist only behind a server flag; table recognition is switched over HTTP."""
     if document_parsing == "docling-cleanup":
@@ -282,6 +289,8 @@ def start_server(
     chunking: dict[str, Any] | None = None,
     embedding_model: str | None = None,
     document_parsing: str | None = None,
+    low_memory_pdf_prepare: bool = False,
+    vulkan_device: int | None = None,
 ) -> tuple[subprocess.Popen[bytes], BinaryIO, Path]:
     if heartbeat(base_url):
         raise RuntimeError(
@@ -308,7 +317,14 @@ def start_server(
         **chunking_environment(chunking),
         **embedding_environment(embedding_model),
         **parsing_environment(document_parsing),
+        **vulkan_environment(vulkan_device),
+        "RAG_LOW_MEMORY_PDF_PREPARE": "true" if low_memory_pdf_prepare else "false",
     }
+    if low_memory_pdf_prepare and sys.platform.startswith("linux"):
+        # The renderer allocates large native buffers. Limit glibc arenas and trim freed
+        # heap pages between PDFs instead of retaining the high-water mark of each thread.
+        environment.setdefault("MALLOC_ARENA_MAX", "2")
+        environment.setdefault("MALLOC_TRIM_THRESHOLD_", str(128 * 1024))
     if reuse_existing_schema:
         environment.pop("DK_MIGRATIONS_DIR", None)
     process = subprocess.Popen(
@@ -376,7 +392,8 @@ def run_dataset(
             return run_dataset(dataset, arguments, suite_id, owner)
     if lease_owner.fd is None or lease_owner.metadata.get('pid') != os.getpid():
         raise RuntimeError('invalid lease owner')
-    download_dataset(dataset, DATASETS_ROOT)
+    dataset_path = download_dataset(dataset, DATASETS_ROOT)
+    pdf_prepare = getattr(arguments, "prepare_only", False) and is_pdf_dataset(dataset_path)
     runtime = prepare_runtime(
         dataset,
         share_model_cache=not arguments.no_shared_model_cache,
@@ -402,6 +419,8 @@ def run_dataset(
         chunking=getattr(arguments, "chunking", None),
         embedding_model=getattr(arguments, "embedding_model", None),
         document_parsing=getattr(arguments, "document_parsing", None),
+        low_memory_pdf_prepare=pdf_prepare,
+        vulkan_device=getattr(arguments, "vulkan_device", None),
     )
     run_name = getattr(arguments, "run_name", None) or f"{suite_id}-{arguments.split}"
     run_directory = RUNS_ROOT / f"{dataset}-{run_name}"
@@ -437,8 +456,12 @@ def run_dataset(
             command += ["--corpus-json", json.dumps(arguments.corpus)]
         if getattr(arguments, "document_parsing", None) is not None:
             command += ["--document-parsing", arguments.document_parsing]
+        if getattr(arguments, "embedding_device", None) is not None:
+            command += ["--embedding-device", arguments.embedding_device]
         if getattr(arguments, "prepare_only", False):
             command.append("--prepare-only")
+        if pdf_prepare:
+            command += ["--pdf-prepare-runtime", str(runtime)]
         if getattr(arguments, "resume", False):
             command.append("--resume")
         child = subprocess.Popen(command, cwd=REPOSITORY_ROOT, start_new_session=True)
@@ -448,6 +471,8 @@ def run_dataset(
                           f"--timeout-minutes {getattr(arguments, 'timeout_seconds', 2700) // 60}")
         if getattr(arguments, "reuse_existing_runtime", False):
             resume_command += f" --reuse-existing-runtime --reuse-document-mapping {arguments.reuse_document_mapping}"
+        if pdf_prepare:
+            resume_command = f"npm run bench -- resume {dataset}-{run_name}"
         supervisor_directory = RUNS_ROOT / f".supervisor-{dataset}-{run_name}"
         watchdog = MemoryWatchdog([process.pid, child.pid], ceiling=getattr(arguments, "memory_ceiling", 7*1024**3), warning=getattr(arguments, "memory_warning", 6*1024**3), resume_command=resume_command, status_path=supervisor_directory/'status.json', samples_path=supervisor_directory/'memory-samples.jsonl')
         deadline = time.monotonic() + getattr(arguments, "timeout_seconds", 10**9)

@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 import paths
 import corpora
+from dataset_catalog import QUERY_SPLITS
 
 # Keys mirror the reranker IDs and token limits in src/lib/server/rag/search/cross-encoders/.
 # The app server rejects unknown IDs and over-long limits at startup.
@@ -34,7 +35,6 @@ DEDUP_MODES = {"none": None, "exact": "dx", "near": "dn", "document-cap": "dc"}
 FUSION_LEVELS = ("chunk", "document")
 DOCUMENT_ORDERS = ("none", "sum-top2")
 SWITCHES = ("off", "on")
-SPLITS = ("test", "train", "dev")
 PREPARE_TIMEOUT_HOURS = 12
 
 # The harness requests documentDepth * CHUNK_OVERFETCH_FACTOR chunks per query.
@@ -62,6 +62,10 @@ class Settings:
     embeddingModel: str = corpora.DEFAULT_EMBEDDING_MODEL
     # PDF corpora only: "docling" ingests with TableFormer table recognition
     documentParsing: str = corpora.DEFAULT_DOCUMENT_PARSING
+    # Where llama.cpp embeds: each device other than auto has its own corpus copy
+    embeddingDevice: str = corpora.DEFAULT_EMBEDDING_DEVICE
+    # -1 lets llama.cpp see every Vulkan device; otherwise the app server sees only this one
+    vulkanDevice: int = -1
     dedupMode: str = "none"
     maxChunksPerDocument: int = 2
     rrfSemanticWeight: float = 1.0
@@ -103,7 +107,7 @@ class Settings:
         if self.rrfSemanticWeight + self.rrfBm25Weight == 0:
             raise ValueError("RRF weights cannot both be 0")
         for name, allowed in (("fusionLevel", FUSION_LEVELS), ("documentOrder", DOCUMENT_ORDERS),
-                              ("rerankTitle", SWITCHES), ("split", SPLITS)):
+                              ("rerankTitle", SWITCHES), ("split", QUERY_SPLITS)):
             if getattr(self, name) not in allowed:
                 raise ValueError(f"{name} must be one of {list(allowed)}")
         if self.dedupMode not in DEDUP_MODES:
@@ -112,6 +116,14 @@ class Settings:
             raise ValueError("maxChunksPerDocument must be at least 1")
         if self.documentParsing not in corpora.DOCUMENT_PARSING:
             raise ValueError(f"documentParsing must be one of {list(corpora.DOCUMENT_PARSING)}")
+        if self.embeddingDevice not in corpora.EMBEDDING_DEVICES:
+            raise ValueError(f"embeddingDevice must be one of {list(corpora.EMBEDDING_DEVICES)}")
+        if (self.embeddingDevice != corpora.DEFAULT_EMBEDDING_DEVICE
+                and self.embeddingModel != corpora.DEFAULT_EMBEDDING_MODEL):
+            raise ValueError(f"The embedding device applies to llama.cpp ({corpora.DEFAULT_EMBEDDING_MODEL}); "
+                             f"{self.embeddingModel} always embeds on the CPU")
+        if not -1 <= self.vulkanDevice <= 7:
+            raise ValueError("vulkanDevice must be -1 (every device) or a device index from 0 to 7")
         if self.embeddingModel not in corpora.EMBEDDING_MODELS:
             raise ValueError(f"Unknown embedding model {self.embeddingModel!r}; "
                              f"choose from {sorted(corpora.EMBEDDING_MODELS)}")
@@ -129,7 +141,7 @@ class Settings:
         defaults = asdict(cls())
         merged = {**defaults, **value}
         casts = {"memoryCeilingGb": float, "rrfSemanticWeight": float, "rrfBm25Weight": float,
-                 "embeddingModel": str, "documentParsing": str, "dedupMode": str, "fusionLevel": str,
+                 "embeddingModel": str, "documentParsing": str, "embeddingDevice": str, "dedupMode": str, "fusionLevel": str,
                  "documentOrder": str, "rerankTitle": str, "split": str}
         settings = cls(**{name: casts.get(name, int)(merged[name]) for name in known})
         settings.validate()
@@ -189,9 +201,13 @@ class JobSpec:
         return self.settings.documentParsing
 
     @property
+    def embedding_device(self) -> str:
+        return self.settings.embeddingDevice
+
+    @property
     def runtime_id(self) -> str:
         return corpora.runtime_id(self.dataset, self.chunking, self.embedding_model,
-                                  self.document_parsing)
+                                  self.document_parsing, device=self.embedding_device)
 
     @property
     def output_chunks(self) -> int:
@@ -225,6 +241,8 @@ class JobSpec:
         # Left out by default so runs recorded before parsing existed still resume.
         if self.document_parsing != corpora.DEFAULT_DOCUMENT_PARSING:
             corpus["documentParsing"] = self.document_parsing
+        if self.embedding_device != corpora.DEFAULT_EMBEDDING_DEVICE:
+            corpus["embeddingDevice"] = self.embedding_device
         return corpus
 
     def to_dict(self) -> dict[str, Any]:
@@ -253,7 +271,7 @@ def validate_job(dataset: str, pipeline: str, queries: str, settings: Settings) 
     if not corpora.has_split(dataset, settings.split):
         raise ValueError(f"{dataset} has no {settings.split} split")
     corpora.require_prepared(dataset, settings.chunking(), settings.embeddingModel,
-                             settings.documentParsing)
+                             settings.documentParsing, device=settings.embeddingDevice)
 
 
 def make_run_name(spec: JobSpec, now: datetime | None = None) -> str:
@@ -283,7 +301,8 @@ def make_run_name(spec: JobSpec, now: datetime | None = None) -> str:
         parts.append(f"dc{config['maxChunksPerDocument']}")
     elif dedup_tag:
         parts.append(dedup_tag)
-    variant = corpora.variant_id(spec.chunking, spec.embedding_model, spec.document_parsing)
+    variant = corpora.variant_id(spec.chunking, spec.embedding_model, spec.document_parsing,
+                                 device=spec.embedding_device)
     if variant != corpora.DEFAULT_VARIANT:
         parts.append(variant)
     if spec.settings.split != "test":
@@ -319,15 +338,18 @@ def create_prepare_jobs(datasets: list[str], settings: Settings) -> list[JobSpec
     settings.validate()
     chunking = settings.chunking()
     parsing = settings.documentParsing
-    variant = corpora.variant_id(chunking, settings.embeddingModel, parsing)
+    device = settings.embeddingDevice
+    variant = corpora.variant_id(chunking, settings.embeddingModel, parsing, device=device)
     if not datasets:
         raise ValueError("Select at least one corpus")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     jobs = []
     for dataset in datasets:
-        status = corpora.variant_status(dataset, chunking, settings.embeddingModel, parsing)
+        status = corpora.variant_status(dataset, chunking, settings.embeddingModel, parsing,
+                                        device=device)
         if status["state"] == "prepared":
-            described = corpora.describe_variant(chunking, settings.embeddingModel, parsing)
+            described = corpora.describe_variant(chunking, settings.embeddingModel, parsing,
+                                                 device=device)
             raise ValueError(f"{dataset} is already prepared with {described}")
         if status["state"] == "unavailable":
             raise ValueError(f"{dataset}: {status['reason']}")
@@ -338,14 +360,15 @@ def create_prepare_jobs(datasets: list[str], settings: Settings) -> list[JobSpec
 
 
 def copy_settings(marker: dict[str, Any], settings: Settings) -> Settings:
-    """The saved settings with a corpus copy's own chunking, embedding model and parsing."""
-    _dataset, chunking, model, parsing = corpora.copy_variant(marker)
+    """The saved settings with a corpus copy's own chunking, embedding model, device and parsing."""
+    _dataset, chunking, model, parsing, device = corpora.copy_variant(marker)
     return Settings.from_dict({
         **asdict(settings),
         "chunkMaxTokens": (chunking or {}).get("maxTokens", 0),
         "chunkOverlapTokens": (chunking or {}).get("overlapTokens", 0),
         "embeddingModel": model,
         "documentParsing": parsing,
+        "embeddingDevice": device,
     })
 
 
@@ -399,16 +422,17 @@ def suite_arguments(spec: JobSpec, resume: bool) -> argparse.Namespace:
             split="test", query_counts="all", sample_seed=42,
             search_depth=spec.settings.documentDepth, port=spec.settings.appPort,
             startup_timeout=120, no_shared_model_cache=False, run_name=spec.runName,
-            resume=False, reuse_existing_schema=False, reuse_existing_runtime=False,
+            resume=resume, reuse_existing_schema=False, reuse_existing_runtime=False,
             reuse_document_mapping=None,
             runtime_id=spec.runtime_id,
             timeout_seconds=PREPARE_TIMEOUT_HOURS * 3600, prepare_only=True,
             chunking=spec.chunking, embedding_model=spec.embedding_model,
-            document_parsing=spec.document_parsing,
+            document_parsing=spec.document_parsing, embedding_device=spec.embedding_device,
+            vulkan_device=spec.settings.vulkanDevice,
             memory_ceiling=ceiling, memory_warning=int(ceiling * 0.85),
         )
     mapping = corpora.require_prepared(spec.dataset, spec.chunking, spec.embedding_model,
-                                       spec.document_parsing)
+                                       spec.document_parsing, device=spec.embedding_device)
     return argparse.Namespace(
         split=spec.settings.split,
         query_counts=spec.queries,
@@ -428,6 +452,8 @@ def suite_arguments(spec: JobSpec, resume: bool) -> argparse.Namespace:
         corpus=spec.corpus(),
         embedding_model=spec.embedding_model,
         document_parsing=spec.document_parsing,
+        embedding_device=spec.embedding_device,
+        vulkan_device=spec.settings.vulkanDevice,
         memory_ceiling=ceiling,
         memory_warning=int(ceiling * 0.85),
     )
@@ -536,31 +562,39 @@ def execute(spec: JobSpec, log: Log = print_flushed) -> str:
 
 
 def execute_prepare(spec: JobSpec, log: Log) -> str:
-    """Ingest the whole corpus into a new copy with the job's chunk settings.
-
-    Ingestion is not resumable: an interrupted copy stays marked "preparing" and the next
-    prepare job for the same settings rebuilds it from scratch.
-    """
+    """Prepare the corpus, continuing committed PDFs in a matching unfinished runtime."""
     import shutil
 
     import run_suite
+    from benchmarks.benchmark_lease import MemoryPausedError
 
     chunking = spec.chunking
     parsing = spec.document_parsing
-    variant = corpora.describe_variant(chunking, spec.embedding_model, parsing)
+    device = spec.embedding_device
+    variant = corpora.describe_variant(chunking, spec.embedding_model, parsing, device=device)
     runtime = spec.runtime_id
-    corpora.start_preparing(spec.dataset, chunking, spec.embedding_model, parsing)
+    corpora.start_preparing(spec.dataset, chunking, spec.embedding_model, parsing, device=device)
     spec.state = "running"
     spec.message = ""
     spec.sessions += 1
     save_job(spec)
     log(f"{spec.dataset}: preparing {variant} ({runtime}); this ingests the whole corpus")
 
-    run_suite.run_dataset(spec.dataset, suite_arguments(spec, resume=False), spec.runName)
-
     directory = run_directory(spec)
+    pdf_prepare = corpora.is_pdf(spec.dataset)
+    resume = pdf_prepare and (directory / "run-config.json").is_file()
+    try:
+        run_suite.run_dataset(spec.dataset, suite_arguments(spec, resume), spec.runName)
+    except MemoryPausedError:
+        if not pdf_prepare:
+            raise
+        spec.state = "memory-paused"
+        spec.message = "Memory safeguard stopped preparation. Resume to continue from saved PDFs."
+        save_job(spec)
+        return spec.state
+
     marker = corpora.finish_preparing(spec.dataset, chunking, spec.embedding_model,
-                                      directory / corpora.MAPPING_FILE, parsing)
+                                      directory / corpora.MAPPING_FILE, parsing, device=device)
     # The ingestion run folder only carried the mapping, which now lives beside the database.
     shutil.rmtree(directory)
     supervisor = paths.RUNS_ROOT / f".supervisor-{spec.run_id}"

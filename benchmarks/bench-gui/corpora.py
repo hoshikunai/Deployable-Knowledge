@@ -1,10 +1,11 @@
-"""Prepared BEIR corpora and their variants (chunking, embedding model, document parsing).
+"""Prepared BEIR corpora and their variants (chunking, embedding model and device, parsing).
 
 Each variant is a separate app database under .cache/beir/. The default variant
 (runtime-<dataset>-001) uses the app's defaults: 1,200-character chunks embedded with
 nomic-embed-text v1.5, PDFs parsed without table recognition. Other variants are built by a
 prepare job and named from what differs, e.g. runtime-<dataset>-t256o32,
-runtime-<dataset>-bge-small, runtime-pdf-eval-docling, or several of these.
+runtime-<dataset>-bge-small, runtime-<dataset>-vulkan, runtime-pdf-eval-docling, or several
+of these.
 The saved BEIR-to-app document mapping lives beside each database so deleting a run
 can never remove it.
 """
@@ -20,7 +21,8 @@ from pathlib import Path
 from typing import Any
 
 import paths
-from dataset_catalog import DATASETS, DOCUMENT_PARSING_MODES, is_pdf_dataset
+from dataset_catalog import (DATASETS, DOCUMENT_PARSING_MODES, EMBEDDING_DEVICE_SETTINGS,
+                             QUERY_SPLITS, is_pdf_dataset)
 from run_prepared_benchmarks import PREPARED_MAPPINGS
 from run_suite import validate_existing_runtime_schema
 
@@ -49,17 +51,32 @@ DOCUMENT_PARSING: dict[str, dict[str, Any]] = {
 }
 DEFAULT_DOCUMENT_PARSING = "standard"
 assert tuple(DOCUMENT_PARSING) == DOCUMENT_PARSING_MODES
+# Where llama.cpp embeds chunks and queries; the copy stores it in its app_state, so searches
+# use the same device.
+EMBEDDING_DEVICES: dict[str, dict[str, Any]] = {
+    "auto": {"label": "Auto", "tag": None,
+             "description": "The app default: llama.cpp picks Vulkan when it finds a device, else the CPU"},
+    "cpu": {"label": "CPU", "tag": "cpu",
+            "description": "llama.cpp on the CPU only"},
+    "vulkan": {"label": "Vulkan GPU", "tag": "vulkan",
+               "description": "llama.cpp on a Vulkan GPU; fails if none is visible. "
+                              "Pick one GPU with the Vulkan device setting"},
+}
+DEFAULT_EMBEDDING_DEVICE = "auto"
+assert tuple(EMBEDDING_DEVICES) == tuple(EMBEDDING_DEVICE_SETTINGS)
 Chunking = dict[str, int] | None
 MAPPING_FILE = "document-id-mapping.json"
 MARKER_FILE = "beir-dataset.json"
 
 
 def variant_id(chunking: Chunking, embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-               parsing: str = DEFAULT_DOCUMENT_PARSING) -> str:
+               parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+               device: str = DEFAULT_EMBEDDING_DEVICE) -> str:
     parts = []
     if chunking is not None:
         parts.append(f"t{chunking['maxTokens']}o{chunking['overlapTokens']}")
-    for tag in (EMBEDDING_MODELS[embedding_model]["tag"], DOCUMENT_PARSING[parsing]["tag"]):
+    for tag in (EMBEDDING_MODELS[embedding_model]["tag"], EMBEDDING_DEVICES[device]["tag"],
+                DOCUMENT_PARSING[parsing]["tag"]):
         if tag is not None:
             parts.append(tag)
     return "-".join(parts) or DEFAULT_VARIANT
@@ -72,9 +89,12 @@ def describe_chunking(chunking: Chunking) -> str:
 
 
 def describe_variant(chunking: Chunking, embedding_model: str,
-                     parsing: str = DEFAULT_DOCUMENT_PARSING) -> str:
+                     parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                     device: str = DEFAULT_EMBEDDING_DEVICE) -> str:
     label = EMBEDDING_MODELS.get(embedding_model, {}).get("label", embedding_model)
     described = f"{describe_chunking(chunking)} · {label}"
+    if device != DEFAULT_EMBEDDING_DEVICE:
+        described += f" on {EMBEDDING_DEVICES.get(device, {}).get('label', device)}"
     if parsing != DEFAULT_DOCUMENT_PARSING:
         described += f" · {DOCUMENT_PARSING.get(parsing, {}).get('label', parsing)}"
     return described
@@ -82,14 +102,17 @@ def describe_variant(chunking: Chunking, embedding_model: str,
 
 def runtime_id(dataset: str, chunking: Chunking,
                embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-               parsing: str = DEFAULT_DOCUMENT_PARSING) -> str:
-    return f"runtime-{dataset}-{variant_id(chunking, embedding_model, parsing)}"
+               parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+               device: str = DEFAULT_EMBEDDING_DEVICE) -> str:
+    return f"runtime-{dataset}-{variant_id(chunking, embedding_model, parsing, device=device)}"
 
 
 def runtime_path(dataset: str, chunking: Chunking,
                  embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-                 parsing: str = DEFAULT_DOCUMENT_PARSING) -> Path:
-    return paths.RUNTIME_ROOT / runtime_id(dataset, chunking, embedding_model, parsing)
+                 parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                 device: str = DEFAULT_EMBEDDING_DEVICE) -> Path:
+    return paths.RUNTIME_ROOT / runtime_id(dataset, chunking, embedding_model, parsing,
+                                           device=device)
 
 
 def read_marker(runtime: Path) -> dict[str, Any] | None:
@@ -119,8 +142,9 @@ def adopt_legacy_mapping(dataset: str, runtime: Path) -> None:
 
 def mapping_path(dataset: str, chunking: Chunking,
                  embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-                 parsing: str = DEFAULT_DOCUMENT_PARSING) -> Path:
-    runtime = runtime_path(dataset, chunking, embedding_model, parsing)
+                 parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                 device: str = DEFAULT_EMBEDDING_DEVICE) -> Path:
+    runtime = runtime_path(dataset, chunking, embedding_model, parsing, device=device)
     if runtime.name.endswith(f"-{DEFAULT_VARIANT}"):
         adopt_legacy_mapping(dataset, runtime)
     return runtime / MAPPING_FILE
@@ -136,7 +160,7 @@ def has_split(dataset: str, split: str) -> bool:
 
 
 def available_splits(dataset: str) -> list[str]:
-    return [split for split in ("test", "train", "dev") if has_split(dataset, split)]
+    return [split for split in QUERY_SPLITS if has_split(dataset, split)]
 
 
 def count_judged_queries(dataset: str, split: str = "test") -> int | None:
@@ -167,9 +191,10 @@ NO_PDFS = "Text corpus: it has no PDFs to parse"
 
 def variant_status(dataset: str, chunking: Chunking,
                    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-                   parsing: str = DEFAULT_DOCUMENT_PARSING) -> dict[str, Any]:
+                   parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                   device: str = DEFAULT_EMBEDDING_DEVICE) -> dict[str, Any]:
     """Whether this dataset's copy for the variant is ready, being built, or missing."""
-    runtime = runtime_path(dataset, chunking, embedding_model, parsing)
+    runtime = runtime_path(dataset, chunking, embedding_model, parsing, device=device)
     status: dict[str, Any] = {"runtimeId": runtime.name, "state": "missing", "reason": None,
                               "documentCount": None, "chunkCount": None}
     if not dataset_files_present(dataset):
@@ -191,11 +216,16 @@ def variant_status(dataset: str, chunking: Chunking,
     if marker_parsing != parsing:
         status["reason"] = f"Copy was parsed with {marker_parsing}, not {parsing}"
         return status
+    marker_device = marker.get("embeddingDevice", DEFAULT_EMBEDDING_DEVICE)
+    if marker_device != device:
+        status["reason"] = f"Copy was embedded on {marker_device}, not {device}"
+        return status
     if marker.get("state") == "preparing":
         status["state"] = "preparing"
-        status["reason"] = "Prepare job running or interrupted; prepare again to rebuild"
+        status["reason"] = ("Prepare job running or interrupted; prepare again to continue"
+                            if is_pdf(dataset) else "Prepare job running or interrupted; prepare again to rebuild")
         return status
-    mapping = mapping_path(dataset, chunking, embedding_model, parsing)
+    mapping = mapping_path(dataset, chunking, embedding_model, parsing, device=device)
     if not mapping.is_file():
         status["reason"] = f"Saved document mapping is missing: {mapping}"
         return status
@@ -211,10 +241,11 @@ def variant_status(dataset: str, chunking: Chunking,
 
 def list_corpora(chunking: Chunking, embedding_model: str = DEFAULT_EMBEDDING_MODEL,
                  split: str = "test",
-                 parsing: str = DEFAULT_DOCUMENT_PARSING) -> list[dict[str, Any]]:
+                 parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                 device: str = DEFAULT_EMBEDDING_DEVICE) -> list[dict[str, Any]]:
     corpora = []
     for info in DATASETS:
-        status = variant_status(info.name, chunking, embedding_model, parsing)
+        status = variant_status(info.name, chunking, embedding_model, parsing, device=device)
         corpora.append({
             "name": info.name,
             "description": info.description,
@@ -224,7 +255,7 @@ def list_corpora(chunking: Chunking, embedding_model: str = DEFAULT_EMBEDDING_MO
             "pdf": is_pdf(info.name),
             "prepared": status["state"] == "prepared",
             "chunking": describe_chunking(chunking),
-            "variant": describe_variant(chunking, embedding_model, parsing),
+            "variant": describe_variant(chunking, embedding_model, parsing, device=device),
             **status,
         })
     return corpora
@@ -232,24 +263,26 @@ def list_corpora(chunking: Chunking, embedding_model: str = DEFAULT_EMBEDDING_MO
 
 def require_prepared(dataset: str, chunking: Chunking,
                      embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-                     parsing: str = DEFAULT_DOCUMENT_PARSING) -> Path:
+                     parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                     device: str = DEFAULT_EMBEDDING_DEVICE) -> Path:
     """Return the mapping path for a prepared corpus variant, or raise."""
-    status = variant_status(dataset, chunking, embedding_model, parsing)
+    status = variant_status(dataset, chunking, embedding_model, parsing, device=device)
     if status["state"] != "prepared":
-        variant = describe_variant(chunking, embedding_model, parsing)
+        variant = describe_variant(chunking, embedding_model, parsing, device=device)
         raise ValueError(f"{dataset} ({variant}) is not prepared: {status['reason']}")
-    return mapping_path(dataset, chunking, embedding_model, parsing)
+    return mapping_path(dataset, chunking, embedding_model, parsing, device=device)
 
 
 def start_preparing(dataset: str, chunking: Chunking,
                     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-                    parsing: str = DEFAULT_DOCUMENT_PARSING) -> Path:
-    """Create an empty variant runtime, replacing only an unfinished earlier attempt."""
+                    parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                    device: str = DEFAULT_EMBEDDING_DEVICE) -> Path:
+    """Reuse committed PDFs when continuing an unfinished copy of the same variant."""
     if not dataset_files_present(dataset):
         raise ValueError(f"{dataset} dataset files are not downloaded")
     if parsing != DEFAULT_DOCUMENT_PARSING and not is_pdf(dataset):
         raise ValueError(f"{dataset} is a text corpus; {parsing} parsing applies only to PDFs")
-    runtime = runtime_path(dataset, chunking, embedding_model, parsing)
+    runtime = runtime_path(dataset, chunking, embedding_model, parsing, device=device)
     marker = read_marker(runtime)
     # A finished default copy is never overwritten by a prepare job, since earlier results
     # depend on it; deleting or regenerating it from the Corpora tab is the deliberate path.
@@ -260,19 +293,24 @@ def start_preparing(dataset: str, chunking: Chunking,
         if marker is None or marker.get("dataset") != dataset:
             raise ValueError(f"{runtime} exists but is not a bench corpus copy; move it aside first")
         if marker.get("state") != "preparing":
-            variant = describe_variant(chunking, embedding_model, parsing)
+            variant = describe_variant(chunking, embedding_model, parsing, device=device)
             raise ValueError(f"{dataset} ({variant}) is already prepared")
+        if is_pdf(dataset):
+            if copy_variant(marker) != (dataset, chunking, embedding_model, parsing, device):
+                raise ValueError(f"Unfinished PDF copy {runtime} has different settings")
+            return runtime
         shutil.rmtree(runtime)
     write_marker(runtime, {"dataset": dataset, "chunking": chunking,
                            "embeddingModel": embedding_model, "documentParsing": parsing,
-                           "state": "preparing"})
+                           "embeddingDevice": device, "state": "preparing"})
     return runtime
 
 
 def finish_preparing(dataset: str, chunking: Chunking, embedding_model: str,
                      built_mapping: Path,
-                     parsing: str = DEFAULT_DOCUMENT_PARSING) -> dict[str, Any]:
-    runtime = runtime_path(dataset, chunking, embedding_model, parsing)
+                     parsing: str = DEFAULT_DOCUMENT_PARSING, *,
+                     device: str = DEFAULT_EMBEDDING_DEVICE) -> dict[str, Any]:
+    runtime = runtime_path(dataset, chunking, embedding_model, parsing, device=device)
     target = runtime / MAPPING_FILE
     shutil.copy2(built_mapping, target)
     identity = validate_existing_runtime_schema(runtime, dataset=dataset, mapping=target)
@@ -281,6 +319,7 @@ def finish_preparing(dataset: str, chunking: Chunking, embedding_model: str,
         "chunking": chunking,
         "embeddingModel": embedding_model,
         "documentParsing": parsing,
+        "embeddingDevice": device,
         "state": "prepared",
         "documentCount": identity["documentCount"],
         "chunkCount": count_chunks(runtime),
@@ -299,10 +338,11 @@ def folder_size(folder: Path) -> int:
                if path.is_file() and not path.is_symlink())
 
 
-def copy_variant(marker: dict[str, Any]) -> tuple[str, Chunking, str, str]:
+def copy_variant(marker: dict[str, Any]) -> tuple[str, Chunking, str, str, str]:
     return (marker["dataset"], marker.get("chunking"),
             marker.get("embeddingModel") or DEFAULT_EMBEDDING_MODEL,
-            marker.get("documentParsing") or DEFAULT_DOCUMENT_PARSING)
+            marker.get("documentParsing") or DEFAULT_DOCUMENT_PARSING,
+            marker.get("embeddingDevice") or DEFAULT_EMBEDDING_DEVICE)
 
 
 def list_copies() -> list[dict[str, Any]]:
@@ -314,20 +354,22 @@ def list_copies() -> list[dict[str, Any]]:
         marker = read_marker(runtime) if runtime.is_dir() else None
         if marker is None or "dataset" not in marker:
             continue
-        dataset, chunking, model, parsing = copy_variant(marker)
+        dataset, chunking, model, parsing, device = copy_variant(marker)
         copies.append({
             "runtimeId": runtime.name,
             "dataset": dataset,
             "chunking": describe_chunking(chunking),
             "embeddingModel": model,
             "documentParsing": parsing,
-            "variant": describe_variant(chunking, model, parsing),
+            "embeddingDevice": device,
+            "variant": describe_variant(chunking, model, parsing, device=device),
             "state": marker.get("state", "prepared"),
             "documentCount": marker.get("documentCount"),
             "chunkCount": marker.get("chunkCount"),
             "sizeBytes": folder_size(runtime),
             "default": runtime.name.endswith(f"-{DEFAULT_VARIANT}"),
-            "regenerable": runtime.name == runtime_id(dataset, chunking, model, parsing),
+            "regenerable": runtime.name == runtime_id(dataset, chunking, model, parsing,
+                                                      device=device),
         })
     return copies
 

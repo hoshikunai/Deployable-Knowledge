@@ -35,10 +35,13 @@ Settings has two token settings:
   (`RAG_CHUNK_MAX_TOKENS`, `RAG_CHUNK_OVERLAP_TOKENS`).
 
 Jobs search the copy that matches the saved chunk setting; runs record it in `run-config.json`
-(`corpus`) and in the run name (`-t256o32-`). A prepare job that stops partway leaves its copy
-marked "preparing"; preparing again rebuilds it from scratch, or delete it from the Corpora
-tab. Each copy keeps its document
-mapping beside its database, so deleting runs can't break a corpus.
+(`corpus`) and in the run name (`-t256o32-`). PDF preparation releases the embedding model
+before extraction. Each page layout or table crop runs inference in a fresh process with just
+the models it needs. The process exits before the next render. This trades model reload time
+for lower peak memory. Resume an interrupted PDF job or prepare the same variant again to reuse
+its committed PDFs, including those saved by older harness versions. The worker verifies the PDF
+contents and page counts before continuing. Interrupted text copies are rebuilt from scratch.
+Each prepared copy keeps its document mapping beside its database.
 
 ## Managing corpus copies
 
@@ -89,6 +92,26 @@ To add a model:
    same top 5. Quantized (8-bit) weights often fail; full precision should match exactly.
 
 5. Rebuild (`npm run build:electron`), then prepare its corpus copies.
+
+## Embedding device
+
+The **Embedding device** choice on the Run tab sets where llama.cpp embeds chunks and queries
+(nomic only; bge-small always runs on the CPU):
+
+- **Auto** (the default): the app's own choice, Vulkan when llama.cpp finds a device, else the
+  CPU. Existing copies were all made this way.
+- **CPU**: llama.cpp on the CPU only (copies named `runtime-<dataset>-cpu`).
+- **Vulkan GPU**: llama.cpp on a Vulkan GPU (copies named `runtime-<dataset>-vulkan`). The prepare
+  stops before ingesting anything if the app server sees no Vulkan device.
+
+A prepare stores the device in the copy's own settings, so later runs on that copy embed their
+queries on the same device. Each run checks the copy's device and the backend that actually
+loaded, and records non-default devices in `run-config.json` (`embeddingDevice`).
+
+**Vulkan device** under Settings → Sessions and system limits the app server to one GPU by
+index (`GGML_VK_VISIBLE_DEVICES`); `-1` lets it see every device. A prepare refuses an index the
+server does not list. Under WSL2 there is currently no Vulkan device: llama.cpp's Vulkan backend
+loads but finds nothing, so Auto runs on the CPU and Vulkan GPU fails.
 
 ## Document parsing (PDF corpora)
 
@@ -141,6 +164,7 @@ npm run bench -- run scifact arguana --pipeline rrf-ettin --queries 100 --seeds 
 npm run bench -- run nfcorpus --pipeline rrf-ettin --rerank-max-tokens 1024 --chunk-tokens 256 --overlap-tokens 32
 npm run bench -- prepare nfcorpus --chunk-tokens 256 --overlap-tokens 32
 npm run bench -- prepare scifact --embedding-model bge-small-en-v1.5
+npm run bench -- prepare scifact --embedding-device vulkan --vulkan-device 1
 npm run bench -- run scifact --pipeline rrf --embedding-model bge-small-en-v1.5
 npm run bench -- resume <run-id>
 npm run bench -- list

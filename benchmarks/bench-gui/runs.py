@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import paths
-from corpora import (DEFAULT_DOCUMENT_PARSING, DEFAULT_EMBEDDING_MODEL, DEFAULT_VARIANT,
+from corpora import (DEFAULT_DOCUMENT_PARSING, DEFAULT_EMBEDDING_DEVICE,
+                     DEFAULT_EMBEDDING_MODEL, DEFAULT_VARIANT,
                      describe_variant, list_copies, protected_run_folders)
 from jobs import DEFAULT_RERANK_MAX_TOKENS, PIPELINES, RESUMABLE_STATES, job_path
 
@@ -79,7 +80,8 @@ def describe_corpus(config: dict[str, Any]) -> str:
     corpus = config.get("corpus") or {}
     return describe_variant(corpus.get("chunking"),
                             corpus.get("embeddingModel", DEFAULT_EMBEDDING_MODEL),
-                            corpus.get("documentParsing", DEFAULT_DOCUMENT_PARSING))
+                            corpus.get("documentParsing", DEFAULT_DOCUMENT_PARSING),
+                            device=corpus.get("embeddingDevice", DEFAULT_EMBEDDING_DEVICE))
 
 
 def has_chunk_scores(directory: Path) -> bool:

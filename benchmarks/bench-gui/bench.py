@@ -6,6 +6,7 @@
     npm run bench -- prepare scifact --embedding-model bge-small-en-v1.5
     npm run bench -- prepare pdf-eval --document-parsing docling
     npm run bench -- run pdf-eval --document-parsing docling
+    npm run bench -- prepare scifact --embedding-device vulkan --vulkan-device 1
     npm run bench -- resume <run-id>
     npm run bench -- list
     npm run bench -- scores <run-id> [<run-id> ...] [--markdown]
@@ -32,6 +33,7 @@ from jobs import (
     save_job,
 )
 import corpora
+from dataset_catalog import QUERY_SPLITS
 from runs import delete_run, list_runs
 from scores import build_scores
 
@@ -93,6 +95,8 @@ def settings_with_overrides(arguments: argparse.Namespace) -> Settings:
         "rerankMaxTokens": getattr(arguments, "rerank_max_tokens", None),
         "embeddingModel": arguments.embedding_model,
         "documentParsing": getattr(arguments, "document_parsing", None),
+        "embeddingDevice": getattr(arguments, "embedding_device", None),
+        "vulkanDevice": getattr(arguments, "vulkan_device", None),
         "dedupMode": getattr(arguments, "dedup", None),
         "maxChunksPerDocument": getattr(arguments, "doc_cap", None),
         "rrfSemanticWeight": getattr(arguments, "semantic_weight", None),
@@ -179,6 +183,11 @@ def add_chunk_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--embedding-model", choices=sorted(corpora.EMBEDDING_MODELS))
     parser.add_argument("--document-parsing", choices=list(corpora.DOCUMENT_PARSING),
                         help="PDF corpora: standard (app default) or docling (TableFormer tables).")
+    parser.add_argument("--embedding-device", choices=list(corpora.EMBEDDING_DEVICES),
+                        help="Where llama.cpp embeds: auto (app default), cpu or vulkan; "
+                             "each non-auto device has its own corpus copy.")
+    parser.add_argument("--vulkan-device", type=int,
+                        help="Vulkan device index the app server may use (-1 = every device).")
     parser.add_argument("--chunk-tokens", type=int,
                         help="Chunk size in tokens (0 = default 1,200 characters).")
     parser.add_argument("--overlap-tokens", type=int, help="Chunk overlap in tokens.")
@@ -214,8 +223,8 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     run.add_argument("--fusion-level", choices=["chunk", "document"])
     run.add_argument("--document-order", choices=["none", "sum-top2"])
     run.add_argument("--rerank-title", choices=["off", "on"])
-    run.add_argument("--split", choices=["test", "train", "dev"],
-                     help="Query split; tune on train/dev, report on test.")
+    run.add_argument("--split", choices=QUERY_SPLITS,
+                     help="Query split; tune on train/dev, report on test; doc scores whole PDFs.")
     add_chunk_options(run)
     run.set_defaults(handler=command_run)
 

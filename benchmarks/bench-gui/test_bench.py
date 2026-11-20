@@ -20,7 +20,7 @@ import corpora
 import jobs
 import scores
 from bench import parse_arguments, parse_seeds
-from run_suite import chunking_environment, pipeline_environment
+from run_suite import chunking_environment, pipeline_environment, vulkan_environment
 from runs import describe_pipeline, pipeline_key
 
 FIXED_TIME = datetime(2026, 9, 28, 12, 0, 0, 123456, tzinfo=timezone.utc)
@@ -188,6 +188,43 @@ class JobTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             jobs.Settings.from_dict({"documentParsing": "layout"})
 
+    def test_embedding_device_selects_its_own_corpus_copy(self) -> None:
+        spec = make_spec("rrf")
+        spec.settings = jobs.Settings(embeddingDevice="vulkan", vulkanDevice=1)
+        with patch.object(corpora, "require_prepared", return_value=Path("/tmp/mapping.json")):
+            namespace = jobs.suite_arguments(spec, resume=False)
+        self.assertEqual(namespace.runtime_id, "runtime-scifact-vulkan")
+        self.assertEqual(namespace.embedding_device, "vulkan")
+        self.assertEqual(namespace.vulkan_device, 1)
+        self.assertEqual(namespace.corpus["embeddingDevice"], "vulkan")
+        self.assertIn("-vulkan-", jobs.make_run_name(spec, FIXED_TIME))
+        self.assertNotIn("embeddingDevice", make_spec("rrf").corpus())
+        self.assertEqual(make_spec("rrf").runtime_id, "runtime-scifact-001")
+        self.assertEqual(
+            corpora.runtime_id("pdf-eval", {"maxTokens": 256, "overlapTokens": 32},
+                               parsing="docling", device="cpu"),
+            "runtime-pdf-eval-t256o32-cpu-docling")
+
+    def test_embedding_device_settings_are_validated(self) -> None:
+        with self.assertRaises(ValueError):
+            jobs.Settings.from_dict({"embeddingDevice": "metal"})
+        with self.assertRaises(ValueError):
+            jobs.Settings.from_dict({"embeddingDevice": "cpu",
+                                     "embeddingModel": "bge-small-en-v1.5"})
+        for index in (-2, 8):
+            with self.assertRaises(ValueError):
+                jobs.Settings.from_dict({"vulkanDevice": index})
+        self.assertEqual(jobs.Settings.from_dict({"vulkanDevice": "0"}).vulkanDevice, 0)
+
+    def test_prepare_job_carries_the_embedding_device(self) -> None:
+        settings = jobs.Settings(embeddingDevice="cpu")
+        with patch.object(corpora, "variant_status", return_value={"state": "missing"}):
+            [spec] = jobs.create_prepare_jobs(["scifact"], settings)
+        namespace = jobs.suite_arguments(spec, resume=False)
+        self.assertEqual(namespace.runtime_id, "runtime-scifact-cpu")
+        self.assertEqual(namespace.embedding_device, "cpu")
+        self.assertEqual(namespace.vulkan_device, -1)
+
     def test_docling_parsing_is_unavailable_for_text_corpora(self) -> None:
         with tempfile.TemporaryDirectory() as root, \
                 patch.object(corpora.paths, "DATASETS_ROOT", Path(root)):
@@ -276,6 +313,25 @@ class CorpusVariantTests(unittest.TestCase):
         self.assertEqual(chunking_environment({"maxTokens": 128, "overlapTokens": 16}),
                          {"RAG_CHUNK_MAX_TOKENS": "128", "RAG_CHUNK_OVERLAP_TOKENS": "16"})
         self.assertEqual(chunking_environment(None), {})
+        self.assertEqual(vulkan_environment(2), {"GGML_VK_VISIBLE_DEVICES": "2"})
+        self.assertEqual(vulkan_environment(-1), {})
+        self.assertEqual(vulkan_environment(None), {})
+
+    def test_copy_embedded_on_another_device_is_not_prepared(self) -> None:
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(corpora.paths, "RUNTIME_ROOT", Path(root)), \
+                patch.object(corpora, "dataset_files_present", return_value=True):
+            runtime = corpora.start_preparing("scifact", None, device="cpu")
+            self.assertEqual(runtime.name, "runtime-scifact-cpu")
+            marker = json.loads((runtime / "beir-dataset.json").read_text())
+            self.assertEqual(marker["embeddingDevice"], "cpu")
+            corpora.write_marker(runtime, {**marker, "embeddingDevice": "vulkan",
+                                           "state": "prepared"})
+            status = corpora.variant_status("scifact", None, device="cpu")
+            self.assertEqual(status["state"], "missing")
+            self.assertIn("embedded on vulkan", status["reason"])
+            self.assertEqual(corpora.copy_variant(marker)[-1], "cpu")
+            self.assertEqual(corpora.copy_variant({"dataset": "scifact"})[-1], "auto")
 
     def test_start_preparing_only_replaces_unfinished_copies(self) -> None:
         chunking = {"maxTokens": 256, "overlapTokens": 32}
@@ -295,6 +351,16 @@ class CorpusVariantTests(unittest.TestCase):
                 corpora.start_preparing("nfcorpus", chunking)
             self.assertEqual(json.loads((runtime / "beir-dataset.json").read_text())["state"],
                              "prepared")
+
+    def test_retry_keeps_partial_pdf_database(self) -> None:
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(corpora.paths, "RUNTIME_ROOT", Path(root)), \
+                patch.object(corpora, "dataset_files_present", return_value=True), \
+                patch.object(corpora, "is_pdf", return_value=True):
+            runtime = corpora.start_preparing("papers", None, parsing="docling-cleanup")
+            (runtime / "app.db").write_bytes(b"partial database")
+            corpora.start_preparing("papers", None, parsing="docling-cleanup")
+            self.assertEqual((runtime / "app.db").read_bytes(), b"partial database")
 
 
 class PipelineLabelTests(unittest.TestCase):

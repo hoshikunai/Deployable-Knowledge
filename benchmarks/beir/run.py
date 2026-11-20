@@ -6,6 +6,7 @@ import json
 import random
 import re
 import os
+import sqlite3
 import tempfile
 import hashlib
 import time
@@ -17,11 +18,15 @@ from beir.datasets.data_loader import GenericDataLoader
 from beir.retrieval.evaluation import EvaluateRetrieval
 
 from app_client import APP_DEFAULT_EMBEDDING_FILE, APP_DEFAULT_EMBEDDING_MODEL, DeployableKnowledgeClient
+from build_pdf_dataset import count_pages
 from dataset_catalog import (
     DOCUMENT_PARSING_MODES,
+    EMBEDDING_DEVICE_SETTINGS,
+    QUERY_SPLITS,
     TABLE_RECOGNITION_MODES,
     download_dataset,
     load_pdf_manifest,
+    split_ranking_unit,
     validate_dataset_name,
 )
 
@@ -96,8 +101,46 @@ def verify_server_pipeline(
         )
 
 
+def apply_embedding_device(
+    client: DeployableKnowledgeClient, device: str, vulkan_device: int = -1
+) -> None:
+    """Store the device in the copy's app_state before ingestion; auto keeps the app default."""
+    if device == "vulkan":
+        devices = client.vulkan_devices()
+        if not devices:
+            raise RuntimeError(
+                "No Vulkan device is visible to the app server, so it cannot embed on a GPU"
+            )
+        if vulkan_device >= 0 and vulkan_device not in {item["index"] for item in devices}:
+            raise RuntimeError(
+                f"Vulkan device {vulkan_device} does not exist; the server sees {devices}"
+            )
+    if device != "auto":
+        client.set_embedding_device(EMBEDDING_DEVICE_SETTINGS[device])
+
+
+def verify_embedding_device(
+    client: DeployableKnowledgeClient, device: str, probe_query: str
+) -> None:
+    """The copy embeds on the requested device; the probe search loads the embedding model."""
+    if device == "auto":
+        return
+    client.search(query=probe_query, top_k=1)
+    status = client.embedding_status()
+    expected_backend = "cpu" if device == "cpu" else "vulkan"
+    if status["settings"]["device"] != EMBEDDING_DEVICE_SETTINGS[device]:
+        raise RuntimeError(
+            f"The corpus copy embeds on {status['settings']['device']!r}, not {device}"
+        )
+    if status.get("backend") != expected_backend:
+        raise RuntimeError(
+            f"Embeddings ran on the {status.get('backend')!r} backend, not {expected_backend}"
+        )
+
+
 def record_query_checkpoint(
     path: Path,
+    checkpoints: dict[str, dict[str, Any]],
     query_id: str,
     rankings: dict[str, dict[str, float]],
     elapsed_seconds: float,
@@ -108,27 +151,40 @@ def record_query_checkpoint(
     attempted_http_top_k: list[int] | None = None,
     final_http_top_k_by_method: dict[str, int] | None = None,
 ) -> None:
-    existing: list[dict[str, Any]] = []
-    if path.exists():
-        existing = [
-            json.loads(line)
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-    existing = [record for record in existing if record["queryId"] != query_id]
-    existing.append(
-        {
-            "queryId": query_id,
-            "rankings": rankings,
-            "rawRanking": raw_ranking,
-            "elapsedSeconds": elapsed_seconds,
-            "attemptCount": attempt_count,
-            "failure": failure,
-            "attemptedHttpTopK": attempted_http_top_k or [],
-            "finalHttpTopKByMethod": final_http_top_k_by_method or {},
-        }
-    )
-    atomic_write_jsonl(path, existing)
+    """
+    Persist one query's checkpoint and mirror it in `checkpoints`, which must hold what the
+    file holds. A new query is appended; a retried query rewrites the file so each query keeps
+    exactly one record, the newest last. A file ending mid-line (an append cut off by a kill)
+    is compacted before appending so the new line starts cleanly.
+    """
+    record = {
+        "queryId": query_id,
+        "rankings": rankings,
+        "rawRanking": raw_ranking,
+        "elapsedSeconds": elapsed_seconds,
+        "attemptCount": attempt_count,
+        "failure": failure,
+        "attemptedHttpTopK": attempted_http_top_k or [],
+        "finalHttpTopKByMethod": final_http_top_k_by_method or {},
+    }
+    replacing = checkpoints.pop(query_id, None) is not None
+    checkpoints[query_id] = record
+    if replacing or not ends_with_newline(path):
+        atomic_write_jsonl(path, list(checkpoints.values()))
+        return
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def ends_with_newline(path: Path) -> bool:
+    """True for a missing or empty file too, since appending to either starts a clean line."""
+    if not path.exists() or path.stat().st_size == 0:
+        return True
+    with path.open("rb") as handle:
+        handle.seek(-1, os.SEEK_END)
+        return handle.read(1) == b"\n"
 
 
 def atomic_write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
@@ -168,9 +224,13 @@ def load_query_checkpoints(
     allowed_query_ids = set(expected_query_ids)
     checkpoints: dict[str, dict[str, Any]] = {}
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise RuntimeError(f"Cannot read query checkpoints: {path}") from exc
+    lines = text.splitlines()
+    # A last line without its newline is an append cut off by a kill; the query reruns.
+    if lines and not text.endswith("\n"):
+        lines.pop()
 
     for line_number, line in enumerate(lines, start=1):
         if not line.strip():
@@ -292,6 +352,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--chunk-overfetch-factor", type=int, default=2)
     parser.add_argument("--public-protocol", type=Path)
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--pdf-prepare-runtime", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--required-document-depth", type=int, default=10)
     parser.add_argument("--initial-http-top-k", type=int, default=20)
     parser.add_argument("--maximum-http-top-k", type=int, default=160)
@@ -312,6 +373,18 @@ def parse_arguments() -> argparse.Namespace:
         choices=DOCUMENT_PARSING_MODES,
         default="standard",
         help="How PDF datasets are parsed when they are ingested (docling = TableFormer tables).",
+    )
+    parser.add_argument(
+        "--embedding-device",
+        choices=tuple(EMBEDDING_DEVICE_SETTINGS),
+        default="auto",
+        help="Where llama.cpp embeds; set on the corpus copy when it is prepared.",
+    )
+    parser.add_argument(
+        "--vulkan-device",
+        type=int,
+        default=-1,
+        help="The one Vulkan device the server sees (run_suite sets it); -1 for every device.",
     )
     return parser.parse_args()
 
@@ -731,6 +804,7 @@ def ingest_corpus(
     judged_document_ids: set[str],
     missing_corpus_document_ids: set[str],
     mapping_path: Path,
+    embedding_device: str = "auto",
 ) -> tuple[
     dict[str, str],
     dict[str, str],
@@ -787,6 +861,7 @@ def ingest_corpus(
                 missing_corpus_document_ids
             ),
             "skippedBeirDocuments": skipped_documents,
+            **device_mapping_fields(embedding_device),
         },
     )
     return (
@@ -797,22 +872,67 @@ def ingest_corpus(
     )
 
 
+def device_mapping_fields(embedding_device: str) -> dict[str, str]:
+    """Mappings name a non-default device so a reused copy can be checked against the request."""
+    return {} if embedding_device == "auto" else {"embeddingDevice": embedding_device}
+
+
+def committed_pdfs(runtime: Path, dataset_path: Path, documents: list[dict[str, Any]]) -> dict[str, str]:
+    """Recover PDF checkpoints from the same transaction that commits a document and its chunks."""
+    with sqlite3.connect((runtime / "app.db").resolve().as_uri() + "?mode=ro", uri=True) as db:
+        stored = dict(db.execute("SELECT source_path, id FROM documents"))
+    if not stored:
+        return {}
+
+    recovered = {}
+    expected_pages = {}
+    for document in documents:
+        path = dataset_path / document["file"]
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        managed_path = f"documents/{digest[:16]}.pdf"
+        if managed_path not in stored:
+            continue
+        with (runtime / managed_path).open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != digest:
+                raise RuntimeError(f"Stored PDF content differs for {document['id']}")
+        recovered[document["id"]] = stored.pop(managed_path)
+        expected_pages[path] = document["pages"]
+
+    if stored:
+        raise RuntimeError("Unfinished PDF copy contains documents outside the current corpus")
+    if count_pages(list(expected_pages)) != expected_pages:
+        raise RuntimeError("Committed PDF page counts differ from the current manifest")
+    return recovered
+
+
 def ingest_pdf_corpus(
     client: DeployableKnowledgeClient,
     dataset_path: Path,
     manifest: dict[str, Any],
     document_parsing: str,
     mapping_path: Path,
+    prepare_runtime: Path | None = None,
+    embedding_device: str = "auto",
 ) -> tuple[dict[str, str], dict[str, str], dict[str, list[str]], dict[str, dict[str, Any]]]:
     """Upload each PDF through the app's file ingestion with the chosen parsing."""
-    verify_server_pipeline(client, None, "PDF cleanup check", None,
-                           document_parsing == "docling-cleanup")
-    client.set_table_recognition(document_parsing in TABLE_RECOGNITION_MODES)
+    status = client.set_table_recognition(document_parsing in TABLE_RECOGNITION_MODES)
+    if status.get("pdfPageCleanup") is not (document_parsing == "docling-cleanup"):
+        raise RuntimeError("Server PDF cleanups do not match the prepare job. Rebuild with 'npm run build'.")
     documents = manifest["documents"]
-    beir_to_application: dict[str, str] = {}
-    application_to_beir: dict[str, str] = {}
+    if len({document["id"] for document in documents}) != len(documents):
+        raise RuntimeError("PDF document IDs must be unique within the manifest")
+    beir_to_application = (
+        committed_pdfs(prepare_runtime, dataset_path, documents) if prepare_runtime else {}
+    )
+    application_to_beir = {app: beir for beir, app in beir_to_application.items()}
     print(f"Ingesting {len(documents)} PDF documents ({document_parsing} parsing)...")
-    for index, document in enumerate(documents, start=1):
+    if beir_to_application:
+        print(f"Recovered {len(beir_to_application)} committed PDFs")
+        print(f"Ingested {len(beir_to_application)}/{len(documents)} documents")
+    for document in documents:
+        if document["id"] in beir_to_application:
+            continue
         started = time.monotonic()
         ingestion = client.ingest_file(dataset_path / document["file"])
         if ingestion["pageCount"] != document["pages"]:
@@ -828,7 +948,7 @@ def ingest_pdf_corpus(
             f"{document['id']}: {ingestion['pageCount']} pages, "
             f"{ingestion['chunkCount']} chunks in {time.monotonic() - started:.1f}s"
         )
-        print(f"Ingested {index}/{len(documents)} documents")
+        print(f"Ingested {len(beir_to_application)}/{len(documents)} documents")
 
     atomic_write_json(
         mapping_path,
@@ -840,6 +960,7 @@ def ingest_pdf_corpus(
             "applicationToBeirAliases": {},
             "missingCorpusQrelDocumentIds": [],
             "skippedBeirDocuments": {},
+            **device_mapping_fields(embedding_device),
         },
     )
     return beir_to_application, application_to_beir, {}, {}
@@ -1002,6 +1123,7 @@ def run_query_searches(
         failure = None if raw_record is not None else " | ".join(errors)
         record_query_checkpoint(
             checkpoint_path,
+            checkpoints,
             query_id,
             rankings,
             elapsed_seconds,
@@ -1010,9 +1132,6 @@ def run_query_searches(
             attempt_count=previous_attempts + attempts_this_invocation,
             attempted_http_top_k=attempted_depths,
             final_http_top_k_by_method=final_depths,
-        )
-        checkpoints = load_query_checkpoints(
-            checkpoint_path, selected_query_ids
         )
         if failure is None:
             completed_query_ids.add(query_id)
@@ -1078,8 +1197,8 @@ def main() -> None:
     arguments = parse_arguments()
 
     dataset_name = validate_dataset_name(arguments.dataset)
-    if arguments.split not in {"train", "dev", "test"}:
-        raise ValueError("--split must be train, dev, or test")
+    if arguments.split not in QUERY_SPLITS:
+        raise ValueError(f"--split must be one of {', '.join(QUERY_SPLITS)}")
     if arguments.run_name:
         validate_name(arguments.run_name, RUN_NAME_PATTERN, "run name")
     if arguments.resume and not arguments.run_name:
@@ -1105,14 +1224,21 @@ def main() -> None:
         data_folder=dataset_path
     ).load(split=arguments.split)
     pdf_manifest = load_pdf_manifest(dataset_path)
-    page_units = pdf_manifest is not None
+    pdf_dataset = pdf_manifest is not None
+    prepare_runtime = getattr(arguments, "pdf_prepare_runtime", None)
+    if prepare_runtime and not (pdf_dataset and arguments.prepare_only):
+        raise ValueError("--pdf-prepare-runtime requires a PDF prepare job")
+    ranking_unit_name = split_ranking_unit(pdf_manifest, arguments.split)
+    page_units = ranking_unit_name == "page"
     document_parsing = getattr(arguments, "document_parsing", "standard")
-    if document_parsing != "standard" and not page_units:
+    embedding_device = getattr(arguments, "embedding_device", "auto")
+    vulkan_device = getattr(arguments, "vulkan_device", -1)
+    if document_parsing != "standard" and not pdf_dataset:
         raise ValueError(f"{dataset_name} has no PDFs, so --document-parsing must be standard")
     # Mappings and runtimes hold PDF documents, while corpus.jsonl and qrels list their pages.
     mapped_document_ids = (
         {document["id"] for document in pdf_manifest["documents"]}
-        if page_units else set(corpus)
+        if pdf_dataset else set(corpus)
     )
 
     public_protocol: dict[str, Any] | None = None
@@ -1142,7 +1268,7 @@ def main() -> None:
         arguments.query_counts,
         arguments.sample_seed,
     )
-    if public_protocol is not None and page_units:
+    if public_protocol is not None and pdf_dataset:
         raise ValueError("The public protocol applies only to text BEIR datasets")
     if public_protocol is not None:
         public_query_ids = list(qrels)
@@ -1181,10 +1307,14 @@ def main() -> None:
         "corpusCount": len(corpus),
         "persistentRuntimeRequiredForResume": True,
     }
-    if page_units:
+    if pdf_dataset:
         immutable_protocol["titleProtocol"] = "pdf-upload"
-        immutable_protocol["rankingUnit"] = "page"
+        immutable_protocol["rankingUnit"] = ranking_unit_name
         immutable_protocol["documentParsing"] = document_parsing
+    if embedding_device != "auto":
+        immutable_protocol["embeddingDevice"] = embedding_device
+    if vulkan_device >= 0:
+        immutable_protocol["vulkanDevice"] = vulkan_device
     reuse_mode = bool(getattr(arguments, "reuse_existing_runtime", False))
     reuse_source = getattr(arguments, "reuse_document_mapping", None)
     if reuse_mode:
@@ -1219,7 +1349,7 @@ def main() -> None:
             raise RuntimeError("Cannot resume without run-config.json")
         if not selection_path.is_file():
             raise RuntimeError("Cannot resume without query-selection.json")
-        if not mapping_path.is_file():
+        if not prepare_runtime and not mapping_path.is_file():
             raise RuntimeError("Cannot resume without document-id-mapping.json")
         saved_protocol = load_json_object(config_path, "run configuration")
         validate_resume_configuration(saved_protocol, immutable_protocol)
@@ -1271,13 +1401,13 @@ def main() -> None:
         for document_id in judgments
     }
     missing_corpus_document_ids = judged_document_ids - set(corpus)
-    if page_units and missing_corpus_document_ids:
+    if pdf_dataset and missing_corpus_document_ids:
         raise RuntimeError(
             "PDF qrels reference pages outside the manifest: "
             f"{sorted(missing_corpus_document_ids)[:5]}"
         )
     client = None
-    if not reuse_mode and not arguments.resume:
+    if not reuse_mode and (not arguments.resume or prepare_runtime):
         client = DeployableKnowledgeClient(arguments.base_url, search_timeout=arguments.search_timeout, ingestion_timeout=arguments.ingestion_timeout)
         client.heartbeat()
     if missing_corpus_document_ids:
@@ -1288,7 +1418,7 @@ def main() -> None:
             "evaluation and cannot be retrieved."
         )
 
-    if arguments.resume:
+    if arguments.resume and not prepare_runtime:
         (
             beir_to_application,
             application_to_beir,
@@ -1313,10 +1443,17 @@ def main() -> None:
         if saved_missing_ids != missing_corpus_document_ids:
             raise RuntimeError("Reused mapping does not match missing corpus qrel IDs")
         mapped_parsing = load_json_object(mapping_source, "document mapping").get("documentParsing")
-        if page_units and mapped_parsing != document_parsing:
+        if pdf_dataset and mapped_parsing != document_parsing:
             raise RuntimeError(
                 f"Reused PDF mapping was ingested with {mapped_parsing} parsing, "
                 f"not {document_parsing}"
+            )
+        mapped_device = load_json_object(mapping_source, "document mapping").get(
+            "embeddingDevice", "auto"
+        )
+        if mapped_device != embedding_device:
+            raise RuntimeError(
+                f"Reused mapping was embedded on {mapped_device}, not {embedding_device}"
             )
         atomic_write_json(mapping_path, load_json_object(mapping_source, "document mapping"))
     elif getattr(arguments, "reuse_document_mapping", None):
@@ -1335,16 +1472,19 @@ def main() -> None:
         atomic_write_json(config_path, {**immutable_protocol,
             "mappingSource": str(mapping_source),
             "mappingSha256": PUBLIC_MAPPING_SHA256})
-    elif page_units:
+    elif pdf_dataset:
+        apply_embedding_device(client, embedding_device, vulkan_device)
         (
             beir_to_application,
             application_to_beir,
             application_to_beir_aliases,
             skipped_documents,
         ) = ingest_pdf_corpus(
-            client, dataset_path, pdf_manifest, document_parsing, mapping_path,
+            client, dataset_path, pdf_manifest, document_parsing, mapping_path, prepare_runtime,
+            embedding_device,
         )
     else:
+        apply_embedding_device(client, embedding_device, vulkan_device)
         (
             beir_to_application,
             application_to_beir,
@@ -1356,6 +1496,7 @@ def main() -> None:
             judged_document_ids,
             missing_corpus_document_ids,
             mapping_path,
+            embedding_device,
         )
 
     if client is None:
@@ -1369,13 +1510,14 @@ def main() -> None:
     if public_protocol is not None:
         mapping_value = load_json_object(mapping_path, "document ID mapping")
         validate_public_mapping(mapping_value, corpus, qrels)
+    verify_embedding_device(client, embedding_device, selected_queries[0][1])
     if getattr(arguments, "prepare_only", False):
         atomic_write_json(status_path, {"status": "prepared", "completedQueryIds": [], "failedQueryIds": []})
         print(f"Prepared benchmark runtime at {run_directory}")
         return
 
     # Pages are not deduplicated by content, so PDF qrels are already canonical.
-    canonical_qrels = qrels if page_units else canonicalize_qrels(
+    canonical_qrels = qrels if pdf_dataset else canonicalize_qrels(
         qrels=qrels,
         beir_to_application=beir_to_application,
         application_to_beir=application_to_beir,
@@ -1395,11 +1537,11 @@ def main() -> None:
         query_id: canonical_qrels[query_id]
         for query_id, _query in selected_queries
     }
-    if requested_pipeline is not None or page_units:
+    if requested_pipeline is not None or pdf_dataset:
         corpus = immutable_protocol.get("corpus") or {}
         verify_server_pipeline(client, requested_pipeline, selected_queries[0][1],
                                corpus.get("embeddingModel") if requested_pipeline else None,
-                               document_parsing == "docling-cleanup" if page_units else None)
+                               document_parsing == "docling-cleanup" if pdf_dataset else None)
     results, raw_rankings, failures = run_query_searches(
         client,
         selected_queries,

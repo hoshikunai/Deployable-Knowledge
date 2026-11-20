@@ -50,6 +50,14 @@
 							</p>
 						</fieldset>
 						<fieldset>
+							<legend>Embedding device</legend>
+							<div id="embedding-device" class="choices"></div>
+							<p class="hint">
+								Where llama.cpp embeds chunks and queries. Each device other than Auto searches its
+								own corpus copy. Pick one GPU with the Vulkan device setting.
+							</p>
+						</fieldset>
+						<fieldset>
 							<legend>Document parsing</legend>
 							<div id="document-parsing" class="choices"></div>
 							<p class="hint">
@@ -113,6 +121,7 @@
 										<option value="test">test</option>
 										<option value="train">train</option>
 										<option value="dev">dev</option>
+										<option value="doc">doc (whole PDFs)</option>
 									</select>
 								</label>
 							</fieldset>

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import run as harness_run
 
-from dataset_catalog import dataset_url, validate_dataset_name
+from dataset_catalog import dataset_url, load_pdf_manifest, split_ranking_unit, validate_dataset_name
 from beir.datasets.data_loader import GenericDataLoader
 from run import (
     build_query_result,
@@ -168,12 +168,41 @@ class QuerySelectionTests(unittest.TestCase):
     def test_resume_checkpoint_skips_completed_query_and_is_atomic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "checkpoint.jsonl"
-            record_query_checkpoint(path, "q1", {"semantic": {"d1": 1.0}}, 0.1)
-            record_query_checkpoint(path, "q2", {"semantic": {}}, 0.2, "timeout")
-            record_query_checkpoint(path, "q1", {"semantic": {"d2": 1.0}}, 0.3)
+            checkpoints: dict = {}
+            record_query_checkpoint(path, checkpoints, "q1", {"semantic": {"d1": 1.0}}, 0.1)
+            record_query_checkpoint(path, checkpoints, "q2", {"semantic": {}}, 0.2, "timeout")
+            record_query_checkpoint(path, checkpoints, "q1", {"semantic": {"d2": 1.0}}, 0.3)
             records = [json.loads(line) for line in path.read_text().splitlines()]
             self.assertEqual([record["queryId"] for record in records], ["q2", "q1"])
-            self.assertFalse(path.with_suffix(".jsonl.tmp").exists())
+            self.assertEqual(records[1]["rankings"], {"semantic": {"d2": 1.0}})
+            self.assertEqual(list(checkpoints), ["q2", "q1"])
+            self.assertEqual([path.name], [entry.name for entry in Path(directory).iterdir()])
+
+    def test_checkpoint_appends_new_queries_without_rewriting(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.jsonl"
+            checkpoints: dict = {}
+            record_query_checkpoint(path, checkpoints, "q1", {"semantic": {}}, 0.1)
+            inode = path.stat().st_ino
+            record_query_checkpoint(path, checkpoints, "q2", {"semantic": {}}, 0.2)
+            self.assertEqual(path.stat().st_ino, inode)
+            self.assertEqual(len(path.read_text().splitlines()), 2)
+
+    def test_checkpoint_cut_off_mid_append_is_ignored_then_compacted(self) -> None:
+        complete = {
+            "queryId": "q1", "rankings": {m: {"d": 1.0} for m in ("bm25", "semantic", "hybrid")},
+            "rawRanking": {"methods": {m: [] for m in ("bm25", "semantic", "hybrid")}},
+            "elapsedSeconds": 1.0, "attemptCount": 1, "failure": None,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.jsonl"
+            path.write_text(json.dumps(complete) + "\n" + '{"queryId": "q2", "rank', encoding="utf-8")
+            checkpoints = load_query_checkpoints(path, ["q1", "q2"])
+            self.assertEqual(list(checkpoints), ["q1"])
+
+            record_query_checkpoint(path, checkpoints, "q2", {"semantic": {}}, 0.2, "timeout")
+            self.assertTrue(path.read_text().endswith("\n"))
+            self.assertEqual(list(load_query_checkpoints(path, ["q1", "q2"])), ["q1", "q2"])
 
     def test_resume_configuration_mismatch_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "configuration mismatch"):
@@ -197,7 +226,7 @@ class QuerySelectionTests(unittest.TestCase):
     def test_failure_checkpoint_keeps_empty_ranking_and_failure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "checkpoint.jsonl"
-            record_query_checkpoint(path, "failed", {"semantic": {}, "bm25": {}, "hybrid": {}}, 180.0, "timeout after retry")
+            record_query_checkpoint(path, {}, "failed", {"semantic": {}, "bm25": {}, "hybrid": {}}, 180.0, "timeout after retry")
             record = json.loads(path.read_text())
             self.assertEqual(record["queryId"], "failed")
             self.assertEqual(record["failure"], "timeout after retry")
@@ -221,6 +250,24 @@ class DatasetCatalogTests(unittest.TestCase):
     def test_dataset_names_reject_path_segments(self) -> None:
         with self.assertRaisesRegex(ValueError, "Invalid BEIR dataset"):
             validate_dataset_name("../nfcorpus")
+
+    def test_split_ranking_unit_follows_the_manifest(self) -> None:
+        manifest = {"splitUnits": {"test": "page", "doc": "document"}}
+        self.assertEqual(split_ranking_unit(None, "test"), "document")
+        self.assertEqual(split_ranking_unit({}, "test"), "page")
+        self.assertEqual(split_ranking_unit(manifest, "test"), "page")
+        self.assertEqual(split_ranking_unit(manifest, "doc"), "document")
+
+    def test_pdf_manifest_rejects_unknown_split_units(self) -> None:
+        documents = [{"id": "paper", "file": "pdfs/paper.pdf", "pages": 3}]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pdf-manifest.json"
+            path.write_text(json.dumps({"documents": documents,
+                                        "splitUnits": {"doc": "document"}}))
+            self.assertEqual(load_pdf_manifest(Path(directory))["splitUnits"], {"doc": "document"})
+            path.write_text(json.dumps({"documents": documents, "splitUnits": {"doc": "section"}}))
+            with self.assertRaisesRegex(RuntimeError, "splitUnits"):
+                load_pdf_manifest(Path(directory))
 
 
 class ExistingRuntimeSchemaTests(unittest.TestCase):
@@ -328,6 +375,89 @@ class FakeClient:
             }
         ]
         return {method: hits for method in harness_run.METHODS}
+
+
+class DeviceClient(FakeClient):
+    def __init__(self, *, vulkan: list[dict[str, object]] | None = None,
+                 backend: str = "cpu") -> None:
+        super().__init__()
+        self.vulkan = vulkan or []
+        self.backend = backend
+        self.device = "auto"
+        self.events: list[str] = []
+
+    def vulkan_devices(self) -> list[dict[str, object]]:
+        return self.vulkan
+
+    def set_embedding_device(self, device: str) -> dict[str, object]:
+        self.events.append(f"device:{device}")
+        self.device = device
+        return {"settings": {"device": device}}
+
+    def embedding_status(self) -> dict[str, object]:
+        return {"settings": {"device": self.device}, "backend": self.backend}
+
+    def ingest_document(self, title: str, text: str) -> dict[str, str]:
+        self.events.append("ingest")
+        return super().ingest_document(title, text)
+
+
+class EmbeddingDeviceTests(unittest.TestCase):
+    def test_auto_leaves_the_app_default_alone(self) -> None:
+        client = DeviceClient(backend="vulkan")
+        harness_run.apply_embedding_device(client, "auto")
+        harness_run.verify_embedding_device(client, "auto", "probe")
+        self.assertEqual(client.events, [])
+        self.assertEqual(client.search_calls, [])
+
+    def test_vulkan_needs_a_visible_device(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "No Vulkan device"):
+            harness_run.apply_embedding_device(DeviceClient(), "vulkan")
+        gpus = [{"index": 0, "name": "AMD Radeon 780M"}, {"index": 1, "name": "AMD Radeon RX 7700S"}]
+        with self.assertRaisesRegex(RuntimeError, "does not exist"):
+            harness_run.apply_embedding_device(DeviceClient(vulkan=gpus), "vulkan", 2)
+        client = DeviceClient(vulkan=gpus)
+        harness_run.apply_embedding_device(client, "vulkan", 1)
+        self.assertEqual(client.events, ["device:gpu"])
+
+    def test_verification_rejects_the_wrong_device_or_backend(self) -> None:
+        client = DeviceClient(backend="vulkan")
+        with self.assertRaisesRegex(RuntimeError, "embeds on 'auto'"):
+            harness_run.verify_embedding_device(client, "cpu", "probe")
+        client.device = "cpu"
+        with self.assertRaisesRegex(RuntimeError, "'vulkan' backend"):
+            harness_run.verify_embedding_device(client, "cpu", "probe")
+        client.backend = "cpu"
+        harness_run.verify_embedding_device(client, "cpu", "probe")
+        self.assertEqual(client.search_calls, ["probe", "probe", "probe"])
+
+    def test_prepare_sets_the_device_before_ingesting_and_records_it(self) -> None:
+        corpus = {"document": {"title": "Test document", "text": "one two three four five six"}}
+        queries = {"q1": "query one"}
+        qrels = {"q1": {"document": 1}}
+        client = DeviceClient(backend="cpu")
+        arguments = Namespace(
+            dataset="scifact", split="test", base_url="http://127.0.0.1:4179", search_depth=10,
+            query_limit=0, query_counts="all", sample_seed=42, run_name="prepare", resume=False,
+            search_timeout=180, ingestion_timeout=1800, chunk_overfetch_factor=1,
+            public_protocol=None, prepare_only=True, embedding_device="cpu", vulkan_device=-1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            runs = Path(directory) / "runs"
+            with (patch.object(harness_run, "RUNS_ROOT", runs),
+                  patch.object(harness_run, "DATASETS_ROOT", Path(directory) / "datasets"),
+                  patch.object(harness_run, "download_dataset", return_value=Path(directory) / "datasets/scifact"),
+                  patch.object(harness_run, "GenericDataLoader", return_value=MagicMock(load=MagicMock(return_value=(corpus, queries, qrels)))),
+                  patch.object(harness_run, "DeployableKnowledgeClient", return_value=client),
+                  patch.object(harness_run, "parse_arguments", return_value=arguments)):
+                harness_run.main()
+            run_directory = runs / "scifact-prepare"
+            mapping = json.loads((run_directory / "document-id-mapping.json").read_text())
+            config = json.loads((run_directory / "run-config.json").read_text())
+        self.assertEqual(client.events, ["device:cpu", "ingest"])
+        self.assertEqual(mapping["embeddingDevice"], "cpu")
+        self.assertEqual(config["embeddingDevice"], "cpu")
+        self.assertNotIn("vulkanDevice", config)
 
 
 class RunnerExecutionTests(unittest.TestCase):
@@ -658,6 +788,7 @@ class RunnerExecutionTests(unittest.TestCase):
                 checkpoint_path, ["q1"]
             )["q1"]
             self.assertEqual(resumed_checkpoint["attemptCount"], 3)
+            self.assertEqual(len(checkpoint_path.read_text().splitlines()), 1)
 
     def test_malformed_and_duplicate_checkpoints_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -717,16 +848,30 @@ class DuplicateDocumentTests(unittest.TestCase):
         )
         self.assertEqual(list(collapsed), ["manual#p12", "manual#p4", "guide#p1"])
 
+    def test_pdf_chunks_collapse_to_documents_on_a_document_split(self) -> None:
+        collapsed = collapse_chunks_to_documents(
+            [
+                {"documentId": "app-1", "pageIndex": 11},
+                {"documentId": "app-1", "pageIndex": 3},
+                {"documentId": "app-2", "pageIndex": 0},
+            ],
+            {"app-1": "manual", "app-2": "guide"},
+            3,
+            page_units=False,
+        )
+        self.assertEqual(list(collapsed), ["manual", "guide"])
+
     def test_pdf_ingestion_sets_parsing_and_checks_page_counts(self) -> None:
         manifest = {"documents": [{"id": "manual", "file": "pdfs/manual.pdf", "pages": 3}]}
         client = MagicMock()
-        client.search.return_value = {"pdfPageCleanup": False}
+        client.set_table_recognition.return_value = {"pdfPageCleanup": False}
         client.ingest_file.return_value = {"documentId": "app-1", "pageCount": 3, "chunkCount": 7}
         with tempfile.TemporaryDirectory() as directory:
             mapping_path = Path(directory) / "mapping.json"
             harness_run.ingest_pdf_corpus(client, Path(directory), manifest, "docling", mapping_path)
             mapping = json.loads(mapping_path.read_text())
             client.set_table_recognition.assert_called_once_with(True)
+            client.search.assert_not_called()
             self.assertEqual(mapping["unit"], "page")
             self.assertEqual(mapping["documentParsing"], "docling")
             self.assertEqual(mapping["applicationToBeir"], {"app-1": "manual"})
@@ -740,25 +885,59 @@ class DuplicateDocumentTests(unittest.TestCase):
     def test_pdf_cleanup_parsing_needs_a_server_with_cleanups(self) -> None:
         manifest = {"documents": [{"id": "manual", "file": "pdfs/manual.pdf", "pages": 3}]}
         client = MagicMock()
-        client.search.return_value = {"pdfPageCleanup": False}
+        client.set_table_recognition.return_value = {"pdfPageCleanup": False}
         with tempfile.TemporaryDirectory() as directory:
             mapping_path = Path(directory) / "mapping.json"
             with self.assertRaisesRegex(RuntimeError, "PDF cleanups"):
                 harness_run.ingest_pdf_corpus(client, Path(directory), manifest,
                                               "docling-cleanup", mapping_path)
             client.ingest_file.assert_not_called()
-            client.search.return_value = {}
+            client.set_table_recognition.return_value = {}
             with self.assertRaisesRegex(RuntimeError, "PDF cleanups"):
                 harness_run.ingest_pdf_corpus(client, Path(directory), manifest, "docling",
                                               mapping_path)
-            client.search.return_value = {"pdfPageCleanup": True}
+            client.set_table_recognition.return_value = {"pdfPageCleanup": True}
             client.ingest_file.return_value = {"documentId": "app-1", "pageCount": 3,
                                                "chunkCount": 7}
             harness_run.ingest_pdf_corpus(client, Path(directory), manifest, "docling-cleanup",
                                           mapping_path)
-            client.set_table_recognition.assert_called_once_with(True)
+            client.set_table_recognition.assert_called_with(True)
+            client.search.assert_not_called()
             self.assertEqual(json.loads(mapping_path.read_text())["documentParsing"],
                              "docling-cleanup")
+
+    def test_pdf_prepare_recovers_committed_upload_before_mapping_was_written(self) -> None:
+        import hashlib
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old_pdf = root / "first.pdf"
+            old_pdf.write_bytes(b"committed paper")
+            digest = hashlib.sha256(old_pdf.read_bytes()).hexdigest()
+            managed = f"documents/{digest[:16]}.pdf"
+            (root / "documents").mkdir()
+            (root / managed).write_bytes(old_pdf.read_bytes())
+            (root / "second.pdf").write_bytes(b"pending paper")
+            manifest = {"documents": [
+                {"id": "a", "file": "first.pdf", "pages": 3},
+                {"id": "b", "file": "second.pdf", "pages": 5},
+            ]}
+            with sqlite3.connect(root / "app.db") as db:
+                db.execute("CREATE TABLE documents (id TEXT, source_path TEXT)")
+                db.execute("INSERT INTO documents VALUES (?, ?)", ("app-a", managed))
+            client = MagicMock()
+            client.set_table_recognition.return_value = {"pdfPageCleanup": True}
+            client.ingest_file.return_value = {"documentId": "app-b", "pageCount": 5, "chunkCount": 9}
+            with patch.object(harness_run, "count_pages", return_value={old_pdf: 3}) as pages:
+                mapping, _, _, _ = harness_run.ingest_pdf_corpus(
+                    client, root, manifest, "docling-cleanup", root / "mapping.json", root)
+            pages.assert_called_once_with([old_pdf])
+            client.ingest_file.assert_called_once_with(root / "second.pdf")
+            self.assertEqual(mapping, {"a": "app-a", "b": "app-b"})
+            old_pdf.write_bytes(b"changed after interruption")
+            with self.assertRaisesRegex(RuntimeError, "outside the current corpus"):
+                harness_run.committed_pdfs(root, root, manifest["documents"])
 
     def test_only_cleanup_parsing_sets_the_server_flag(self) -> None:
         self.assertEqual(parsing_environment("docling-cleanup"), {"RAG_PDF_PAGE_CLEANUP": "true"})

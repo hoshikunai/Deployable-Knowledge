@@ -26,7 +26,8 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 import paths
-from corpora import DOCUMENT_PARSING, EMBEDDING_MODELS, copy_marker, delete_copy, list_corpora
+from corpora import (DOCUMENT_PARSING, EMBEDDING_DEVICES, EMBEDDING_MODELS, copy_marker, delete_copy,
+                     list_corpora)
 from jobs import (
     PIPELINES,
     RESUMABLE_STATES,
@@ -248,9 +249,10 @@ def options() -> dict[str, Any]:
     settings = load_settings()
     return {
         "corpora": list_corpora(settings.chunking(), settings.embeddingModel, settings.split,
-                                settings.documentParsing),
+                                settings.documentParsing, device=settings.embeddingDevice),
         "embeddingModels": [{"id": key, **value} for key, value in EMBEDDING_MODELS.items()],
         "documentParsing": [{"id": key, **value} for key, value in DOCUMENT_PARSING.items()],
+        "embeddingDevices": [{"id": key, **value} for key, value in EMBEDDING_DEVICES.items()],
         "pipelines": [{"key": key, **value} for key, value in PIPELINES.items()],
         "settings": asdict(settings),
         "defaults": asdict(Settings()),
@@ -306,7 +308,8 @@ def start_jobs(request: JobRequest) -> dict[str, Any]:
 @app.get("/api/corpora")
 def corpora_for(chunkMaxTokens: int = 0, chunkOverlapTokens: int = 0,
                 embeddingModel: str | None = None,
-                documentParsing: str | None = None) -> list[dict[str, Any]]:
+                documentParsing: str | None = None,
+                embeddingDevice: str | None = None) -> list[dict[str, Any]]:
     """Corpus copy status for chunk values that may not be saved yet."""
     saved = load_settings()
     try:
@@ -314,11 +317,12 @@ def corpora_for(chunkMaxTokens: int = 0, chunkOverlapTokens: int = 0,
             "chunkMaxTokens": chunkMaxTokens, "chunkOverlapTokens": chunkOverlapTokens,
             "embeddingModel": embeddingModel or saved.embeddingModel,
             "documentParsing": documentParsing or saved.documentParsing,
+            "embeddingDevice": embeddingDevice or saved.embeddingDevice,
         })
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
     return list_corpora(settings.chunking(), settings.embeddingModel,
-                        parsing=settings.documentParsing)
+                        parsing=settings.documentParsing, device=settings.embeddingDevice)
 
 
 class PrepareRequest(BaseModel):

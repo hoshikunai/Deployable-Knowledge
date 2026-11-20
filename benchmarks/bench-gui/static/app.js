@@ -83,6 +83,12 @@ const SETTINGS_GROUPS = [
 			['maxSessions', 'Max sessions per run', 'Stops and waits for Resume after this', 1],
 			['memoryCeilingGb', 'Memory ceiling (GB)', 'Pauses the run above this', 1],
 			['appPort', 'App server port', 'Used while benchmarking', 1024],
+			[
+				'vulkanDevice',
+				'Vulkan device',
+				'Index of the one GPU llama.cpp may use; -1 = every device',
+				-1
+			],
 			['guiPort', 'GUI port', 'Takes effect next launch', 1024]
 		]
 	}
@@ -146,6 +152,11 @@ function selectTab(name) {
 
 function parsingLabel(id) {
 	return options?.documentParsing.find((mode) => mode.id === id)?.label ?? id;
+}
+
+function deviceSuffix(id) {
+	if (!id || id === 'auto') return '';
+	return ` on ${options?.embeddingDevices.find((device) => device.id === id)?.label ?? id}`;
 }
 
 function selectedPipeline() {
@@ -212,6 +223,14 @@ function renderOptions() {
 				`<option value="${model.id}" ${model.id === options.settings.embeddingModel ? 'selected' : ''}>${escapeHtml(model.label)}</option>`
 		)
 		.join('');
+	byId('embedding-device').innerHTML = options.embeddingDevices
+		.map(
+			(device) => `<label class="choice">
+				<input type="radio" name="embedding-device" value="${device.id}" ${device.id === options.settings.embeddingDevice ? 'checked' : ''}>
+				<span><strong>${escapeHtml(device.label)}</strong><br><span class="hint">${escapeHtml(device.description)}</span></span>
+			</label>`
+		)
+		.join('');
 	byId('document-parsing').innerHTML = options.documentParsing
 		.map(
 			(mode) => `<label class="choice">
@@ -222,7 +241,7 @@ function renderOptions() {
 		.join('');
 	byId('split').value = options.settings.split;
 	byId('corpora-legend').textContent =
-		`Corpora · ${options.corpora[0]?.chunking ?? ''} · ${parsingLabel(options.settings.documentParsing)}`;
+		`Corpora · ${options.corpora[0]?.chunking ?? ''}${deviceSuffix(options.settings.embeddingDevice)} · ${parsingLabel(options.settings.documentParsing)}`;
 	byId('corpora').innerHTML = options.corpora.map(corpusRow).join('');
 	byId('pipelines').innerHTML = options.pipelines
 		.map(
@@ -275,12 +294,12 @@ function jobStatusLine(job) {
 		const chunks = job.settings.chunkMaxTokens
 			? `${job.settings.chunkMaxTokens}-token chunks, ${job.settings.chunkOverlapTokens} overlap`
 			: '1,200-character chunks';
-		return `${job.dataset} · preparing ${chunks} · ${job.settings.embeddingModel} · ${parsingLabel(job.settings.documentParsing)}`;
+		return `${job.dataset} · preparing ${chunks} · ${job.settings.embeddingModel}${deviceSuffix(job.settings.embeddingDevice)} · ${parsingLabel(job.settings.documentParsing)}`;
 	}
 	const pipeline = options?.pipelines.find((item) => item.key === job.pipeline)?.label ?? '';
 	const queries =
 		job.queries === 'all' ? 'all queries' : `${job.queries} queries, seed ${job.seed}`;
-	return `${job.dataset} · ${pipeline} · ${parsingLabel(job.settings.documentParsing)} · ${queries}`;
+	return `${job.dataset} · ${pipeline}${deviceSuffix(job.settings.embeddingDevice)} · ${parsingLabel(job.settings.documentParsing)} · ${queries}`;
 }
 
 function renderCurrent(current) {
@@ -771,14 +790,16 @@ let copiesRequest = 0;
 async function loadCorpusCopies() {
 	const container = byId('corpus-copies');
 	if (!container) return;
-	const { chunkMaxTokens, chunkOverlapTokens, embeddingModel, documentParsing } = formSettings();
+	const { chunkMaxTokens, chunkOverlapTokens, embeddingModel, documentParsing, embeddingDevice } =
+		formSettings();
 	if (
 		!chunkMaxTokens &&
 		embeddingModel === options.defaults.embeddingModel &&
-		documentParsing === options.defaults.documentParsing
+		documentParsing === options.defaults.documentParsing &&
+		embeddingDevice === options.defaults.embeddingDevice
 	) {
 		container.innerHTML =
-			'<p class="hint">Default copies (1,200-character chunks, nomic, current chunking) are used. Enter a chunk size in tokens, or pick another embedding model or document parsing on the Run tab, to prepare other copies.</p>';
+			'<p class="hint">Default copies (1,200-character chunks, nomic, current chunking) are used. Enter a chunk size in tokens, or pick another embedding model, embedding device or document parsing on the Run tab, to prepare other copies.</p>';
 		return;
 	}
 	const request = ++copiesRequest;
@@ -786,7 +807,8 @@ async function loadCorpusCopies() {
 		chunkMaxTokens,
 		chunkOverlapTokens,
 		embeddingModel,
-		documentParsing
+		documentParsing,
+		embeddingDevice
 	});
 	try {
 		const corpora = await api(`/api/corpora?${params}`);
@@ -896,6 +918,9 @@ function bindEvents() {
 	byId('split').addEventListener('change', (event) => saveRunSetting('split', event.target.value));
 	byId('document-parsing').addEventListener('change', (event) =>
 		saveRunSetting('documentParsing', event.target.value)
+	);
+	byId('embedding-device').addEventListener('change', (event) =>
+		saveRunSetting('embeddingDevice', event.target.value)
 	);
 	byId('corpora').addEventListener('click', (event) => {
 		const dataset = event.target.closest('button')?.dataset.prepareCorpus;

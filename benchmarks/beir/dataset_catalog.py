@@ -21,6 +21,13 @@ PDF_MANIFEST = "pdf-manifest.json"
 # "docling" turns on table recognition (Heron layout + TableFormer). OCR is the same for both.
 DOCUMENT_PARSING_MODES = ("standard", "docling", "docling-cleanup")
 TABLE_RECOGNITION_MODES = ("docling", "docling-cleanup")
+# Where llama.cpp embeds, mapped to the app's embedding device setting. "vulkan" is the app's
+# "gpu", which refuses to fall back to the CPU.
+EMBEDDING_DEVICE_SETTINGS = {"auto": "auto", "cpu": "cpu", "vulkan": "gpu"}
+# A PDF manifest may score some qrel splits by page and others by whole document.
+RANKING_UNITS = ("page", "document")
+# Qrel splits the harness accepts; "doc" is the whole-document split of a PDF dataset.
+QUERY_SPLITS = ("test", "train", "dev", "doc")
 
 
 @dataclass(frozen=True)
@@ -84,6 +91,15 @@ DATASETS = (
         corpus_size="8 PDFs, 1,071 pages",
         test_queries="81",
     ),
+    DatasetInfo(
+        # Built locally by build_openrag_dataset.py from Vectara's Open RAG Benchmark (arXiv);
+        # "test" scores pages of the aligned section, "doc" scores whole papers.
+        name="openrag-arxiv",
+        description="arXiv papers as PDFs (Open RAG Benchmark); test scores pages, doc scores papers",
+        splits=("test", "doc"),
+        corpus_size="250 PDFs (default subset)",
+        test_queries="~700",
+    ),
 )
 
 
@@ -113,7 +129,20 @@ def load_pdf_manifest(dataset_path: Path) -> dict[str, Any] | None:
         for item in documents
     ):
         raise RuntimeError(f"Invalid PDF manifest: {path}")
+    split_units = manifest.get("splitUnits", {})
+    if not isinstance(split_units, dict) or not all(
+        isinstance(split, str) and unit in RANKING_UNITS for split, unit in split_units.items()
+    ):
+        raise RuntimeError(f"Invalid splitUnits in PDF manifest: {path}")
     return manifest
+
+
+def split_ranking_unit(manifest: dict[str, Any] | None, split: str) -> str:
+    """What a split's qrels judge: a text corpus's documents, or a PDF's pages unless the
+    manifest names the split a whole-document split."""
+    if manifest is None:
+        return "document"
+    return manifest.get("splitUnits", {}).get(split, "page")
 
 
 def is_pdf_dataset(dataset_path: Path) -> bool:

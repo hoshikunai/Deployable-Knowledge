@@ -109,6 +109,38 @@ class DeployableKnowledgeClient:
             raise RuntimeError("Table recognition is on but its models are not installed")
         return status
 
+    def embedding_status(self) -> dict[str, Any]:
+        return self.request_json("GET", "/embedding")
+
+    def set_embedding_device(self, device: str) -> dict[str, Any]:
+        """Keep the active embedding provider and model, and switch the device it runs on."""
+        settings = self.embedding_status()["settings"]
+        status = self.request_json(
+            "PATCH", "/embedding",
+            {"provider": settings["provider"], "model": settings["model"], "device": device},
+        )
+        if status["settings"]["device"] != device:
+            raise RuntimeError(f"Embedding device did not switch to {device}: {status['settings']}")
+        return status
+
+    def vulkan_devices(self) -> list[dict[str, Any]]:
+        return self.request_json("GET", "/vulkan-devices")["devices"]
+
+    def request_json(self, method: str, path: str,
+                     body: dict[str, Any] | None = None) -> dict[str, Any]:
+        http_request = request.Request(
+            f"{self.base_url}{path}",
+            data=None if body is None else json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method=method,
+        )
+        try:
+            with request.urlopen(http_request, timeout=self.search_timeout) as response:
+                return json.load(response)
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"{method} {path} returned HTTP {exc.code}: {detail}") from exc
+
     def search(self, query: str, top_k: int) -> dict[str, Any]:
         parameters = parse.urlencode(
             {

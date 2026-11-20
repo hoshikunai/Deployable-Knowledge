@@ -16,7 +16,7 @@ import pytrec_eval
 
 import paths
 from run import canonicalize_qrels, ranking_unit
-from corpora import DEFAULT_DOCUMENT_PARSING, DEFAULT_EMBEDDING_MODEL
+from corpora import DEFAULT_DOCUMENT_PARSING, DEFAULT_EMBEDDING_DEVICE, DEFAULT_EMBEDDING_MODEL
 from runs import describe_corpus, describe_pipeline, read_json, run_path
 
 METHODS = ("bm25", "semantic", "hybrid")
@@ -155,6 +155,9 @@ def corpus_differences(baseline: RunData, other: RunData) -> list[str]:
     base_model = corpus(baseline).get("embeddingModel", DEFAULT_EMBEDDING_MODEL)
     if base_model != corpus(other).get("embeddingModel", DEFAULT_EMBEDDING_MODEL):
         differences.append("embedding model")
+    base_device = corpus(baseline).get("embeddingDevice", DEFAULT_EMBEDDING_DEVICE)
+    if base_device != corpus(other).get("embeddingDevice", DEFAULT_EMBEDDING_DEVICE):
+        differences.append("embedding device")
     base_parsing = corpus(baseline).get("documentParsing", DEFAULT_DOCUMENT_PARSING)
     if base_parsing != corpus(other).get("documentParsing", DEFAULT_DOCUMENT_PARSING):
         differences.append("document parsing")
@@ -164,8 +167,8 @@ def corpus_differences(baseline: RunData, other: RunData) -> list[str]:
 def retriever_check(bm25_same: bool, semantic_same: bool, differences: list[str]) -> tuple[str, bool]:
     """Describe whether BM25 and semantic results match, and whether any mismatch is expected.
 
-    Chunking and document parsing change both retrievers; the embedding model changes only
-    semantic search.
+    Chunking and document parsing change both retrievers; the embedding model and device change
+    only semantic search.
     """
     changes_text = {"chunk size", "document parsing"} & set(differences)
     unexpected = (not bm25_same and not changes_text) or (

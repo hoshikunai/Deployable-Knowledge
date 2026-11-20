@@ -72,6 +72,20 @@ benchmarks/beir/.venv/bin/python \
 The downloader uses BEIR's official URL convention. A dataset still needs the
 standard `corpus.jsonl`, `queries.jsonl`, and `qrels/<split>.tsv` layout.
 
+## PDF corpora
+
+`pdf-eval` (8 Air Force PDFs) and `openrag-arxiv` (arXiv papers from Vectara's Open RAG
+Benchmark) are scored by page and uploaded as real PDFs, so document parsing modes can be
+compared. `openrag-arxiv` also has a `doc` split scored by whole paper. See
+`report_docs/BUILDING_A_PDF_CORPUS.md` for how to build them.
+
+## Embedding device
+
+`run.py --embedding-device {auto,cpu,vulkan}` sets where llama.cpp embeds while a corpus copy is
+ingested (through the app's `/embedding` setting), then checks the backend that loaded. `vulkan`
+first asks `/vulkan-devices` and stops if the server sees none. `run_suite.py` passes the bench
+GUI's Vulkan device index to the server as `GGML_VK_VISIBLE_DEVICES`.
+
 ## Run the automated test pipeline
 
 ### One-command prepared-runtime benchmark
