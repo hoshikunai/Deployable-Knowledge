@@ -7,6 +7,8 @@ import type { Document } from '#lib/types';
 import { assertIngestableAudioSize } from '#lib/utils';
 import type { ExtractionResult, ParsedChunk, Source } from '#lib/server/rag/chunk/parse-shared';
 import { extractText } from '#lib/server/rag/chunk/text-extract';
+import { lowMemoryPdfPrepare } from '#lib/server/rag/chunk/pdf-config';
+import { getActiveEmbedding } from '#lib/server/rag/embedding-model';
 import { extractPlainText } from '#lib/server/rag/chunk/text-file-extract';
 import { extractCsv } from '#lib/server/rag/chunk/tabular-extract';
 import { extractSpreadsheet } from '#lib/server/rag/chunk/spreadsheet-extract';
@@ -57,8 +59,11 @@ const pdfHandler: SourceTypeHandler = {
 			throw new Error('Only PDF uploads are supported.');
 		}
 	},
-	extract: async (source, onProgress) =>
-		extractText(source, onProgress, { recognizeTables: await shouldRecognizeTables() })
+	extract: async (source, onProgress) => {
+		const recognizeTables = await shouldRecognizeTables();
+		if (lowMemoryPdfPrepare) await (await getActiveEmbedding()).provider.unload();
+		return extractText(source, onProgress, { recognizeTables });
+	}
 };
 
 const audioHandler: SourceTypeHandler = {

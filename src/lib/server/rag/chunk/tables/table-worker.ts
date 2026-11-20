@@ -1,7 +1,9 @@
+import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { createLogger } from '#lib/server/logging';
 import { INFERENCE_THREADS } from '#lib/server/utils/inference-threads';
+import { lowMemoryPdfPrepare } from '../pdf-config';
 import { TABLE_MODEL_PATHS } from './table-models';
 import type { Box } from './table-types';
 
@@ -20,8 +22,7 @@ const log = createLogger('documents');
 // docling-ibm-models (MIT): the crop is resized to 448x448 with OpenCV's bilinear sampling,
 // normalized, and laid out (C, W, H) as Docling does; tags are decoded greedily with Docling's
 // two structure corrections, and each cell's box comes from the decoder state Docling picks.
-const WORKER_SOURCE = String.raw`
-const { parentPort, workerData } = require("node:worker_threads");
+const MODEL_SOURCE = String.raw`
 const ort = require(workerData.ortPath);
 
 const TABLE_LABEL = 8;
@@ -42,19 +43,10 @@ const options = {
 	enableCpuMemArena: false,
 	enableMemPattern: false
 };
-let sessions;
-const ready = Promise.all([
-	ort.InferenceSession.create(workerData.paths.layout, options),
-	ort.InferenceSession.create(workerData.paths.encoder, options),
-	ort.InferenceSession.create(workerData.paths.decoder, options),
-	ort.InferenceSession.create(workerData.paths.bbox, options)
-]).then(
-	([layout, encoder, decoder, bbox]) => {
-		sessions = { layout, encoder, decoder, bbox };
-		parentPort.postMessage({ type: "ready" });
-	},
-	(error) => parentPort.postMessage({ type: "fatal", message: String(error && error.message ? error.message : error) })
-);
+const sessions = {};
+async function loadModel(name) {
+	sessions[name] = await ort.InferenceSession.create(workerData.paths[name], options);
+}
 
 async function detect(message) {
 	const rgba = message.pixels;
@@ -229,9 +221,16 @@ async function recognize(message) {
 	return { result: { tags: tagArray, boxes }, transfer: [tagArray.buffer, boxes.buffer] };
 }
 
+`;
+
+const WORKER_SOURCE = `const { parentPort, workerData } = require("node:worker_threads");
+${MODEL_SOURCE}
+const ready = Promise.all(["layout", "encoder", "decoder", "bbox"].map(loadModel)).then(
+	() => true,
+	(error) => { parentPort.postMessage({ type: "fatal", message: String(error) }); return false; }
+);
 parentPort.on("message", async (message) => {
-	await ready;
-	if (!sessions) return;
+	if (!(await ready)) return;
 	try {
 		const { result, transfer } = message.type === "detect" ? await detect(message) : await recognize(message);
 		parentPort.postMessage({ type: "result", id: message.id, ...result }, transfer);
@@ -241,14 +240,37 @@ parentPort.on("message", async (message) => {
 });
 `;
 
+// A prepare may render very large embedded images even for a 640px model input.
+// Exit after each inference so the OS reclaims native model memory before the next render.
+const PREPARE_SOURCE = `const workerData = JSON.parse(process.argv[1]);
+${MODEL_SOURCE}
+process.once("message", async (message) => {
+	let reply;
+	try {
+		const names = message.type === "detect" ? ["layout"] : ["encoder", "decoder", "bbox"];
+		for (const name of names) await loadModel(name);
+		try {
+			const { result } = message.type === "detect" ? await detect(message) : await recognize(message);
+			reply = { type: "result", result };
+		} catch (error) {
+			reply = { type: "error", message: String(error) };
+		}
+	} catch (error) {
+		reply = { type: "fatal", message: String(error) };
+	}
+	process.send(reply, (error) => process.exit(error ? 1 : 0));
+});
+`;
+
 export type RgbaImage = { pixels: Uint8Array<ArrayBuffer>; width: number; height: number };
 
 export type RecognizedTags = { tags: Int32Array; boxes: Float32Array };
 
 type DetectResult = { boxes: Float32Array; scores: Float32Array };
 
+type PrepareReply<T> = { type: 'result'; result: T } | { type: 'error' | 'fatal'; message: string };
+
 type WorkerMessage =
-	| { type: 'ready' }
 	| { type: 'fatal'; message: string }
 	| ({ type: 'result'; id: number } & (DetectResult | RecognizedTags))
 	| { type: 'error'; id: number; message: string };
@@ -275,18 +297,17 @@ function failPending(error: Error): void {
 	pending.clear();
 }
 
-function stopWorker(): void {
+async function stopWorker(): Promise<void> {
 	const running = worker;
 	worker = undefined;
 	if (idleTimer) {
 		clearTimeout(idleTimer);
 		idleTimer = undefined;
 	}
-	void running?.terminate();
+	await running?.terminate();
 }
 
 function handleMessage(message: WorkerMessage): void {
-	if (message.type === 'ready') return;
 	if (message.type === 'fatal') {
 		failPending(new TableModelLoadError(`Table models failed to load: ${message.message}`));
 		stopWorker();
@@ -308,15 +329,19 @@ function startWorker(): Worker {
 		execArgv: [],
 		workerData: { ortPath, paths: TABLE_MODEL_PATHS, threads: INFERENCE_THREADS }
 	});
-	created.on('message', handleMessage);
+	created.on('message', (message: WorkerMessage) => {
+		if (worker === created) handleMessage(message);
+	});
 	created.on('error', (error: Error) => {
+		if (worker !== created) return;
 		log.error('Table worker crashed', {}, error);
 		failPending(error);
-		if (worker === created) worker = undefined;
+		worker = undefined;
 	});
 	created.on('exit', (code) => {
+		if (worker !== created) return;
 		failPending(new Error(`Table worker exited (code ${code}).`));
-		if (worker === created) worker = undefined;
+		worker = undefined;
 	});
 	return created;
 }
@@ -327,7 +352,46 @@ function scheduleIdleTeardown(): void {
 	idleTimer.unref?.();
 }
 
+function runPrepareInference<T>(message: Record<string, unknown>, pixels: Uint8Array): Promise<T> {
+	const ortPath = createRequire(import.meta.url).resolve('onnxruntime-node');
+	const config = JSON.stringify({ ortPath, paths: TABLE_MODEL_PATHS, threads: 1 });
+	const child = spawn(process.execPath, ['--input-type=commonjs', '-e', PREPARE_SOURCE, config], {
+		stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+		serialization: 'advanced'
+	});
+	return new Promise<T>((resolve, reject) => {
+		let reply: PrepareReply<T> | undefined;
+		let failure: Error | undefined;
+		const timer = setTimeout(() => {
+			failure = new Error('PDF prepare table inference timed out.');
+			child.kill('SIGKILL');
+		}, REQUEST_TIMEOUT_MS);
+		child.once('error', (error) => {
+			failure = error;
+		});
+		child.once('message', (value: PrepareReply<T>) => {
+			reply = value;
+		});
+		child.once('close', (code) => {
+			clearTimeout(timer);
+			if (failure) reject(failure);
+			else if (reply?.type === 'fatal') reject(new TableModelLoadError(reply.message));
+			else if (reply?.type === 'error') reject(new Error(reply.message));
+			else if (code === 0 && reply?.type === 'result') resolve(reply.result);
+			else reject(new Error(`PDF prepare inference exited without a result (code ${code}).`));
+		});
+		child.send({ ...message, pixels }, (error) => {
+			if (error) {
+				failure = error;
+				child.kill('SIGKILL');
+			}
+		});
+	});
+}
+
 function send<T>(message: Record<string, unknown>, pixels: Uint8Array<ArrayBuffer>): Promise<T> {
+	if (lowMemoryPdfPrepare) return runPrepareInference<T>(message, pixels);
+	if (idleTimer) clearTimeout(idleTimer);
 	worker ??= startWorker();
 	const target = worker;
 	const id = (nextRequestId += 1);
@@ -348,7 +412,7 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
 		try {
 			return await run();
 		} finally {
-			scheduleIdleTeardown();
+			if (worker) scheduleIdleTeardown();
 		}
 	});
 	queue = task.catch(() => undefined);

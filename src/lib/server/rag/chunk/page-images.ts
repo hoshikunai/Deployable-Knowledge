@@ -1,4 +1,8 @@
 import sharp from 'sharp';
+import { createLogger } from '#lib/server/logging';
+
+const ocrLog = createLogger('ocr');
+export const MAX_OCR_PIXELS = 50_000_000;
 
 const PAINT_IMAGE_XOBJECT = 85;
 const PAINT_INLINE_IMAGE_XOBJECT = 86;
@@ -147,12 +151,21 @@ export async function extractPageImages(
 			if (!isInline && operator !== PAINT_IMAGE_XOBJECT) continue;
 
 			const operand = argsArray[index][0];
-			const name = isInline ? `inline_p${pageNumber}_${images.length + 1}` : String(operand);
+			const name = isInline ? `inline_p${pageNumber}_${index + 1}` : String(operand);
 			if (seen.has(name)) continue;
 			seen.add(name);
 
 			const raw = isInline ? (operand as RawImage) : await resolveImage(page, name);
 			if (!raw) continue;
+			if (raw.width && raw.height && raw.width * raw.height > MAX_OCR_PIXELS) {
+				ocrLog.warn('Skipped an image too large to OCR', {
+					page: pageNumber,
+					image: name,
+					width: raw.width,
+					height: raw.height
+				});
+				continue;
+			}
 
 			const png = await toPng(raw);
 			if (!png) continue;

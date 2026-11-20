@@ -52,18 +52,6 @@ function readChunkingConfig(): ChunkingConfig {
 	return { unit: 'tokens', maxTokens, overlapTokens: overlap };
 }
 
-function readBoolean(name: string): boolean {
-	const raw = process.env[name]?.trim();
-	if (!raw || raw === 'false') return false;
-	if (raw === 'true') return true;
-	throw new Error(`${name} must be "true" or "false", received "${raw}".`);
-}
-
-// Benchmark-only: strips running headers, joins sentences split across pages, drops pdf-parse
-// tables already in the page text, and splits long OCR text. It deletes repeated page-edge lines,
-// which can include real text, so it stays off in the app.
-export const pdfPageCleanup = readBoolean('RAG_PDF_PAGE_CLEANUP');
-
 export const chunkingConfig: Readonly<ChunkingConfig> = Object.freeze(readChunkingConfig());
 
 export async function loadChunkBudget(): Promise<ChunkBudget> {

@@ -51,6 +51,12 @@ export class TransformersEmbeddingProvider extends EmbeddingProvider {
 
 	private extractors = new Map<string, Promise<FeatureExtractionPipeline>>();
 
+	override async unload(): Promise<void> {
+		const extractors = [...this.extractors.values()];
+		this.extractors.clear();
+		for (const extractor of extractors) await (await extractor).dispose();
+	}
+
 	override isInstalled(id: string): Promise<boolean> {
 		const model = catalogModel(id);
 		return ModelRegistry.is_pipeline_cached('feature-extraction', model.repository, {

@@ -1,6 +1,7 @@
 import type { ApiTableRecognitionStatus } from '#lib/types';
 import { createLogger } from '#lib/server/logging';
 import { getTableRecognition } from '#lib/server/database/app-state';
+import { pdfPageCleanup } from '#lib/server/rag/chunk/pdf-config';
 import {
 	areTableModelsInstalled,
 	TABLE_MODELS_SIZE_BYTES
@@ -12,7 +13,8 @@ export async function getTableRecognitionStatus(): Promise<ApiTableRecognitionSt
 	return {
 		enabled: await getTableRecognition(),
 		modelsInstalled: areTableModelsInstalled(),
-		modelsSizeBytes: TABLE_MODELS_SIZE_BYTES
+		modelsSizeBytes: TABLE_MODELS_SIZE_BYTES,
+		pdfPageCleanup
 	};
 }
 

@@ -1,6 +1,7 @@
 import { setImmediate as yieldEventLoop } from 'node:timers/promises';
 import { createLogger } from '#lib/server/logging';
 import { withTimeout } from '#lib/server/utils/with-timeout';
+import { lowMemoryPdfPrepare } from '../pdf-config';
 import type { PdfDocument } from '../page-images';
 import type { ExtractedChunk, Source } from '../parse-shared';
 import { buildTableStructure } from './otsl';
@@ -41,6 +42,7 @@ async function readPageTables(
 	try {
 		const viewport = page.getViewport({ scale: 1 });
 		const layout = await rendered(renderLayoutInput(document, page, viewport));
+		if (lowMemoryPdfPrepare) page.cleanup();
 		const tables = distinctTables(await detectTables(layout, viewport.width, viewport.height));
 		if (tables.length === 0) return [];
 
@@ -50,6 +52,7 @@ async function readPageTables(
 			const crop = await rendered(
 				renderTableCrop(document, page, viewport, clampToPage(table, viewport))
 			);
+			if (lowMemoryPdfPrepare) page.cleanup();
 			let content = '';
 			try {
 				const { tags, boxes } = await recognizeTable(crop.image);

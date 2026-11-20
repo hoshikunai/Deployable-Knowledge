@@ -5,9 +5,14 @@ import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
 import { createLogger } from '#lib/server/logging';
 import { TimeoutError, withTimeout } from '#lib/server/utils/with-timeout';
 import { installOcrData, OCR_DATA_DIR } from './ocr-data.ts';
-import { extractPageImages, type PageImage, type PdfDocument } from './page-images.ts';
+import {
+	extractPageImages,
+	MAX_OCR_PIXELS,
+	type PageImage,
+	type PdfDocument
+} from './page-images.ts';
 import { collectRecognizedTables } from './tables/table-extract.ts';
-import { pdfPageCleanup } from './chunking-config.ts';
+import { lowMemoryPdfPrepare, pdfPageCleanup } from './pdf-config.ts';
 import { joinCrossPageSentences, stripRepeatedPageLines } from './page-cleanup.ts';
 import {
 	normalizeWhitespace,
@@ -18,7 +23,6 @@ import {
 
 const MIN_OCR_CONFIDENCE = 80;
 const MIN_OCR_ONLY_CONFIDENCE = 50;
-const MAX_OCR_PIXELS = 50_000_000;
 const OCR_IMAGE_TIMEOUT_MS = 120_000;
 const OCR_STARTUP_TIMEOUT_MS = 60_000;
 const PAGE_IMAGE_TIMEOUT_MS = 60_000;
@@ -141,11 +145,6 @@ async function ocrEmbeddedImages(
 					page: pageNumber,
 					width: image.width
 				};
-				if (image.width * image.height > MAX_OCR_PIXELS) {
-					ocrLog.warn('Skipped an image too large to OCR', imageFields);
-					continue;
-				}
-
 				try {
 					session ??= await createOcrSession();
 
@@ -274,7 +273,10 @@ export async function extractText(
 	options: PdfExtractOptions = { recognizeTables: false }
 ): Promise<ExtractionResult> {
 	const data = await readFile(file.path);
-	const pdf: PdfSession = { data, parser: new PDFParse({ data }) };
+	const pdf: PdfSession = {
+		data,
+		parser: new PDFParse({ data, maxImageSize: lowMemoryPdfPrepare ? MAX_OCR_PIXELS : -1 })
+	};
 	const ocrShare = options.recognizeTables ? 0.5 : 1;
 
 	try {
@@ -307,6 +309,13 @@ export async function extractText(
 			durationMs: Date.now() - ocrStarted,
 			pagesWithText: ocrTextByPage.size
 		});
+
+		if (lowMemoryPdfPrepare) {
+			// Limit decoding only for OCR. Table recognition must see the full original page.
+			await pdf.parser.destroy();
+			pdf.parser = new PDFParse({ data });
+			if (options.recognizeTables) await pdf.parser.getInfo();
+		}
 
 		const recognizedByPage = options.recognizeTables
 			? await collectRecognizedTables(

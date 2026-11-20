@@ -7,7 +7,7 @@ import { orderByDocument } from './document-scoring';
 import { getHybridPipeline, type HybridPipelineConfig } from './hybrid-pipeline';
 import { fuseSearchResultsRrf } from './rrf-fusion';
 import { getActiveEmbedding } from '../embedding-model';
-import { pdfPageCleanup } from '../chunk/chunking-config';
+import { pdfPageCleanup } from '../chunk/pdf-config';
 import {
 	type ScoredSearchMatch,
 	type SearchMatchBase,

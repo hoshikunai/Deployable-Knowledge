@@ -377,6 +377,7 @@ export interface ApiTableRecognitionStatus {
 	enabled: boolean;
 	modelsInstalled: boolean;
 	modelsSizeBytes: number;
+	pdfPageCleanup: boolean;
 }
 
 export interface ApiTableRecognitionUpdate {
