@@ -379,6 +379,71 @@ class PipelineLabelTests(unittest.TestCase):
             self.assertIn(text, label)
 
 
+class EnvironmentTests(unittest.TestCase):
+    def test_environment_labels(self) -> None:
+        from runs import describe_environment
+        windows = {"platform": "windows", "serverEnvironment": {
+            "embeddingBackend": "vulkan", "gpus": ["AMD Radeon RX 7700S"]}}
+        self.assertEqual(describe_environment(windows), "Windows · Vulkan · AMD Radeon RX 7700S")
+        wsl = {"platform": "wsl", "serverEnvironment": {"embeddingBackend": "vulkan", "gpus": []}}
+        self.assertEqual(describe_environment(wsl), "WSL · CPU (no Vulkan GPU)")
+        cpu = {"platform": "linux", "serverEnvironment": {"embeddingBackend": "cpu", "gpus": []}}
+        self.assertEqual(describe_environment(cpu), "Linux · CPU")
+        self.assertEqual(describe_environment({"platform": "wsl", "serverEnvironment": None}), "WSL")
+        self.assertIsNone(describe_environment({"buildTime": 1}))
+        self.assertIsNone(describe_environment(None))
+
+    def test_machine_platform(self) -> None:
+        with patch.object(jobs.sys, "platform", "win32"):
+            self.assertEqual(jobs.machine_platform(), "windows")
+        with patch.object(jobs.sys, "platform", "linux"), \
+                patch.object(jobs.platform, "release", return_value="6.18.58.1-microsoft-standard-WSL2"):
+            self.assertEqual(jobs.machine_platform(), "wsl")
+        with patch.object(jobs.sys, "platform", "linux"), \
+                patch.object(jobs.platform, "release", return_value="6.8.0-generic"):
+            self.assertEqual(jobs.machine_platform(), "linux")
+
+    def test_execution_meta_records_platform_and_server_environment(self) -> None:
+        spec = make_spec("rrf")
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            (run / "server-environment.json").write_text(json.dumps(
+                {"embeddingBackend": "vulkan", "gpus": ["AMD Radeon RX 7700S"]}))
+            with patch.object(jobs, "run_directory", return_value=run), \
+                    patch.object(jobs, "build_status", return_value={"stale": False}), \
+                    patch.object(jobs, "machine_platform", return_value="windows"):
+                jobs.record_execution_meta(spec)
+            meta = json.loads((run / "execution-meta.json").read_text())
+        self.assertEqual(meta["platform"], "windows")
+        self.assertEqual(meta["serverEnvironment"]["gpus"], ["AMD Radeon RX 7700S"])
+
+
+class LauncherTests(unittest.TestCase):
+    LAUNCHER = Path(__file__).resolve().parent / "launch.mjs"
+
+    def test_launcher_runs_bench_and_passes_the_exit_code(self) -> None:
+        import subprocess
+        shown = subprocess.run(["node", str(self.LAUNCHER), "run", "--help"],
+                               capture_output=True, text=True, timeout=120)
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertIn("--pipeline", shown.stdout)
+        failed = subprocess.run(["node", str(self.LAUNCHER), "no-such-command"],
+                                capture_output=True, text=True, timeout=120)
+        self.assertNotEqual(failed.returncode, 0)
+
+    def test_launcher_explains_a_missing_venv(self) -> None:
+        import shutil
+        import subprocess
+        with tempfile.TemporaryDirectory() as root:
+            copy = Path(root) / "benchmarks" / "bench-gui"
+            copy.mkdir(parents=True)
+            shutil.copy(self.LAUNCHER, copy / "launch.mjs")
+            result = subprocess.run(["node", str(copy / "launch.mjs")], capture_output=True,
+                                    text=True, timeout=60)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("venv is missing", result.stderr)
+
+
 class CliTests(unittest.TestCase):
     def test_run_one_turns_ctrl_break_into_keyboard_interrupt(self) -> None:
         import signal

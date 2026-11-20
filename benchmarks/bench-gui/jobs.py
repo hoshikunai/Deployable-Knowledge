@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import re
 import subprocess
+import sys
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
@@ -486,12 +488,26 @@ def build_status() -> dict[str, Any]:
     }
 
 
+def machine_platform() -> str:
+    """windows, wsl or linux: the same code runs on all three, but timings differ."""
+    if sys.platform == "win32":
+        return "windows"
+    if "microsoft" in platform.release().lower():
+        return "wsl"
+    return sys.platform
+
+
 def record_execution_meta(spec: JobSpec) -> None:
     directory = run_directory(spec)
     if not directory.is_dir():
         return
+    environment_path = directory / "server-environment.json"
+    server_environment = (json.loads(environment_path.read_text(encoding="utf-8"))
+                          if environment_path.is_file() else None)
     write_json(directory / "execution-meta.json", {
         **build_status(),
+        "platform": machine_platform(),
+        "serverEnvironment": server_environment,
         "pipeline": spec.pipeline,
         "pipelineConfig": spec.pipeline_config(),
         "corpus": spec.corpus(),

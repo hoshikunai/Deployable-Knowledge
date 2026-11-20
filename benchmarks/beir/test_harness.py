@@ -354,6 +354,13 @@ class FakeClient:
     def heartbeat(self) -> None:
         return
 
+    def embedding_status(self) -> dict[str, object]:
+        return {"settings": {"device": "auto", "model": "nomic-embed-text-v1.5.Q8_0.gguf"},
+                "backend": "cpu"}
+
+    def vulkan_devices(self) -> list[dict[str, object]]:
+        return []
+
     def ingest_document(self, title: str, text: str) -> dict[str, str]:
         self.ingest_calls.append((title, text))
         return {"documentId": "app-document"}
@@ -395,7 +402,8 @@ class DeviceClient(FakeClient):
         return {"settings": {"device": device}}
 
     def embedding_status(self) -> dict[str, object]:
-        return {"settings": {"device": self.device}, "backend": self.backend}
+        return {"settings": {"device": self.device, "model": "nomic-embed-text-v1.5.Q8_0.gguf"},
+                "backend": self.backend}
 
     def ingest_document(self, title: str, text: str) -> dict[str, str]:
         self.events.append("ingest")
@@ -484,10 +492,33 @@ class EmbeddingDeviceTests(unittest.TestCase):
             run_directory = runs / "scifact-prepare"
             mapping = json.loads((run_directory / "document-id-mapping.json").read_text())
             config = json.loads((run_directory / "run-config.json").read_text())
+            environment = json.loads((run_directory / "server-environment.json").read_text())
         self.assertEqual(client.events, ["device:cpu", "ingest"])
         self.assertEqual(mapping["embeddingDevice"], "cpu")
         self.assertEqual(config["embeddingDevice"], "cpu")
         self.assertNotIn("vulkanDevice", config)
+        self.assertEqual(environment["embeddingBackend"], "cpu")
+        self.assertEqual(environment["gpus"], [])
+
+    def test_server_environment_names_the_pinned_gpu(self) -> None:
+        gpus = [{"index": 0, "name": "AMD Radeon 780M Graphics"},
+                {"index": 1, "name": "AMD Radeon RX 7700S"}]
+        client = DeviceClient(vulkan=gpus, backend="vulkan")
+        client.device = "gpu"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "server-environment.json"
+            harness_run.record_server_environment(client, path, 1)
+            pinned = json.loads(path.read_text())
+            harness_run.record_server_environment(client, path)
+            unpinned = json.loads(path.read_text())
+            harness_run.record_server_environment(DeviceClient(backend="cpu"), path)
+            cpu = json.loads(path.read_text())
+        self.assertEqual(pinned["gpus"], ["AMD Radeon RX 7700S"])
+        self.assertEqual(pinned["vulkanDevice"], 1)
+        self.assertEqual(pinned["embeddingDevice"], "gpu")
+        self.assertEqual(unpinned["gpus"], ["AMD Radeon 780M Graphics", "AMD Radeon RX 7700S"])
+        self.assertIsNone(unpinned["vulkanDevice"])
+        self.assertEqual(cpu["gpus"], [])
 
 
 class RunnerExecutionTests(unittest.TestCase):

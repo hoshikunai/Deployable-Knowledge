@@ -445,7 +445,7 @@ function renderRuns() {
 				return `<tr>
 					<td><input type="checkbox" data-select="${run.id}" aria-label="Select ${run.id}" ${selectedRuns.has(run.id) ? 'checked' : ''}></td>
 					<td class="mono">${escapeHtml(run.id)}</td>
-					<td>${escapeHtml(run.pipelineLabel)}<br><span class="hint">${escapeHtml(run.corpusLabel)}${run.hasScores ? '' : ' · no chunk scores'}</span></td>
+					<td>${escapeHtml(run.pipelineLabel)}<br><span class="hint">${escapeHtml(run.corpusLabel)}${run.environmentLabel ? ` · ${escapeHtml(run.environmentLabel)}` : ''}${run.hasScores ? '' : ' · no chunk scores'}</span></td>
 					<td>${queries}</td>
 					<td class="status-${status}">${escapeHtml(status)}${progress}${run.jobMessage && status !== 'complete' ? `<br><span class="hint">${escapeHtml(run.jobMessage)}</span>` : ''}</td>
 					<td class="numeric">${ndcg == null ? '–' : ndcg.toFixed(5)}</td>

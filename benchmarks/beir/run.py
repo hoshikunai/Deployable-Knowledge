@@ -138,6 +138,24 @@ def verify_embedding_device(
         )
 
 
+def record_server_environment(
+    client: DeployableKnowledgeClient, path: Path, vulkan_device: int = -1
+) -> None:
+    """Which embedding backend and GPU this run used, so results from different machines differ."""
+    status = client.embedding_status()
+    backend = status.get("backend")
+    gpus = client.vulkan_devices() if backend == "vulkan" else []
+    if vulkan_device >= 0:
+        gpus = [gpu for gpu in gpus if gpu["index"] == vulkan_device]
+    atomic_write_json(path, {
+        "embeddingBackend": backend,
+        "embeddingDevice": status["settings"]["device"],
+        "embeddingModel": status["settings"]["model"],
+        "vulkanDevice": vulkan_device if vulkan_device >= 0 else None,
+        "gpus": [gpu["name"] for gpu in gpus],
+    })
+
+
 def record_query_checkpoint(
     path: Path,
     checkpoints: dict[str, dict[str, Any]],
@@ -1511,7 +1529,9 @@ def main() -> None:
         mapping_value = load_json_object(mapping_path, "document ID mapping")
         validate_public_mapping(mapping_value, corpus, qrels)
     verify_embedding_device(client, embedding_device, selected_queries[0][1])
+    environment_path = run_directory / "server-environment.json"
     if getattr(arguments, "prepare_only", False):
+        record_server_environment(client, environment_path, vulkan_device)
         atomic_write_json(status_path, {"status": "prepared", "completedQueryIds": [], "failedQueryIds": []})
         print(f"Prepared benchmark runtime at {run_directory}")
         return
@@ -1555,6 +1575,7 @@ def main() -> None:
         document_depth=arguments.search_depth,
         page_units=page_units,
     )
+    record_server_environment(client, environment_path, vulkan_device)
     failures_path = run_directory / "failures.json"
     atomic_write_json(failures_path, failures)
     if failures:

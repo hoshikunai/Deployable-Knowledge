@@ -84,6 +84,27 @@ def describe_corpus(config: dict[str, Any]) -> str:
                             device=corpus.get("embeddingDevice", DEFAULT_EMBEDDING_DEVICE))
 
 
+PLATFORM_NAMES = {"windows": "Windows", "wsl": "WSL", "linux": "Linux"}
+
+
+def describe_environment(meta: dict[str, Any] | None) -> str | None:
+    """Where a run embedded, e.g. "Windows · Vulkan · AMD Radeon RX 7700S"; None before recording."""
+    if not meta or "platform" not in meta:
+        return None
+    parts = [PLATFORM_NAMES.get(meta["platform"], meta["platform"])]
+    server = meta.get("serverEnvironment") or {}
+    backend = server.get("embeddingBackend")
+    gpus = server.get("gpus") or []
+    if backend == "vulkan" and not gpus:
+        # llama.cpp loads its Vulkan backend even when it finds no device, then runs on the CPU.
+        parts.append("CPU (no Vulkan GPU)")
+    elif backend == "vulkan":
+        parts += ["Vulkan", *gpus]
+    elif backend:
+        parts.append(backend.upper() if backend == "cpu" else backend)
+    return " · ".join(parts)
+
+
 def has_chunk_scores(directory: Path) -> bool:
     checkpoint_path = directory / "query-checkpoints.jsonl"
     if not checkpoint_path.is_file():
@@ -116,6 +137,7 @@ def summarize_run(directory: Path) -> dict[str, Any]:
         "pipelineConfig": pipeline,
         "pipelineLabel": describe_pipeline(pipeline, config.get("httpTopK")),
         "corpusLabel": describe_corpus(config),
+        "environmentLabel": describe_environment(read_json(directory / "execution-meta.json")),
         "queryCount": len(query_ids),
         "selection": config.get("selectionProtocol"),
         "split": config.get("split", "test"),

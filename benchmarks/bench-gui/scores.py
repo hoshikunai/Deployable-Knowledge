@@ -17,7 +17,7 @@ import pytrec_eval
 import paths
 from run import canonicalize_qrels, ranking_unit
 from corpora import DEFAULT_DOCUMENT_PARSING, DEFAULT_EMBEDDING_DEVICE, DEFAULT_EMBEDDING_MODEL
-from runs import describe_corpus, describe_pipeline, read_json, run_path
+from runs import describe_corpus, describe_environment, describe_pipeline, read_json, run_path
 
 METHODS = ("bm25", "semantic", "hybrid")
 METRIC_COLUMNS = (
@@ -53,8 +53,10 @@ class RunData:
         self.rankings: dict[str, Any] | None = read_json(self.directory / "document-rankings.json")
         self.dataset: str = self.config["dataset"]
         self.pipeline = self.config.get("hybridPipeline")
-        self.label = (f"{describe_pipeline(self.pipeline, self.config.get('httpTopK'))} · "
-                      f"{describe_corpus(self.config)}")
+        environment = describe_environment(read_json(self.directory / "execution-meta.json"))
+        self.label = " · ".join(part for part in (
+            describe_pipeline(self.pipeline, self.config.get("httpTopK")),
+            describe_corpus(self.config), environment) if part)
         mapping = read_json(self.directory / "document-id-mapping.json") or {}
         self.application_to_beir: dict[str, str] = mapping.get("applicationToBeir", {})
         self.page_units = self.config.get("rankingUnit") == "page"

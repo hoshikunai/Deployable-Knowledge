@@ -15,6 +15,12 @@ sample, then Start. Jobs run one at a time. A session that hits its timeout resu
 automatically; a memory pause, cancel, or closed GUI leaves the run resumable from the Runs tab.
 Depths, RRF k, timeouts, ports, and the memory ceiling are under Settings (gear icon).
 
+`npm run bench` works the same on Linux and Windows: `launch.mjs` starts `bench.py` with the
+harness venv's Python (`.venv/bin/python` or `.venv\Scripts\python.exe`). Each run records where
+it ran in `execution-meta.json` (`platform`, plus `serverEnvironment`: embedding backend and GPU
+names), and the Runs and Scores tabs show it, e.g. "Windows · Vulkan · AMD Radeon RX 7700S" or
+"WSL · CPU (no Vulkan GPU)".
+
 The Scores tab shows metrics, a paired comparison against the first selected run, and
 chunk-score calibration tables. **Copy JSON** copies the raw data; the same JSON is printed in the
 terminal.
