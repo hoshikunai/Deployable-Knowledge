@@ -397,6 +397,29 @@ def stop_server(
     log_file.close()
 
 
+def harness_options(arguments: argparse.Namespace, pdf_prepare_runtime: Path | None) -> list[str]:
+    """Optional run.py flags; run.py records and checks the Vulkan device the server sees."""
+    options: list[str] = []
+    vulkan_device = getattr(arguments, "vulkan_device", None)
+    if getattr(arguments, "pipeline", None) is not None:
+        options += ["--pipeline-json", json.dumps(arguments.pipeline)]
+    if getattr(arguments, "corpus", None) is not None:
+        options += ["--corpus-json", json.dumps(arguments.corpus)]
+    if getattr(arguments, "document_parsing", None) is not None:
+        options += ["--document-parsing", arguments.document_parsing]
+    if getattr(arguments, "embedding_device", None) is not None:
+        options += ["--embedding-device", arguments.embedding_device]
+    if vulkan_device is not None and vulkan_device >= 0:
+        options += ["--vulkan-device", str(vulkan_device)]
+    if getattr(arguments, "prepare_only", False):
+        options.append("--prepare-only")
+    if pdf_prepare_runtime is not None:
+        options += ["--pdf-prepare-runtime", str(pdf_prepare_runtime)]
+    if getattr(arguments, "resume", False):
+        options.append("--resume")
+    return options
+
+
 def run_dataset(
     dataset: str,
     arguments: argparse.Namespace,
@@ -467,21 +490,8 @@ def run_dataset(
             command += ["--reuse-existing-runtime", "--reuse-document-mapping",
                         str(arguments.reuse_document_mapping), "--runtime-fingerprint",
                         hashlib.sha256(json.dumps(runtime_identity, sort_keys=True).encode()).hexdigest()]
-        if getattr(arguments, "pipeline", None) is not None:
-            command += ["--pipeline-json", json.dumps(arguments.pipeline)]
-        if getattr(arguments, "corpus", None) is not None:
-            command += ["--corpus-json", json.dumps(arguments.corpus)]
-        if getattr(arguments, "document_parsing", None) is not None:
-            command += ["--document-parsing", arguments.document_parsing]
-        if getattr(arguments, "embedding_device", None) is not None:
-            command += ["--embedding-device", arguments.embedding_device]
-        if getattr(arguments, "prepare_only", False):
-            command.append("--prepare-only")
-        if pdf_prepare:
-            command += ["--pdf-prepare-runtime", str(runtime)]
-        if getattr(arguments, "resume", False):
-            command.append("--resume")
-        child = subprocess.Popen(command, cwd=REPOSITORY_ROOT, **new_group_kwargs())
+        command += harness_options(arguments, runtime if pdf_prepare else None)
+        child =subprocess.Popen(command, cwd=REPOSITORY_ROOT, **new_group_kwargs())
         resume_command = (f"python benchmarks/rag-evaluation/full_beir_plan.py --execute --resume "
                           f"--dataset {dataset} --run-name {run_name} "
                           f"--search-depth {arguments.search_depth} "

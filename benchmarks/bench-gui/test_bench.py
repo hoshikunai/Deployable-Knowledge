@@ -21,7 +21,8 @@ import corpora
 import jobs
 import scores
 from bench import parse_arguments, parse_seeds
-from run_suite import chunking_environment, link_directory, pipeline_environment, vulkan_environment
+from run_suite import (chunking_environment, harness_options, link_directory, pipeline_environment,
+                       vulkan_environment)
 from runs import describe_pipeline, pipeline_key
 
 FIXED_TIME = datetime(2026, 9, 28, 12, 0, 0, 123456, tzinfo=timezone.utc)
@@ -225,6 +226,18 @@ class JobTests(unittest.TestCase):
         self.assertEqual(namespace.runtime_id, "runtime-scifact-cpu")
         self.assertEqual(namespace.embedding_device, "cpu")
         self.assertEqual(namespace.vulkan_device, -1)
+
+    def test_harness_receives_the_vulkan_device_the_server_sees(self) -> None:
+        spec = make_spec("rrf")
+        spec.settings = jobs.Settings(embeddingDevice="vulkan", vulkanDevice=1)
+        with patch.object(corpora, "require_prepared", return_value=Path("/tmp/mapping.json")):
+            options = harness_options(jobs.suite_arguments(spec, resume=False), None)
+        self.assertEqual(options[options.index("--vulkan-device") + 1], "1")
+        self.assertEqual(options[options.index("--embedding-device") + 1], "vulkan")
+        spec.settings = jobs.Settings(embeddingDevice="vulkan")
+        with patch.object(corpora, "require_prepared", return_value=Path("/tmp/mapping.json")):
+            options = harness_options(jobs.suite_arguments(spec, resume=False), None)
+        self.assertNotIn("--vulkan-device", options)
 
     def test_docling_parsing_is_unavailable_for_text_corpora(self) -> None:
         with tempfile.TemporaryDirectory() as root, \
