@@ -47,6 +47,7 @@ from jobs import (
 )
 from runs import delete_run, list_copies_with_runs, list_runs, run_path
 from scores import build_scores
+from sync import SyncError, sync_repository
 
 BUILD_ITEM = "__build__"
 INGEST_PROGRESS = re.compile(r"Ingested (\d+)/(\d+) documents")
@@ -165,6 +166,8 @@ class Runner:
             self.log("Building the app (npm run build:electron)…")
             command = [shutil.which("npm") or "npm", "run", "build:electron"]
         else:
+            if not self.sync_before(item):
+                return
             self.log(f"Starting {item}")
             command = [sys.executable, "-u", str(paths.BENCH_ROOT / "bench.py"), "run-one", item]
         process = subprocess.Popen(
@@ -178,6 +181,22 @@ class Runner:
             self.log(line.rstrip("\n"))
         process.wait()
         self.log(f"{'Build' if item == BUILD_ITEM else item} finished (exit {process.returncode})")
+
+    def sync_before(self, item: str) -> bool:
+        """On a benchmark-only copy, pull new code first; a refused sync fails the job."""
+        settings = load_settings()
+        if settings.syncBeforeJobs != "on":
+            return True
+        try:
+            sync_repository(settings.syncBranch, self.log)
+        except SyncError as error:
+            spec = load_job(item)
+            spec.state = "failed"
+            spec.message = f"Not started: sync refused: {error}"
+            save_job(spec)
+            self.log(f"{item}: {spec.message}")
+            return False
+        return True
 
     def stop_on_exit(self) -> None:
         """Closing the GUI stops the running job so no app server is left behind."""

@@ -1,6 +1,7 @@
 const byId = (id) => document.getElementById(id);
 
-// [key, label, hint, minimum, choices?]; hints marked live are recomputed as values change.
+// [key, label, hint, minimum, choices?]; choices is a list for a select or 'text' for a text
+// field. Hints marked live are recomputed as values change.
 // Fields with choices render as a select and keep string values.
 const SETTINGS_GROUPS = [
 	{
@@ -89,7 +90,15 @@ const SETTINGS_GROUPS = [
 				'Index of the one GPU llama.cpp may use; -1 = every device',
 				-1
 			],
-			['guiPort', 'GUI port', 'Takes effect next launch', 1024]
+			['guiPort', 'GUI port', 'Takes effect next launch', 1024],
+			[
+				'syncBeforeJobs',
+				'Sync with GitHub before each job',
+				'Benchmark-only copies: fast-forward to origin first; refuses if this copy has local edits',
+				0,
+				['off', 'on']
+			],
+			['syncBranch', 'Sync branch', 'The origin branch this copy follows', 0, 'text']
 		]
 	}
 ];
@@ -709,6 +718,12 @@ function settingsField([key, label, hint, minimum, choices], values) {
 	const steps = { memoryCeilingGb: '0.5', rrfSemanticWeight: '0.05', rrfBm25Weight: '0.05' };
 	const step = steps[key] ?? '1';
 	const help = hint === 'live' ? '' : escapeHtml(hint);
+	if (choices === 'text') {
+		return `<label>${label}
+		<input class="field" type="text" name="${key}" value="${escapeHtml(values[key])}" spellcheck="false">
+		<span class="hint" data-hint="${key}">${help}</span>
+	</label>`;
+	}
 	const input = choices
 		? `<select class="field" name="${key}">${choices
 				.map(

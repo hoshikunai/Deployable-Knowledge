@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ DEDUP_MODES = {"none": None, "exact": "dx", "near": "dn", "document-cap": "dc"}
 FUSION_LEVELS = ("chunk", "document")
 DOCUMENT_ORDERS = ("none", "sum-top2")
 SWITCHES = ("off", "on")
+BRANCH_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 PREPARE_TIMEOUT_HOURS = 12
 
 # The harness requests documentDepth * CHUNK_OVERFETCH_FACTOR chunks per query.
@@ -75,6 +77,9 @@ class Settings:
     rerankTitle: str = "on"
     # Query split to evaluate: tune on train/dev, report on test
     split: str = "test"
+    # Benchmark-only copies: fast-forward to origin/<syncBranch> before each GUI job
+    syncBeforeJobs: str = "off"
+    syncBranch: str = "docling-beir"
 
     def chunking(self) -> dict[str, int] | None:
         if self.chunkMaxTokens == 0:
@@ -107,11 +112,14 @@ class Settings:
         if self.rrfSemanticWeight + self.rrfBm25Weight == 0:
             raise ValueError("RRF weights cannot both be 0")
         for name, allowed in (("fusionLevel", FUSION_LEVELS), ("documentOrder", DOCUMENT_ORDERS),
-                              ("rerankTitle", SWITCHES), ("split", QUERY_SPLITS)):
+                              ("rerankTitle", SWITCHES), ("split", QUERY_SPLITS),
+                              ("syncBeforeJobs", SWITCHES)):
             if getattr(self, name) not in allowed:
                 raise ValueError(f"{name} must be one of {list(allowed)}")
         if self.dedupMode not in DEDUP_MODES:
             raise ValueError(f"dedupMode must be one of {sorted(DEDUP_MODES)}")
+        if not BRANCH_NAME.fullmatch(self.syncBranch):
+            raise ValueError("syncBranch must be a branch name such as docling-beir")
         if self.maxChunksPerDocument < 1:
             raise ValueError("maxChunksPerDocument must be at least 1")
         if self.documentParsing not in corpora.DOCUMENT_PARSING:
@@ -142,7 +150,8 @@ class Settings:
         merged = {**defaults, **value}
         casts = {"memoryCeilingGb": float, "rrfSemanticWeight": float, "rrfBm25Weight": float,
                  "embeddingModel": str, "documentParsing": str, "embeddingDevice": str, "dedupMode": str, "fusionLevel": str,
-                 "documentOrder": str, "rerankTitle": str, "split": str}
+                 "documentOrder": str, "rerankTitle": str, "split": str,
+                 "syncBeforeJobs": str, "syncBranch": str}
         settings = cls(**{name: casts.get(name, int)(merged[name]) for name in known})
         settings.validate()
         return settings

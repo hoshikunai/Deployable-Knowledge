@@ -157,6 +157,24 @@ npm run bench -- prepare pdf-eval --document-parsing docling
 npm run bench -- run pdf-eval --document-parsing docling
 ```
 
+## A benchmark-only copy that syncs itself
+
+A second clone that only runs benchmarks (for example a Windows copy with GPU embeddings) can
+pull new code by itself. Turn on **Sync with GitHub before each job** under Settings → Sessions
+and system, and set **Sync branch**. Before each job the GUI starts, it then:
+
+1. refuses if the copy has local edits to tracked files, has another branch checked out, or has
+   commits that `origin/<branch>` lacks (nothing is ever reset, stashed or discarded);
+2. fast-forwards to `origin/<branch>`;
+3. runs `npm ci` only if `package-lock.json` changed, and `npm run build:electron` only if the
+   build is older than `src/`;
+4. asks you to restart the GUI if the GUI's own files changed (the job already uses the new
+   harness, since each job runs in a fresh process).
+
+A refused sync marks the job failed with the reason, and it stays resumable. The switch is off by
+default and is stored per copy (`.cache/bench-gui/settings.json`), so a development copy never
+pulls. Terminal `npm run bench -- run …` jobs don't sync.
+
 ## Terminal commands
 
 ```bash
