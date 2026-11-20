@@ -1005,6 +1005,25 @@ class DuplicateDocumentTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "outside the current corpus"):
                 harness_run.committed_pdfs(root, root, manifest["documents"])
 
+    def test_pdf_prepare_recovers_uploads_stored_with_windows_paths(self) -> None:
+        import hashlib
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pdf = root / "paper.pdf"
+            pdf.write_bytes(b"committed paper")
+            digest = hashlib.sha256(pdf.read_bytes()).hexdigest()[:16]
+            (root / "documents").mkdir()
+            (root / "documents" / f"{digest}.pdf").write_bytes(pdf.read_bytes())
+            with closing(sqlite3.connect(root / "app.db")) as db, db:
+                db.execute("CREATE TABLE documents (id TEXT, source_path TEXT)")
+                db.execute("INSERT INTO documents VALUES (?, ?)",
+                           ("app-a", f"documents\\{digest}.pdf"))
+            documents = [{"id": "a", "file": "paper.pdf", "pages": 2}]
+            with patch.object(harness_run, "count_pages", return_value={pdf: 2}):
+                self.assertEqual(harness_run.committed_pdfs(root, root, documents), {"a": "app-a"})
+
     def test_only_cleanup_parsing_sets_the_server_flag(self) -> None:
         self.assertEqual(parsing_environment("docling-cleanup"), {"RAG_PDF_PAGE_CLEANUP": "true"})
         for mode in ("standard", "docling", None):

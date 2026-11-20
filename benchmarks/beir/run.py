@@ -900,7 +900,9 @@ def device_mapping_fields(embedding_device: str) -> dict[str, str]:
 def committed_pdfs(runtime: Path, dataset_path: Path, documents: list[dict[str, Any]]) -> dict[str, str]:
     """Recover PDF checkpoints from the same transaction that commits a document and its chunks."""
     with closing(sqlite3.connect((runtime / "app.db").resolve().as_uri() + "?mode=ro", uri=True)) as db:
-        stored = dict(db.execute("SELECT source_path, id FROM documents"))
+        # The app stores OS-native relative paths: documents\<digest>.pdf on Windows.
+        stored = {path.replace("\\", "/"): document_id
+                  for path, document_id in db.execute("SELECT source_path, id FROM documents")}
     if not stored:
         return {}
 
