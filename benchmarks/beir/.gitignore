@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 datasets/openrag-*/
 datasets/.openrag-source/
+datasets/ohr-bench*/
+datasets/.ohr-bench-source/
+datasets/financebench*/
+datasets/.financebench-source/
+datasets/mmlongbench-*/
+datasets/.mmlongbench-source/

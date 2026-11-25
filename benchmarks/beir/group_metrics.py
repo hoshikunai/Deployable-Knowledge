@@ -1,10 +1,13 @@
 """Break a finished run's metrics down by query group.
 
 Datasets built with a query-groups.json (such as build_openrag_dataset.py's) tag each query
-with its source modality and type. This re-scores a run's saved document rankings per group.
+with labels such as its source modality and type. This re-scores a run's saved document
+rankings per value of one label.
 
     benchmarks/beir/.venv/bin/python benchmarks/beir/group_metrics.py \\
         benchmarks/beir/runs/openrag-arxiv-RUN --by source
+    benchmarks/beir/.venv/bin/python benchmarks/beir/group_metrics.py \\
+        benchmarks/beir/runs/ohr-bench-RUN --by table
 """
 
 from __future__ import annotations
@@ -35,6 +38,8 @@ def group_metrics(run_directory: Path, by: str) -> dict[str, dict[str, dict[str,
 
     members: dict[str, list[str]] = defaultdict(list)
     for query_id in rankings[METHODS[0]]:
+        if by not in groups[query_id]:
+            raise SystemExit(f"{config['dataset']}'s {QUERY_GROUPS} has no '{by}' label for {query_id}")
         members[groups[query_id][by]].append(query_id)
 
     report = {}
@@ -52,7 +57,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run_directory", type=Path)
-    parser.add_argument("--by", choices=("source", "type"), default="source")
+    parser.add_argument("--by", default="source",
+                        help="A label in the dataset's query-groups.json: source and type, plus "
+                             "textLayer and table for the table-heavy PDF datasets.")
     parser.add_argument("--json", action="store_true", help="Print the report as JSON.")
     arguments = parser.parse_args()
     report = group_metrics(arguments.run_directory, arguments.by)

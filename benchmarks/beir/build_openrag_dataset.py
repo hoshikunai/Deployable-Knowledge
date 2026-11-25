@@ -23,61 +23,28 @@ import json
 import random
 import re
 import shutil
-import subprocess
 import time
 import unicodedata
-import urllib.request
 from pathlib import Path
 
-from build_pdf_dataset import REPOSITORY_ROOT, page_id, write_jsonl
+from build_pdf_dataset import page_id, write_jsonl
 from dataset_catalog import PDF_MANIFEST, validate_dataset_name
+from pdf_dataset_tools import fetch, read_page_texts
 
 HARNESS_ROOT = Path(__file__).resolve().parent
 DATASETS_ROOT = HARNESS_ROOT / "datasets"
 SOURCE_URL = "https://huggingface.co/datasets/vectara/open_ragbench/resolve/main/pdf/arxiv"
 METADATA_FILES = ("queries.json", "qrels.json", "answers.json", "pdf_urls.json")
-USER_AGENT = "beir-harness-pdf-builder/1.0"
 ARXIV_DELAY_SECONDS = 3.0
 SHINGLE_SIZE = 6
 ANCHOR_SHINGLES = 20
 MIN_ANCHOR_MATCHES = 3
 ALIGNMENT_WARNING_SHARE = 0.8
 
-PAGE_TEXT_SCRIPT = """
-import { readFile } from 'node:fs/promises';
-import { PDFParse } from 'pdf-parse';
-const texts = {};
-for (const path of process.argv.slice(1)) {
-	const parser = new PDFParse({ data: await readFile(path) });
-	const result = await parser.getText();
-	const pages = [];
-	for (let page = 1; page <= result.total; page += 1) pages.push(result.getPageText(page));
-	texts[path] = pages;
-	await parser.destroy();
-}
-console.log(JSON.stringify(texts));
-"""
-
 MATH = re.compile(r"\$\$.*?\$\$|\$[^$]*\$", re.DOTALL)
 PLACEHOLDER = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 HYPHEN_BREAK = re.compile(r"-\s*\n\s*")
 WORD = re.compile(r"[a-z]{3,}")
-
-
-def fetch(url: str, destination: Path, expected_prefix: bytes | None = None) -> bool:
-    """Download url to destination unless it is cached. Returns whether it hit the network."""
-    if destination.is_file():
-        return False
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        body = response.read()
-    if expected_prefix is not None and not body.startswith(expected_prefix):
-        raise RuntimeError(f"{url} did not return the expected file type")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    partial = destination.with_suffix(destination.suffix + ".partial")
-    partial.write_bytes(body)
-    partial.replace(destination)
-    return True
 
 
 def load_metadata(cache: Path) -> dict[str, dict]:
@@ -113,16 +80,6 @@ def download_papers(positives: list[str], negatives: list[str], pdf_urls: dict[s
         if fetch(pdf_urls[paper], cache / "pdfs" / f"{paper}.pdf", expected_prefix=b"%PDF-"):
             print(f"Downloaded {index}/{len(papers)} PDFs")
             time.sleep(ARXIV_DELAY_SECONDS)
-
-
-def read_page_texts(files: list[Path]) -> dict[Path, list[str]]:
-    """Per-page text from pdf-parse, the parser the app's PDF ingestion uses."""
-    result = subprocess.run(
-        ["node", "--input-type=module", "-e", PAGE_TEXT_SCRIPT, *map(str, files)],
-        cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=True,
-    )
-    texts = json.loads(result.stdout)
-    return {path: texts[str(path)] for path in files}
 
 
 def normalize_words(text: str) -> list[str]:

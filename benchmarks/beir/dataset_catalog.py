@@ -100,6 +100,31 @@ DATASETS = (
         corpus_size="250 PDFs (default subset)",
         test_queries="~700",
     ),
+    DatasetInfo(
+        # Built locally by build_ohr_bench_dataset.py from OHR-Bench (finance, academic, manual
+        # and administration by default); query groups label table evidence and scanned pages.
+        name="ohr-bench",
+        description="OHR-Bench PDFs in four table-heavy domains, scored by page (1,909 table queries)",
+        splits=("test", "doc"),
+        corpus_size="383 PDFs, 6,209 pages",
+        test_queries="5,029",
+    ),
+    DatasetInfo(
+        # Built locally by build_financebench_dataset.py from FinanceBench's open-source sample.
+        name="financebench",
+        description="SEC filings as PDFs (FinanceBench), mostly financial-table questions, scored by page",
+        splits=("test", "doc"),
+        corpus_size="84 PDFs, 12,013 pages",
+        test_queries="150",
+    ),
+    DatasetInfo(
+        # Built locally by build_mmlongbench_dataset.py from MMLongBench-Doc.
+        name="mmlongbench-doc",
+        description="Long mixed PDFs (MMLongBench-Doc), scored by page (209 table queries)",
+        splits=("test", "doc"),
+        corpus_size="132 PDFs, 6,252 pages",
+        test_queries="825",
+    ),
 )
 
 

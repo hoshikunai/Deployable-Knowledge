@@ -92,8 +92,15 @@ standard `corpus.jsonl`, `queries.jsonl`, and `qrels/<split>.tsv` layout.
 
 `pdf-eval` (8 Air Force PDFs) and `openrag-arxiv` (arXiv papers from Vectara's Open RAG
 Benchmark) are scored by page and uploaded as real PDFs, so document parsing modes can be
-compared. `openrag-arxiv` also has a `doc` split scored by whole paper. See
-`report_docs/BUILDING_A_PDF_CORPUS.md` for how to build them.
+compared. `openrag-arxiv` also has a `doc` split scored by whole paper.
+
+Three table-heavy PDF corpora come from public benchmarks whose questions name their evidence
+page: `ohr-bench` (OHR-Bench, 1,909 table questions), `financebench` (FinanceBench, SEC
+filings) and `mmlongbench-doc` (MMLongBench-Doc, 209 table questions). Each has `test` (page)
+and `doc` (document) splits, and its query groups label table evidence and scanned evidence
+pages for `group_metrics.py --by table` and `--by textLayer`.
+
+See `report_docs/BUILDING_A_PDF_CORPUS.md` for how to build them all.
 
 ## Embedding device
 

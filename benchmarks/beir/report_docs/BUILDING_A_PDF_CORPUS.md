@@ -212,3 +212,68 @@ benchmarks/beir/.venv/bin/python benchmarks/beir/group_metrics.py \
 - Hard negatives were mined to be unrelated to every query, so they make the corpus bigger more
   than they make it harder.
 - `answers.json` holds the reference answers for later answer evaluation. The BEIR run ignores it.
+
+## Table-heavy corpora (`ohr-bench`, `financebench`, `mmlongbench-doc`)
+
+`pdf-eval` has 16 table questions and the `openrag-arxiv` sample 98, too few to measure table
+recognition. Three public benchmarks label each question with its evidence page, and two of them
+also label table evidence. Their licences restrict them to research or non-commercial use, so
+the built folders and download caches are ignored by Git and must not be committed.
+
+| Dataset           | Source                                                                  | PDFs | Pages  | Questions | Table questions             | Page numbering |
+| ----------------- | ----------------------------------------------------------------------- | ---- | ------ | --------- | --------------------------- | -------------- |
+| `ohr-bench`       | [OHR-Bench](https://github.com/opendatalab/OHR-Bench), four domains     | 383  | 6,209  | 5,029     | 1,909 (1,713 on text pages) | from 0         |
+| `financebench`    | [FinanceBench](https://github.com/patronus-ai/financebench) open sample | 84   | 12,013 | 150       | not labelled                | from 0         |
+| `mmlongbench-doc` | [MMLongBench-Doc](https://github.com/mayubo2333/MMLongBench-Doc)        | 132  | 6,252  | 825       | 209 (179 on text pages)     | from 1         |
+
+```bash
+benchmarks/beir/.venv/bin/python benchmarks/beir/build_ohr_bench_dataset.py
+benchmarks/beir/.venv/bin/python benchmarks/beir/build_financebench_dataset.py
+benchmarks/beir/.venv/bin/python benchmarks/beir/build_mmlongbench_dataset.py
+```
+
+- **Downloads.** OHR-Bench is one 1.5 GB archive; FinanceBench downloads the filings its
+  questions cite; MMLongBench-Doc downloads 631 MB of PDFs. Each is cached in
+  `benchmarks/beir/datasets/.<name>-source/`, so rebuilding reuses it.
+- **OHR-Bench domains.** The default takes the four domains with the most table questions
+  (finance, academic, manual, administration). `--domains all` takes all seven (law, news and
+  textbook add few table questions). Every PDF of a chosen domain is included, with or without
+  questions. Several administration and manual PDFs are scans.
+- **Page numbering is checked.** Each builder looks for every question's evidence text (or, for
+  MMLongBench-Doc, its longer answers) on the cited page in pdf-parse's text. It refuses to build
+  when the other numbering matches clearly more questions, and records both match rates in
+  `pdf-manifest.json` (`pageNumbering`). On the current sources the published numbering matches
+  75–96% of samples and the other numbering 1–4%.
+- **MMLongBench-Doc leaves questions out.** It drops unanswerable questions (no evidence page),
+  9 whose labels cite page 0 or pages past the end of the PDF, and 20 on files that are
+  byte-identical to another file. Two of those files hold a different document from the one
+  their name and questions describe (`mi_phone.pdf` is the NYU housing guide). The first name of
+  each identical group is kept. `pdf-manifest.json` lists every question left out.
+
+### Query groups
+
+`query-groups.json` gives each query these labels, for `group_metrics.py --by <label>`:
+
+| Label       | `ohr-bench`                                   | `financebench`  | `mmlongbench-doc`                        |
+| ----------- | --------------------------------------------- | --------------- | ---------------------------------------- |
+| `source`    | evidence kind: text, table, formula, chart, … | question type   | evidence kinds joined with `+`           |
+| `type`      | domain                                        | reasoning label | document type                            |
+| `table`     | `yes` for table evidence                      | (none)          | `yes` when the evidence includes a table |
+| `textLayer` | `scanned` when an evidence page has no text   | same            | same                                     |
+
+Table recognition only runs on pages with a text layer, so compare parsing modes on
+`--by table` first, then check that the table gain sits on `textLayer` = `text`.
+
+```bash
+benchmarks/beir/.venv/bin/python benchmarks/beir/group_metrics.py \
+  benchmarks/beir/runs/RUN_FOLDER --by table
+```
+
+### Ingest time
+
+These corpora are as large as `openrag-arxiv` or larger: `ohr-bench` and `mmlongbench-doc` about
+6,200 pages each and `financebench` 12,000. A Docling + TableFormer prepare took about 4 hours for
+`openrag-arxiv`'s 6,240 pages on the Windows Vulkan machine, so expect about that for the first
+two and twice that for `financebench`. A full `ohr-bench` run searches 5,029 queries (about
+5 hours at 3.4 s per query); a seeded sample is cheaper, but it samples table and non-table
+questions alike.
