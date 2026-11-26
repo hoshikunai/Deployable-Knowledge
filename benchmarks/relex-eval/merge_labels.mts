@@ -3,15 +3,16 @@ import { parseArgs } from 'node:util';
 import { inArray } from 'drizzle-orm';
 import { db } from '../../src/lib/server/database/database';
 import { documentChunks } from '../../src/lib/server/database/schema';
-import { disposeRuntime } from '../../src/lib/server/providers/llamacpp-runtime';
 import {
 	activeChatModel,
+	releaseChatModel,
 	countHits,
 	GENERIC_NAMES,
 	generateValidated,
 	isVagueRelation,
 	normalizeLabel,
 	parseJsonObject,
+	resolveSource,
 	type LabelSet,
 	type ProposedType
 } from './label-tools.mts';
@@ -45,6 +46,7 @@ interface Removal {
 
 const { values } = parseArgs({
 	options: {
+		model: { type: 'string' },
 		dictionary: { type: 'string', default: '.cache/relex-eval/dictionary.json' },
 		'max-share': { type: 'string', default: '0.8' },
 		rounds: { type: 'string', default: '4' },
@@ -267,6 +269,21 @@ function perDocumentLabels(entries: DictionaryEntry[], merge: Merge, labels: Lab
 	);
 }
 
+function resolveSources(merge: Merge, originalNames: string[], unmatched: string[]): Merge {
+	const resolveType = (type: MergedType): MergedType => ({
+		...type,
+		mergedFrom: type.mergedFrom.flatMap((source) => {
+			const name = resolveSource(source, originalNames);
+			if (!name) unmatched.push(`${type.name} <- ${source}`);
+			return name ? [name] : [];
+		})
+	});
+	return {
+		entityTypes: merge.entityTypes.map(resolveType),
+		relationTypes: merge.relationTypes.map(resolveType)
+	};
+}
+
 const dictionary = JSON.parse(readFileSync(values.dictionary, 'utf8')) as {
 	entries: DictionaryEntry[];
 };
@@ -274,7 +291,7 @@ const entries = dictionary.entries.filter((entry) => entry.entityTypes && entry.
 const failed = dictionary.entries.length - entries.length;
 console.log(`${entries.length} dictionary entries${failed ? `, ${failed} failed in pass 1` : ''}.`);
 
-const model = await activeChatModel();
+const model = await activeChatModel(values.model);
 const { value: proposed, attempts } = await generateValidated(
 	model,
 	buildPrompt(entries),
@@ -282,7 +299,7 @@ const { value: proposed, attempts } = await generateValidated(
 	MAX_TOKENS,
 	parseMerge
 );
-await disposeRuntime();
+await releaseChatModel(model);
 for (const [index, attempt] of attempts.entries()) {
 	console.log(
 		`Merge attempt ${index + 1}: ${attempt.error ? `failed: ${attempt.error}` : 'valid'} after ${attempt.seconds.toFixed(1)}s.`
@@ -290,18 +307,17 @@ for (const [index, attempt] of attempts.entries()) {
 }
 if (!proposed) throw new Error('The model did not return a usable merge in two attempts.');
 
-const originalNames = new Set(
-	entries.flatMap((entry) =>
-		[...(entry.entityTypes ?? []), ...(entry.relationTypes ?? [])].map((type) => type.name)
+const originalNames = [
+	...new Set(
+		entries.flatMap((entry) =>
+			[...(entry.entityTypes ?? []), ...(entry.relationTypes ?? [])].map((type) => type.name)
+		)
 	)
-);
-const unmatchedSources = [...proposed.entityTypes, ...proposed.relationTypes].flatMap((type) =>
-	type.mergedFrom
-		.filter((source) => !originalNames.has(source))
-		.map((source) => `${type.name} <- ${source}`)
-);
+].sort((a, b) => b.length - a.length);
+const unmatchedSources: string[] = [];
+const resolved = resolveSources(proposed, originalNames, unmatchedSources);
 const removals: Removal[] = [];
-const filtered = filterMerged(proposed, removals);
+const filtered = filterMerged(resolved, removals);
 const startLabels = {
 	entityLabels: filtered.entityTypes.map((type) => type.name),
 	relationLabels: filtered.relationTypes.map((type) => type.name)
@@ -330,7 +346,17 @@ writeFileSync(
 writeFileSync(
 	values.out.replace(/\.json$/, '-merge.json'),
 	JSON.stringify(
-		{ proposed, filtered, unmatchedSources, removals, rounds, labels, perDocument, attempts },
+		{
+			proposed,
+			resolved,
+			filtered,
+			unmatchedSources,
+			removals,
+			rounds,
+			labels,
+			perDocument,
+			attempts
+		},
 		null,
 		2
 	) + '\n'

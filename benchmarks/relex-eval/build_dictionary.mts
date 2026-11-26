@@ -3,10 +3,10 @@ import { parseArgs } from 'node:util';
 import { inArray } from 'drizzle-orm';
 import { db } from '../../src/lib/server/database/database';
 import { documentChunks, documents } from '../../src/lib/server/database/schema';
-import { disposeRuntime } from '../../src/lib/server/providers/llamacpp-runtime';
 import { getVectorIndex } from '../../src/lib/server/rag/search/vector-index';
 import {
 	activeChatModel,
+	releaseChatModel,
 	entityTypeSchema,
 	generateValidated,
 	normalizeText,
@@ -39,7 +39,9 @@ interface DictionaryEntry extends Partial<DocumentEntry> {
 
 const { values } = parseArgs({
 	options: {
+		model: { type: 'string' },
 		'per-document': { type: 'string', default: '8' },
+		feedback: { type: 'string', default: 'all' },
 		seed: { type: 'string', default: '42' },
 		exclude: { type: 'string', default: '.cache/relex-eval/own-chunks.json' },
 		out: { type: 'string', default: '.cache/relex-eval/dictionary.json' }
@@ -47,6 +49,10 @@ const { values } = parseArgs({
 });
 
 const PER_DOCUMENT = Number(values['per-document']);
+if (values.feedback !== 'all' && values.feedback !== 'none') {
+	throw new Error("--feedback must be 'all' or 'none'.");
+}
+const FEEDBACK = values.feedback;
 const EXCERPT_CHARACTERS = 600;
 const MAX_LABELS = 8;
 const MAX_TOKENS = 3000;
@@ -61,6 +67,7 @@ const RESPONSE_SCHEMA = {
 };
 
 function knownLabels(entries: DictionaryEntry[]): string {
+	if (FEEDBACK === 'none') return 'Propose labels for this document on its own.';
 	const entityNames = [
 		...new Set(entries.flatMap((entry) => (entry.entityTypes ?? []).map((type) => type.name)))
 	];
@@ -128,7 +135,7 @@ function parseEntry(output: string, context: ReadContext): DocumentEntry {
 const excluded = new Set(
 	(JSON.parse(readFileSync(values.exclude, 'utf8')) as { id: string }[]).map((chunk) => chunk.id)
 );
-const model = await activeChatModel();
+const model = await activeChatModel(values.model);
 console.log(
 	`Active profile: ${model.profile.name} · ${model.profile.provider} · ${model.profile.model}`
 );
@@ -219,7 +226,10 @@ for (const [documentId, documentRows] of rowsByDocument) {
 		entry.error = attempts.at(-1)?.error ?? 'No reply.';
 	}
 	entries.push(entry);
-	writeFileSync(values.out, JSON.stringify({ perDocument: PER_DOCUMENT, entries }, null, 2) + '\n');
+	writeFileSync(
+		values.out,
+		JSON.stringify({ perDocument: PER_DOCUMENT, feedback: FEEDBACK, entries }, null, 2) + '\n'
+	);
 	writeFileSync(
 		values.out.replace(/\.json$/, '-attempts.json'),
 		JSON.stringify(rawAttempts, null, 2) + '\n'
@@ -233,6 +243,6 @@ for (const [documentId, documentRows] of rowsByDocument) {
 	);
 }
 
-await disposeRuntime();
+await releaseChatModel(model);
 console.log(`Done: ${values.out}`);
 process.exit(0);

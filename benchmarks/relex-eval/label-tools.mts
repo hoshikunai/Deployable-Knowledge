@@ -3,7 +3,11 @@ import { db } from '../../src/lib/server/database/database';
 import { appState, profiles } from '../../src/lib/server/database/schema';
 import { extractRelex } from '../../src/lib/server/entities/relex';
 import type { ProviderJsonSchema } from '../../src/lib/server/providers/provider';
+import { disposeRuntime } from '../../src/lib/server/providers/llamacpp-runtime';
 import { findProvider } from '../../src/lib/server/providers/registry';
+
+const OLLAMA_URL = 'http://localhost:11434';
+const OLLAMA_CONTEXT_TOKENS = 8192;
 
 export interface RelationExample {
 	head: string;
@@ -190,6 +194,18 @@ export function normalizeLabel(name: string): string {
 		.toLowerCase();
 }
 
+export function isNegatedLabel(name: string): boolean {
+	return /\b(not|never|no)\b|n't\b/.test(name);
+}
+
+export function resolveSource(source: string, originalNames: string[]): string | undefined {
+	const normalized = normalizeLabel(source);
+	return originalNames.find(
+		(name) =>
+			normalized === name || normalized.startsWith(`${name}:`) || normalized.startsWith(`${name} (`)
+	);
+}
+
 export function isVagueRelation(name: string): boolean {
 	return VAGUE_RELATION_PREFIXES.some((prefix) => name === prefix || name.startsWith(`${prefix} `));
 }
@@ -248,12 +264,99 @@ export function parseJsonObject(output: string): Record<string, unknown> {
 	return JSON.parse(output.slice(start, end + 1)) as Record<string, unknown>;
 }
 
-export async function activeChatModel() {
+export async function activeChatModel(override?: string) {
 	const [state] = await db.select().from(appState).where(eq(appState.id, 'app'));
-	const [profile] = await db.select().from(profiles).where(eq(profiles.id, state.activeProfileId!));
+	const [active] = await db.select().from(profiles).where(eq(profiles.id, state.activeProfileId!));
+	const separator = override?.indexOf('/') ?? -1;
+	if (override && separator < 1) throw new Error("--model must look like 'provider/model'.");
+	const profile = override
+		? { ...active, provider: override.slice(0, separator), model: override.slice(separator + 1) }
+		: active;
 	const provider = await findProvider(profile.provider);
 	if (!provider) throw new Error(`Provider '${profile.provider}' is not available.`);
 	return { profile, provider };
+}
+
+export async function releaseChatModel(model: Awaited<ReturnType<typeof activeChatModel>>) {
+	if (model.profile.provider === 'llamacpp') {
+		await disposeRuntime();
+		return;
+	}
+	if (model.profile.provider !== 'ollama') return;
+	const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ model: model.profile.model, keep_alive: 0 })
+	});
+	if (!response.ok)
+		throw new Error(`Ollama did not unload ${model.profile.model}: ${response.status}`);
+}
+
+async function providerJson(
+	model: Awaited<ReturnType<typeof activeChatModel>>,
+	prompt: string,
+	schema: ProviderJsonSchema,
+	maxTokens: number
+): Promise<string> {
+	let output = '';
+	for await (const part of model.provider.chat(prompt, model.profile.model, {
+		temperature: model.profile.temperature,
+		topK: model.profile.topK,
+		maxTokens,
+		reasoningBudget: 0,
+		gpuMode: model.profile.gpuMode,
+		responseSchema: schema
+	})) {
+		output += part;
+	}
+	return output;
+}
+
+async function ollamaJson(
+	model: Awaited<ReturnType<typeof activeChatModel>>,
+	prompt: string,
+	schema: ProviderJsonSchema,
+	maxTokens: number
+): Promise<string> {
+	const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			model: model.profile.model,
+			messages: [{ role: 'user', content: prompt }],
+			format: schema,
+			think: false,
+			keep_alive: '60m',
+			stream: true,
+			options: {
+				num_ctx: OLLAMA_CONTEXT_TOKENS,
+				num_predict: maxTokens,
+				temperature: model.profile.temperature,
+				top_k: model.profile.topK
+			}
+		})
+	});
+	if (!response.ok || !response.body) {
+		throw new Error(`Ollama chat failed (${response.status}): ${await response.text()}`);
+	}
+	return readOllamaStream(response.body);
+}
+
+async function readOllamaStream(body: ReadableStream<Uint8Array>): Promise<string> {
+	const decoder = new TextDecoder();
+	let buffer = '';
+	let output = '';
+	for await (const value of body) {
+		buffer += decoder.decode(value, { stream: true });
+		const lines = buffer.split('\n');
+		buffer = lines.pop() ?? '';
+		for (const line of lines.filter((item) => item.trim())) {
+			const record = JSON.parse(line) as { message?: { content?: string }; error?: string };
+			if (record.error) throw new Error(`Ollama chat failed: ${record.error}`);
+			output += record.message?.content ?? '';
+		}
+	}
+	return output;
 }
 
 export async function generateValidated<T>(
@@ -266,17 +369,10 @@ export async function generateValidated<T>(
 	const attempts: GenerationAttempt[] = [];
 	for (let attempt = 1; attempt <= 2; attempt += 1) {
 		const started = performance.now();
-		let output = '';
-		for await (const part of model.provider.chat(prompt, model.profile.model, {
-			temperature: model.profile.temperature,
-			topK: model.profile.topK,
-			maxTokens,
-			reasoningBudget: 0,
-			gpuMode: model.profile.gpuMode,
-			responseSchema: schema
-		})) {
-			output += part;
-		}
+		const output =
+			model.profile.provider === 'ollama'
+				? await ollamaJson(model, prompt, schema, maxTokens)
+				: await providerJson(model, prompt, schema, maxTokens);
 		const record: GenerationAttempt = { seconds: (performance.now() - started) / 1000, output };
 		attempts.push(record);
 		try {
